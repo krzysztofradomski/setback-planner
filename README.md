@@ -8,6 +8,15 @@ Draw a four-corner plot on a 1 m grid, place houses and garages, and see every c
 - The plan autosaves in the browser and in the page address, so the link is a shareable copy of the plan.
 - Undo, snapping, JSON export/import, and pan/zoom/pinch on touch screens.
 
+![Desktop, English, light theme](docs/desktop-en.png)
+
+<table>
+  <tr>
+    <td width="68%"><img src="docs/desktop-pl-dark.png" alt="Desktop, Polish, dark theme"></td>
+    <td><img src="docs/mobile-pl.png" alt="Phone, Polish"></td>
+  </tr>
+</table>
+
 ## Development
 
 The whole app is one static file, `public/index.html`, with no build step. Open it in a browser or serve the folder:

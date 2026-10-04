@@ -155,7 +155,7 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
   .stage{order:-1;height:62svh;min-height:340px}
   .rail{overflow:visible;padding-right:0}
   .legend{display:none}
-  .chipbar{max-width:calc(100% - 190px)}
+  .chipbar{top:50px;max-width:calc(100% - 20px)} /* below the tool buttons, which are wider in Polish */
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -576,10 +576,11 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
     const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     const pad = W < 500 ? 36 : 64;
-    const k = Math.max(1, Math.min(200, Math.min((W - 2*pad) / Math.max(1, maxX - minX), (H - 2*pad - 20) / Math.max(1, maxY - minY))));
+    const top = matchMedia('(max-width:760px)').matches ? 96 : pad; // phones: status chips sit below the tool row
+    const k = Math.max(1, Math.min(200, Math.min((W - 2*pad) / Math.max(1, maxX - minX), (H - top - pad - 20) / Math.max(1, maxY - minY))));
     view.k = k;
     view.ox = W/2 - (minX + maxX)/2 * k;
-    view.oy = H/2 - (minY + maxY)/2 * k + 6;
+    view.oy = (H + top - pad)/2 - (minY + maxY)/2 * k + 6;
     fitted = true;
   }
   function zoomAt(px, py, f){
