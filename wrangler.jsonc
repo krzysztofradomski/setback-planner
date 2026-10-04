@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "setback-planner",
+  "compatibility_date": "2026-10-04",
+  "assets": { "directory": "./public" },
+  "routes": [{ "pattern": "setback-planner.paperplane.builders", "custom_domain": true }]
+}
