@@ -289,7 +289,7 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
 </div>
 
 <script>
-(() => {
+(async () => {
   const $ = s => document.querySelector(s);
   const svg = $('#sheet'), scene = $('#scene');
 
@@ -400,23 +400,37 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
     };
   }
   function load(){ try { const s = localStorage.getItem(LS); return s ? clean(JSON.parse(s)) : null; } catch (e) { return null; } }
-  // Shareable link: #p=<base64url(JSON)>, numbers rounded to mm to keep it short.
-  function toHash(o){
-    const b = new TextEncoder().encode(JSON.stringify(o, (k, v) => typeof v === 'number' ? Math.round(v * 1000) / 1000 : v));
-    return '#p=' + btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // Shareable link: #z=<base64url(deflate-raw(positional JSON))>, numbers rounded to mm.
+  // Older #p=<base64url(JSON)> links still load, and browsers without CompressionStream still write them.
+  const r3 = v => Math.round(v * 1000) / 1000;
+  const b64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const pipe = (bytes, stream) => new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer().then(b => new Uint8Array(b));
+  async function toHash(s){
+    if (typeof CompressionStream === 'undefined')
+      return '#p=' + b64(new TextEncoder().encode(JSON.stringify(s, (k, v) => typeof v === 'number' ? r3(v) : v)));
+    const c = [s.plot.flatMap(p => [r3(p.x), r3(p.y)]), s.items.map(i => [i.type, i.name, r3(i.x), r3(i.y), r3(i.w), r3(i.d), r3(i.rot), r3(i.setback)]),
+      s.snap, s.dimScope, s.showPairs ? 1 : 0];
+    return '#z=' + b64(await pipe(new TextEncoder().encode(JSON.stringify(c)), new CompressionStream('deflate-raw')));
   }
-  function fromHash(){
+  async function fromHash(){
     try {
-      const m = location.hash.match(/^#p=([\w-]+)$/); if (!m) return null;
-      const bin = atob(m[1].replace(/-/g, '+').replace(/_/g, '/'));
-      return clean(JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))));
+      const m = location.hash.match(/^#([pz])=([\w-]+)$/); if (!m) return null;
+      const bytes = unb64(m[2]);
+      if (m[1] === 'p') return clean(JSON.parse(new TextDecoder().decode(bytes)));
+      const [plot, items, snap, dimScope, showPairs] = JSON.parse(new TextDecoder().decode(await pipe(bytes, new DecompressionStream('deflate-raw'))));
+      return clean({
+        plot: [0, 2, 4, 6].map(i => ({x: plot[i], y: plot[i + 1]})),
+        items: items.map(([type, name, x, y, w, d, rot, setback]) => ({type, name, x, y, w, d, rot, setback})),
+        snap, dimScope, showPairs: !!showPairs,
+      });
     } catch (e) { return null; }
   }
-  let state = fromHash() || load() || DEFAULT();
+  let state = (await fromHash()) || load() || DEFAULT();
   let saveT;
   function save(){ clearTimeout(saveT); saveT = setTimeout(() => {
     try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {}
-    try { window.history.replaceState(null, '', toHash(state)); } catch (e) {}
+    toHash(state).then(h => { try { window.history.replaceState(null, '', h); } catch (e) {} });
   }, 300); }
   let uid = state.items.reduce((m, i) => Math.max(m, parseInt(String(i.id).replace(/\D/g, '')) || 0), 0) + 1;
   let selected = state.items[0] ? state.items[0].id : null;
@@ -967,8 +981,8 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
     } catch (_) { fallback(); }
   };
   $('#b-link').onclick = () => {
-    const url = location.href.split('#')[0] + toHash(state);
-    try { window.history.replaceState(null, '', url); } catch (_) {}
+    // ponytail: copies the address bar, which save() keeps ≤300 ms behind; awaiting the encoder here would cost Safari's clipboard permission
+    const url = location.href;
     const fallback = () => toast(t('linkBlocked'));
     try { navigator.clipboard.writeText(url).then(() => toast(t('linkCopied')), fallback); } catch (_) { fallback(); }
   };
@@ -987,7 +1001,7 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
     applyPlan(o, t('planLoaded'));
   };
   // A shared link pasted into an already-open tab only changes the hash.
-  window.addEventListener('hashchange', () => { const o = fromHash(); if (o) applyPlan(o, t('planFromLink')); });
+  window.addEventListener('hashchange', async () => { const o = await fromHash(); if (o) applyPlan(o, t('planFromLink')); });
   let resetArmed = false, resetT;
   $('#b-reset').onclick = e => {
     const b = e.currentTarget;
