@@ -49,7 +49,7 @@ const words = {
     pickHint:
       "Click the parcel you want on the map. You will confirm its boundary before changing your project.",
     addressHint:
-      "This pin locates the address, not a confirmed parcel. Click the correct parcel on the map.",
+      "We picked the parcel at this address. If it is not yours, click your parcel on the map.",
     results: "Choose the right location",
     empty:
       "No matching locations. Add a town and street, or choose directly on the map.",
@@ -93,6 +93,7 @@ const words = {
     exampleBadge: "Example project · not your parcel",
     back: "Back to search",
     close: "Close introduction",
+    placeHint: "This pin marks the town or street, not a confirmed parcel. Click your parcel on the map.",
     drawingHouse: "House",
     drawingFits: "Fits within a 4 m setback",
   },
@@ -117,7 +118,7 @@ const words = {
     pickHint:
       "Kliknij właściwą działkę na mapie. Potwierdzisz jej granicę przed zmianą projektu.",
     addressHint:
-      "Pinezka wskazuje adres, a nie potwierdzoną działkę. Kliknij właściwą działkę na mapie.",
+      "Zaznaczyliśmy działkę pod tym adresem. Jeśli to nie Twoja, kliknij swoją działkę na mapie.",
     results: "Wybierz właściwą lokalizację",
     empty:
       "Nie znaleziono lokalizacji. Dopisz miejscowość i ulicę lub wybierz działkę na mapie.",
@@ -161,6 +162,7 @@ const words = {
     exampleBadge: "Projekt przykładowy · to nie Twoja działka",
     back: "Wróć do wyszukiwania",
     close: "Zamknij wprowadzenie",
+    placeHint: "Pinezka wskazuje miejscowość lub ulicę, a nie potwierdzoną działkę. Kliknij swoją działkę na mapie.",
     drawingHouse: "Dom",
     drawingFits: "Mieści się w odstępie 4 m",
   },
@@ -376,6 +378,10 @@ export function mountParcelJourney(o: Options) {
         const list = root.querySelector(".journey-results")!;
         list.replaceChildren();
         status(locations.length ? w().results : w().empty, !locations.length);
+        if (locations.length === 1 && locations[0].kind === "address") {
+          void chooseMap(locations[0]);
+          return;
+        }
         for (const location of locations) {
           const b = document.createElement("button");
           b.type = "button";
@@ -399,6 +405,7 @@ export function mountParcelJourney(o: Options) {
     longitude: number;
     latitude: number;
     label: string;
+    kind?: "address" | "street" | "locality";
   }) {
     leaveIntro();
     app.classList.add("journey-discovery");
@@ -408,8 +415,12 @@ export function mountParcelJourney(o: Options) {
       await o.showMap(point);
       picking = true;
       o.pickMap();
-      status(point ? w().addressHint : w().pickHint);
+      // An exact address or GPS point usually sits on the right parcel: preview it straight away; the map stays
+      // clickable. Towns and streets only centre the map.
+      const exact = !!point && (!point.kind || point.kind === "address");
+      status(exact ? w().addressHint : point ? w().placeHint : w().pickHint);
       setStep(1);
+      if (exact) void previewAt(point.longitude, point.latitude);
     } catch {
       status(w().failed, true);
     }

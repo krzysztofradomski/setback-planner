@@ -1,6 +1,7 @@
 import {createCatalogItem, catalogCarport} from './catalogs/placement.ts';
 import {fitItemsToParcel, parcelAxis} from './core/placement.ts';
 import {planFromBrief} from './core/brief.ts';
+import {designGarden} from './core/garden.ts';
 import {sourceDirectory,mapOverlayIds} from './map/sources.ts';
 import {mountWorkspace} from './workspace.ts';
 import {mountParcelJourney} from './parcel-journey.ts';
@@ -11,7 +12,7 @@ import {fenceSchema,fenceSegments} from './core/fences.ts';
 import { objectLibrary, blocksPlacement } from './core/objects.ts';
 import { catalogRegistrations, loadCatalog, catalogAvailable } from './core/catalogs.ts';
 import { materialPresets, resolveAppearance, resetAppearance } from './core/materials.ts';
-import { worldFootprint, boundingCorners } from './core/footprints.ts';
+import { worldFootprint, boundingCorners, fitOpenings } from './core/footprints.ts';
 import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
 import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
 import { polygonRelation, validRing, polygonArea, perpendicularClearance } from './core/geometry.ts';
@@ -339,7 +340,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   let viewer = null, view3d = false, parcelMap = null, mapActive = false;
   let originalAppearance = false;
   let C = compute();
-  function render(){ syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d){viewer.update(state,originalAppearance,exteriorFor);void refreshContext();} if(parcelMap && mapActive)parcelMap.update(state); save(); journey?.refresh(); }
+  function render(){ for(const it of state.items)if(it.openings.length)it.openings=fitOpenings(it); syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d){viewer.update(state,originalAppearance,exteriorFor);void refreshContext();} if(parcelMap && mapActive)parcelMap.update(state); save(); journey?.refresh(); }
 
   function dim(a, b, cls, text){
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
@@ -473,7 +474,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     } else {
       box.innerHTML = `
         <div class="sec-head"><h2 class="lbl">${t('selected')}</h2><span class="tag ${it.type}">${t(it.type)}</span></div>
-        ${it.catalog?`<p class="hint">${esc(it.catalog.catalogId)} / ${esc(it.catalog.modelId)} · ${esc(it.catalog.modelVersion)}<br>${catalogAvailable(it.catalog,enabledCatalogs)?(catalogModel&&(Math.abs(it.w-catalogModel.footprint.width)>.001||Math.abs(it.d-catalogModel.footprint.depth)>.001)?(lang==='pl'?'Wymiary zmienione przez użytkownika.':'Dimensions customized by the user.'):(lang==='pl'?'Obrys wg rzutu producenta · wysokość i dach poglądowe.':'Envelope from manufacturer plan · illustrative height and roof.')) :t('catalogUnavailable')}</p>${!catalogAvailable(it.catalog,enabledCatalogs)&&catalogRegistrations.some(r=>r.id===it.catalog.catalogId)?`<button id="enable-missing-catalog">${t('enableCatalog')}</button>`:''}`:''}
+        ${it.catalog?`<p class="hint"><b>${esc(catalogRegistrations.find(r=>r.id===it.catalog.catalogId)?.name??it.catalog.catalogId)} · ${esc(catalogModel?.name??it.catalog.modelId)}</b><br>${catalogAvailable(it.catalog,enabledCatalogs)?(catalogModel&&(Math.abs(it.w-catalogModel.footprint.width)>.001||Math.abs(it.d-catalogModel.footprint.depth)>.001)?(lang==='pl'?'Wymiary zmienione przez użytkownika.':'Dimensions customized by the user.'):(lang==='pl'?'Obrys wg rzutu producenta · wysokość i dach poglądowe.':'Envelope from manufacturer plan · illustrative height and roof.')) :t('catalogUnavailable')}</p>${!catalogAvailable(it.catalog,enabledCatalogs)&&catalogRegistrations.some(r=>r.id===it.catalog.catalogId)?`<button id="enable-missing-catalog">${t('enableCatalog')}</button>`:''}`:''}
         ${catalogModel?`<figure class="selected-catalog"><img src="${esc(catalogModel.thumbnail)}" alt="${esc(catalogModel.name)}"><figcaption>${esc(catalogModel.name)} · Udana Budowa<button id="selected-plan">${lang==='pl'?'Zobacz rzut':'View plan'} ↗</button></figcaption></figure>`:''}
         <div class="field"><label for="f-name">${t('name')}</label><input id="f-name" type="text" maxlength="60" value="${esc(it.name)}"></div>
         <div class="grid2">
@@ -873,13 +874,42 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     }catch{$('#brief-status').textContent=bi('The assistant is unavailable right now. Add a house below or pick one from the catalogue.','Asystent jest teraz niedostępny. Dodaj dom poniżej lub wybierz z katalogu.');}
     finally{$('#brief-run').disabled=false;}
   };
+  // One-click garden: deterministic layout around the main house; re-running replaces the previous auto-garden.
+  const gardenCard=document.createElement('div');gardenCard.id='garden-designer';
+  gardenCard.innerHTML='<h3><span data-bi="Design my garden|Zaprojektuj ogród"></span></h3><p class="hint"><span data-bi="Terrace, paths, driveway, planting and a boundary hedge, fitted to your parcel. Everything stays editable.|Taras, ścieżki, podjazd, zieleń i żywopłot wzdłuż granicy, dopasowane do działki. Wszystko można potem edytować."></span></p><div class="garden-styles" role="radiogroup"><button type="button" role="radio" aria-checked="true" data-style="family"><span data-bi="Family|Rodzinny"></span></button><button type="button" role="radio" aria-checked="false" data-style="modern"><span data-bi="Modern|Nowoczesny"></span></button><button type="button" role="radio" aria-checked="false" data-style="natural"><span data-bi="Natural|Naturalny"></span></button></div><button type="button" id="garden-design"><span data-bi="Design garden|Zaprojektuj ogród"></span></button>';
+  gardenCard.querySelectorAll('[data-style]').forEach(b=>b.onclick=()=>gardenCard.querySelectorAll('[data-style]').forEach(x=>x.setAttribute('aria-checked',String(x===b))));
+  let autoGarden={items:[],fence:null};
+  gardenCard.querySelector('#garden-design').onclick=()=>{
+    const style=gardenCard.querySelector('[aria-checked=true]').dataset.style;
+    const base={...state,items:state.items.filter(i=>!autoGarden.items.includes(i.id)),fences:state.fences.filter(f=>f.id!==autoGarden.fence)};
+    let result;try{result=designGarden(base,style,()=>'o'+uid++,kind=>objectLibrary[kind][lang]);}catch{toast(bi('Add a house first.','Najpierw dodaj dom.'));return;}
+    if(base.items.length+result.items.length>100){toast(t('objectLimit'));return;}
+    snapshot();state.items=[...base.items,...result.items];state.fences=base.fences;
+    let fence=null;if(state.fences.length<12){fence=fenceSchema.parse({id:crypto.randomUUID(),name:bi('Boundary hedge','Żywopłot przy granicy'),type:'hedge-evergreen',path:result.hedge,height:1.6,spacing:.6,width:.8,color:'#3f6a4e',foundation:0,maturity:1,gate:null});state.fences.push(fence);}
+    autoGarden={items:result.items.map(i=>i.id),fence:fence?.id??null};
+    buildPanel();render();toast(bi(`Garden designed: ${result.items.length} elements${fence?' and a hedge':''}. Drag or delete anything.`,`Ogród gotowy: ${result.items.length} elementów${fence?' i żywopłot':''}. Możesz wszystko przesuwać i usuwać.`));
+  };
   const walkButton=document.createElement('button');walkButton.dataset.bi='Walk|Spacer';walkButton.textContent=bi('Walk','Spacer');walkButton.onclick=()=>viewer?.view('walk');$('#viewer-controls').append(walkButton);
   // Toolbar: one camera group, the surroundings toggle, and a "more" menu for screenshot and low power.
   const cameraGroup=document.createElement('div');cameraGroup.className='camera-group';cameraGroup.setAttribute('role','group');cameraGroup.setAttribute('aria-label',bi('Camera','Kamera'));
   cameraGroup.append($('#view-axon'),$('#view-top'),focusButton,walkButton);
   const more=document.createElement('details');more.className='viewer-more';more.innerHTML='<summary aria-label="More">⋯</summary><div class="viewer-more-menu"></div>';
   more.querySelector('.viewer-more-menu').append($('#view-capture'),$('#view-low').closest('label'));
-  contextToggle.classList.add('context-toggle');$('#viewer-controls').replaceChildren(cameraGroup,contextToggle,more);
+  // Season, weather and time of day: a chip that opens a small popover (same data as Garden → Season and sunlight).
+  const env=document.createElement('details');env.className='env-chip';
+  const seasons=[['spring','Spring','Wiosna'],['summer','Summer','Lato'],['autumn','Autumn','Jesień'],['winter','Winter','Zima']],weathers=[['clear','Clear','Słońce'],['clouds','Cloudy','Chmury'],['rain','Rain','Deszcz'],['snow','Snow','Śnieg']];
+  const seg=(key,list)=>`<div class="env-seg" data-env="${key}">${list.map(([v,en,pl])=>`<button type="button" data-value="${v}"><span data-bi="${en}|${pl}">${bi(en,pl)}</span></button>`).join('')}</div>`;
+  env.innerHTML=`<summary><span class="env-label"></span></summary><div class="env-pop"><small><span data-bi="Season|Pora roku">${bi('Season','Pora roku')}</span></small>${seg('season',seasons)}<small><span data-bi="Weather|Pogoda">${bi('Weather','Pogoda')}</span></small>${seg('weather',weathers)}<small><span data-bi="Time of day|Pora dnia">${bi('Time of day','Pora dnia')}</span> <b class="env-time"></b></small><input type="range" min="5" max="21" step="0.25" class="env-hour" aria-label="Time of day"></div>`;
+  env.querySelectorAll('.env-seg').forEach(group=>group.onclick=e=>{const b=e.target.closest('button');if(!b)return;snapshot();state.environment[group.dataset.env]=b.dataset.value;render();});
+  const hourInput=env.querySelector('.env-hour');
+  hourInput.oninput=()=>{const d=new Date(state.environment.date),h=Number(hourInput.value);d.setHours(Math.floor(h),Math.round((h%1)*60),0,0);state.environment.date=d.toISOString();render();};
+  hourInput.onpointerdown=()=>snapshot();
+  document.addEventListener('click',e=>{if(!env.contains(e.target))env.open=false;});
+  function syncEnvChip(){const e=state.environment,d=new Date(e.date),label=s=>{const m=[...seasons,...weathers].find(x=>x[0]===s);return m?bi(m[1],m[2]):s;};
+    env.querySelector('.env-label').textContent=`${{clear:'☀',clouds:'☁',rain:'☂',snow:'❄'}[e.weather]??'☀'} ${label(e.season)} · ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    env.querySelectorAll('.env-seg').forEach(g=>g.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===e[g.dataset.env]))));
+    hourInput.value=String(d.getHours()+d.getMinutes()/60);env.querySelector('.env-time').textContent=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+  contextToggle.classList.add('context-toggle');$('#viewer-controls').replaceChildren(cameraGroup,contextToggle,env,more);syncEnvChip();
   document.addEventListener('click',e=>{if(!more.contains(e.target))more.open=false;});
   const contextHint=document.createElement('div');contextHint.id='context-hint';contextHint.hidden=true;
   contextHint.innerHTML='<p><span data-bi="This plan has no map location, so there is no aerial photo or neighbouring buildings yet.|Ten plan nie ma lokalizacji na mapie, więc nie ma jeszcze zdjęcia lotniczego ani sąsiednich budynków."></span></p><button type="button"><span data-bi="Find your parcel|Znajdź swoją działkę"></span></button>';
@@ -906,9 +936,10 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   $('#fence-list').onclick=e=>{const id=e.target.dataset.removeFence;if(id){snapshot();state.fences=state.fences.filter(f=>f.id!==id);render();}};
   $('#fence-add').onclick=()=>{try{if(state.fences.length>=12)throw new Error('Maximum 12 paths');const raw=$('#fence-path').value.trim(),points=raw?JSON.parse(raw):[...state.plot,state.plot[0]].map(p=>[p.x,p.y]),type=$('#fence-type').value;const fence=fenceSchema.parse({id:crypto.randomUUID(),name:type,type,path:points.map(([x,y])=>({x,y})),height:Number($('#fence-height').value),spacing:Number($('#fence-spacing').value),width:Number($('#fence-width').value),color:$('#fence-color').value,foundation:0,maturity:1,gate:$('#fence-gate').value?{edge:0,offset:0,width:Number($('#fence-gate-width').value),type:$('#fence-gate').value,open:$('#fence-open').checked,inward:true}:null});snapshot();state.fences.push(fence);$('#fence-message').textContent='';render();}catch{$('#fence-message').textContent=bi('Check the fence path and gate width.','Sprawdź trasę ogrodzenia i szerokość bramy.');}};
   const environmentPanel=document.createElement('details');environmentPanel.innerHTML=`<summary data-t="environment">${t('environment')}</summary><p class="hint" data-t="solarHint">${t('solarHint')}</p><div class="grid2"><label><span data-bi="Season|Pora roku">Season</span><select id="env-season">${[['spring','Spring','Wiosna'],['summer','Summer','Lato'],['autumn','Autumn','Jesień'],['winter','Winter','Zima']].map(([v,en,pl])=>`<option value="${v}" data-bi="${en}|${pl}">${en}</option>`).join('')}</select></label><label><span data-bi="Weather|Pogoda">Weather</span><select id="env-weather">${[['clear','Clear','Bezchmurnie'],['clouds','Cloudy','Pochmurno'],['rain','Rain','Deszcz'],['snow','Snow','Śnieg']].map(([v,en,pl])=>`<option value="${v}" data-bi="${en}|${pl}">${en}</option>`).join('')}</select></label></div><label><span data-bi="Date|Data">Date</span><input id="env-date" type="datetime-local"></label><div class="grid2"><label><span data-bi="Latitude|Szerokość">Latitude</span><input id="env-latitude" type="number" min="-90" max="90" step="0.01"></label><label><span data-bi="Longitude|Długość">Longitude</span><input id="env-longitude" type="number" min="-180" max="180" step="0.01"></label></div>`;$('#sel').before(environmentPanel);
-  function syncEnvironment(){if(!$('#env-season'))return;const e=state.environment;setVal('env-season',e.season);setVal('env-weather',e.weather);setVal('env-latitude',e.latitude);setVal('env-longitude',e.longitude);const date=new Date(e.date);setVal('env-date',new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16));}
+  function syncEnvironment(){if(typeof syncEnvChip==='function'&&document.querySelector('.env-chip'))syncEnvChip();if(!$('#env-season'))return;const e=state.environment;setVal('env-season',e.season);setVal('env-weather',e.weather);setVal('env-latitude',e.latitude);setVal('env-longitude',e.longitude);const date=new Date(e.date);setVal('env-date',new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16));}
   for(const key of ['season','weather','latitude','longitude','date'])$('#env-'+key).onchange=e=>{let value=e.target.value;if(key==='date'){if(!Number.isFinite(new Date(value).getTime()))return;value=new Date(value).toISOString();}if(key==='latitude'||key==='longitude'){value=Number(value);if(!Number.isFinite(value)||Math.abs(value)>(key==='latitude'?90:180))return;}snapshot();state.environment[key]=value;render();};
-  const garden=document.createElement('details');garden.innerHTML=`<summary data-t="garden">${t('garden')}</summary><select id="garden-kind" aria-label="${t('garden')}">${Object.entries(objectLibrary).map(([id,v])=>`<option data-object-kind="${id}" value="${id}">${v[lang]}</option>`).join('')}</select><button id="garden-add" data-t="addOutdoor">${t('addOutdoor')}</button>`;$('#sel').before(garden);
+  const garden=document.createElement('details');garden.innerHTML=`<summary data-t="garden">${t('garden')}</summary><select id="garden-kind" aria-label="${t('garden')}">${Object.entries(objectLibrary).map(([id,v])=>`<option data-object-kind="${id}" value="${id}">${v[lang]}</option>`).join('')}</select><button id="garden-add" data-t="addOutdoor">${t('addOutdoor')}</button><div class="garden-tiles">${Object.entries(objectLibrary).map(([id,v])=>`<button type="button" data-tile="${id}"><i style="background:${v.color}"></i><span data-object-kind="${id}">${v[lang]}</span></button>`).join('')}</div>`;$('#sel').before(garden);
+  garden.querySelector('.garden-tiles').onclick=e=>{const b=e.target.closest('[data-tile]');if(!b)return;$('#garden-kind').value=b.dataset.tile;$('#garden-add').click();};
   $('#garden-add').onclick=()=>{
     if(state.items.length>=100){toast(t('objectLimit'));return;}
     const kind=$('#garden-kind').value,spec=objectLibrary[kind],x=state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,y=state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length;
@@ -1063,6 +1094,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
 
   workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='project')renderLayoutReview();}});
   document.querySelector('[data-panel=houses]')?.prepend($('#house-brief'));
+  document.querySelector('[data-panel=garden]')?.prepend(gardenCard);
   const parcelPanel=document.querySelector('[data-panel=parcel]'),parcelAdvanced=document.createElement('details');parcelAdvanced.className='parcel-advanced';parcelAdvanced.innerHTML=`<summary>${lang==='pl'?'Rysowanie, import i współrzędne':'Drawing, import & coordinates'}</summary>`;parcelAdvanced.append($('#p-area').closest('section'));parcelPanel.append(parcelAdvanced);
   const review=document.createElement('section');review.id='review-layout';document.querySelector('[data-panel=project]').prepend(review);
   function renderLayoutReview(){const data=compute();renderReview(review,{scene:state,language:lang,checks:state.items.map(i=>({id:i.id,...data.res.get(i.id)})),selectedId:selected,onShowPlan:id=>{if(id){selected=id;buildPanel();}setStageMode('2d');fit();render();workspace.activate('houses');if(matchMedia('(max-width:1000px)').matches)document.querySelector('.library-close').click();},onReport:()=>$('#b-report').click(),onSources:()=>{workspace.activate('parcel');document.querySelector('.journey-topics').scrollIntoView({block:'start'});}});}

@@ -34,7 +34,25 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   const scene=new THREE.Scene(),content=new THREE.Group();scene.add(content);
   // Sky gradient and a neutral meadow around the parcel so the plot sits in a landscape, fading into the horizon fog.
   const sky=(top:string,horizon:string)=>{const c=document.createElement('canvas');c.width=2;c.height=256;const g=c.getContext('2d');if(g){const grad=g.createLinearGradient(0,0,0,256);grad.addColorStop(0,top);grad.addColorStop(1,horizon);g.fillStyle=grad;g.fillRect(0,0,2,256);}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;};
-  const daySky=sky('#8fb8d6','#e6ecec'),nightSky=sky('#070d16','#1b2838');
+  const daySky=sky('#8fb8d6','#e6ecec'),nightSky=sky('#070d16','#1b2838'),greySky=sky('#8e989f','#d3d8da');
+  // Rain and snow particles around the parcel; animated only while visible.
+  let weatherFx:THREE.LineSegments|THREE.Points|null=null,weatherKind='clear',weatherBox=new THREE.Box3(),frame=0,last=0;
+  function setWeather(kind:string,center:THREE.Vector3,range:number){
+    if(weatherFx){scene.remove(weatherFx);weatherFx.geometry.dispose();(weatherFx.material as THREE.Material).dispose();weatherFx=null;}
+    weatherKind=kind;if(kind!=='rain'&&kind!=='snow')return;
+    const half=Math.min(range*1.4,120),count=kind==='rain'?5000:3500,top=30,pos=new Float32Array(count*(kind==='rain'?6:3));
+    weatherBox=new THREE.Box3(new THREE.Vector3(center.x-half,0,center.z-half),new THREE.Vector3(center.x+half,top,center.z+half));
+    for(let i=0;i<count;i++){const x=center.x+(Math.random()*2-1)*half,y=Math.random()*top,z=center.z+(Math.random()*2-1)*half;if(kind==='rain'){pos.set([x,y,z,x+.05,y+.6,z],i*6);}else pos.set([x,y,z],i*3);}
+    const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));
+    weatherFx=kind==='rain'?new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:'#aebccb',transparent:true,opacity:.5})):new THREE.Points(geometry,new THREE.PointsMaterial({color:'#ffffff',size:.14,transparent:true,opacity:.9,depthWrite:false}));
+    weatherFx.frustumCulled=false;scene.add(weatherFx);if(!frame)frame=requestAnimationFrame(tick);
+  }
+  function tick(now:number){
+    frame=0;if(disposed||!weatherFx)return;if(!active){frame=requestAnimationFrame(tick);return;}
+    const dt=Math.min(.05,(now-(last||now))/1000),attr=weatherFx.geometry.getAttribute('position') as THREE.BufferAttribute,a=attr.array as Float32Array,rain=weatherKind==='rain',step=rain?6:3,fall=(rain?18:1.1)*dt,{min,max}=weatherBox;last=now;
+    for(let i=0;i<a.length;i+=step){a[i+1]-=fall;if(rain)a[i+4]-=fall;else{a[i]+=Math.sin(now/900+i)*.004;}if(a[i+1]<0){const y=max.y;a[i+1]=y;if(rain)a[i+4]=y+.6;}if(a[i]<min.x||a[i]>max.x)a[i]=min.x+Math.random()*(max.x-min.x);}
+    attr.needsUpdate=true;renderer.render(scene,camera);frame=requestAnimationFrame(tick);
+  }
   const contextGroup=new THREE.Group();scene.add(contextGroup);let contextActive=false;
   const land=new THREE.Mesh(new THREE.CircleGeometry(1,72),new THREE.MeshStandardMaterial({color:'#9aae86',roughness:1}));land.rotation.x=-Math.PI/2;land.receiveShadow=true;scene.add(land);
   const camera=new THREE.PerspectiveCamera(42,1,0.1,10000),controls=new OrbitControls(camera,renderer.domElement);
@@ -80,7 +98,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     const range=extent,env=project.environment,origin=project.coordinates.projected?.origin;
     const [lon,lat]=origin?geographicPoint([origin.x,origin.y]):[env.longitude,env.latitude];
     const position=sunPosition(env.date,lat,lon);sun.target.position.copy(center);sun.position.copy(center).add(new THREE.Vector3(position.direction.x,position.direction.y,position.direction.z).multiplyScalar(range*2));sun.intensity=position.daylight?(env.weather==='clear'?3:1.2):0;ambient.intensity=position.daylight?1.15:.18;
-    renderer.setClearColor(position.daylight?'#dce4e7':'#15212f');scene.background=position.daylight?daySky:nightSky;scene.fog=env.weather==='clear'?new THREE.Fog(position.daylight?'#e6ecec':'#1b2838',range*7,range*16):new THREE.Fog('#b7c1c4',range*1.5,range*4);
+    renderer.setClearColor(position.daylight?'#dce4e7':'#15212f');scene.background=!position.daylight?nightSky:env.weather==='clear'?daySky:greySky;setWeather(env.weather,center,range);scene.fog=env.weather==='clear'?new THREE.Fog(position.daylight?'#e6ecec':'#1b2838',range*7,range*16):new THREE.Fog('#b7c1c4',range*1.5,range*4);
     land.scale.setScalar(range*18);land.position.set(center.x,-0.08,center.z);(land.material as THREE.MeshStandardMaterial).color.set(seasonalGround[env.season]).lerp(new THREE.Color('#9da393'),.55).multiplyScalar(.78);
     Object.assign(sun.shadow.camera,{left:-range,right:range,top:range,bottom:-range,near:0.1,far:range*5});sun.shadow.camera.updateProjectionMatrix();
     if(camera.position.length()===0)view('axonometric');render();
@@ -121,7 +139,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},
     screenshot(){render();return renderer.domElement.toDataURL('image/png');},
-    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);disposeObject(contextGroup);land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
+    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();disposeObject(contextGroup);land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
     memory(){return {...renderer.info.memory};},
   };
 }

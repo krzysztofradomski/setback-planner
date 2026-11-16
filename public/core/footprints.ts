@@ -15,3 +15,13 @@ export function localFootprint(item:Footprint):Point[] {
 }
 export const worldFootprint=(item:PlacedFootprint)=>transformFootprint(localFootprint(item),item);
 export const boundingCorners=(item:PlacedFootprint)=>transformFootprint(localFootprint({w:item.w,d:item.d}),item);
+/** Keep openings inside their walls after a resize: slide first, shrink only if the wall is now too short or low. */
+export function fitOpenings<T extends PlacedFootprint & {openings:{edge:number;offset:number;width:number;height:number;sill:number}[];architecture:{height:number}}>(item:T):T['openings']{
+  const points=localFootprint(item),h=item.architecture.height;
+  return item.openings.filter(o=>points[o.edge]).map(o=>{
+    const a=points[o.edge],b=points[(o.edge+1)%points.length],length=Math.hypot(b.x-a.x,b.y-a.y);
+    const width=Math.min(o.width,Math.max(.2,length-.2)),offset=Math.min(Math.max(0,o.offset),Math.max(0,length-width));
+    const height=Math.min(o.height,Math.max(.2,h-.05)),sill=Math.min(o.sill,Math.max(0,h-height));
+    return width===o.width&&offset===o.offset&&height===o.height&&sill===o.sill?o:{...o,width,offset,height,sill};
+  });
+}

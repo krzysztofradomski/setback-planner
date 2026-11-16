@@ -61,3 +61,11 @@ A live Gruntometr usability study informed a guided entry: address/full identifi
 - **Report (`core/reports.ts`):** verdict card, key metrics (area, coverage, buildable zone, perimeter, nearest neighbour), a plan with neighbours and the buildable zone, overview and close-up 3D views, surroundings counts, an official-source checklist and catalogue data provenance.
 - **Describe your house (`/api/ai/house`, `core/brief.ts`):** Workers AI (`llama-3.1-8b-instruct-fast`, JSON schema output) interprets the user's words. Geometry is computed deterministically in the browser and shown for confirmation before anything is added. The endpoint is rate-limited (15 requests per IP per day, 400 globally per day), and answers are edge-cached.
 - **Known limits:** neighbour heights are not measured (GUGiK LoD1/NMPT would fix this but has no area API). OSM footprints may be missing in some areas. DE 135's entrance door position is approximated inside the recess. The DE 75 and DE 165 carport/garage shown in the renders is not in the plans, so it is not modelled.
+
+## Save fix, faster parcel pick, garden designer, weather (2026-11-16)
+
+- Resizing a house with plan openings could leave windows wider than their wall, which made every later save fail. `fitOpenings` now slides openings back inside their walls, shrinking them only when they can't fit, and runs on every render.
+- Choosing an exact address (or GPS) previews the parcel at that point immediately. A single exact match is chosen automatically. Town and street matches still ask for a click on the map.
+- One-click garden (`core/garden.ts`) in three styles. It places a terrace behind the house, a path from the front door, a driveway from the garage or carport, style objects in their zones, and a boundary hedge left open on the street side. Everything is checked against the parcel and existing objects. Re-running replaces the previous auto-garden.
+- 3D weather: rain streaks, drifting snow and an overcast sky. A toolbar chip sets season, weather and time of day.
+- Garden objects are now one-click tiles. The inspector shows a readable catalogue name.

@@ -774,6 +774,73 @@ body {
   box-shadow: none;
   border: 0;
 }
+.workspace .env-chip {
+  position: relative;
+  padding: 0;
+}
+.workspace .env-chip > summary {
+  min-height: 36px;
+  padding: 0 12px;
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.workspace .env-chip > summary::after,
+.workspace .viewer-more > summary::after {
+  display: none;
+}
+.workspace .env-chip[open] > summary {
+  margin: 0;
+}
+.workspace .env-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--float);
+  z-index: 6;
+}
+.workspace .env-pop small {
+  color: var(--muted);
+  font-weight: 600;
+}
+.workspace .env-pop .env-time {
+  color: var(--ink);
+}
+.workspace .env-seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.workspace .env-seg button {
+  flex: 1;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.workspace .env-seg button[aria-pressed="true"] {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(19, 33, 28, 0.14);
+}
+.workspace .env-hour {
+  width: 100%;
+  accent-color: var(--spruce);
+}
 .workspace #context-hint:not([hidden]) {
   display: flex;
 }
@@ -948,6 +1015,78 @@ body {
 .workspace .brief-card small {
   color: var(--muted);
   font-size: 12px;
+}
+
+/* ---------- one-click garden ---------- */
+.workspace #garden-designer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, #e6efdc, var(--surface));
+}
+.workspace #garden-designer h3 {
+  margin: 0;
+  font: 650 15px var(--f-ui);
+}
+.workspace #garden-designer .hint {
+  margin: 0;
+}
+.workspace .garden-styles {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--r-md);
+  background: var(--paper);
+}
+.workspace .garden-styles button {
+  flex: 1;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  font-weight: 600;
+  color: var(--muted);
+  min-height: 32px;
+}
+.workspace .garden-styles button[aria-checked="true"] {
+  background: var(--spruce-soft);
+  color: var(--spruce);
+}
+.workspace #garden-design {
+  justify-content: center;
+  background: var(--spruce);
+  border-color: var(--spruce);
+  color: #fff;
+  font-weight: 600;
+}
+.workspace #garden-design:hover {
+  background: var(--spruce-hover);
+}
+
+.workspace .garden-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+.workspace .garden-tiles button {
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  text-align: left;
+  line-height: 1.2;
+}
+.workspace .garden-tiles i {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+.workspace .garden-tiles button:hover {
+  border-color: var(--spruce);
 }
 
 /* ---------- catalog ---------- */
