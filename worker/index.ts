@@ -201,7 +201,13 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
             return fail(422, (error as Error).message);
         }
         // changes() gates audit insertion on the preceding compare-and-swap update in one D1 transaction.
-        await env.DB.batch([env.DB.prepare('UPDATE leads SET status=?,evidence=?,existing_customer=?,commission_cents=?,currency=?,commission_rules=?,revision=revision+1 WHERE id=? AND revision=?').bind(b.status, JSON.stringify(b.evidence), b.existingCustomer ? 1 : 0, cents, rules.currency, JSON.stringify(rules), row.id, b.revision), env.DB.prepare('INSERT INTO audit(id,tenant_id,lead_id,actor,action,detail,created) SELECT ?,tenant_id,id,?,?,?,? FROM leads WHERE id=? AND changes()=1').bind(crypto.randomUUID(), user.id, 'status_changed', JSON.stringify({ from: row.status, to: b.status, evidence: b.evidence, commissionCents: cents, rules }), Date.now(), row.id)]);
+        const updates = await env.DB.batch([env.DB.prepare('UPDATE leads SET status=?,evidence=?,existing_customer=?,commission_cents=?,currency=?,commission_rules=?,revision=revision+1 WHERE id=? AND revision=?').bind(b.status, JSON.stringify(b.evidence), b.existingCustomer ? 1 : 0, cents, rules.currency, JSON.stringify(rules), row.id, b.revision), env.DB.prepare('INSERT INTO audit(id,tenant_id,lead_id,actor,action,detail,created) SELECT ?,tenant_id,id,?,?,?,? FROM leads WHERE id=? AND changes()=1').bind(crypto.randomUUID(), user.id, 'status_changed', JSON.stringify({ from: row.status, to: b.status, evidence: b.evidence, commissionCents: cents, rules }), Date.now(), row.id)]);
+        if ((updates[0] as {
+            meta: {
+                changes: number;
+            };
+        }).meta.changes !== 1)
+            fail(409, 'Concurrent update; refresh');
         const updated = await lead(env, user, row.id);
         if (updated.revision !== b.revision + 1 || updated.status !== b.status)
             fail(409, 'Concurrent update; refresh');
