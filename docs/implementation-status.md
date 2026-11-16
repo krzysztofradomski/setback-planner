@@ -59,3 +59,5 @@ Useful commands: `npm ci`, `npx playwright install chromium`, `npm test`, `npm r
 F014 completed: Parametric concept library with editable dimensions and maturity. Species-specific horticultural growth models and photorealistic assets are not claimed.
 
 F016 completed: Solar position is calculated with SunCalc 2.1.4 (degrees clockwise from north, converted to scene axes); source: https://github.com/mourner/suncalc . Four seasons and atmospheric presets are conceptual; shadows omit unknown neighboring heights and terrain.
+
+F015 completed: Fence and hedge paths support editable dimensions, spacing, color and gate opening geometry. Designs are procedural concepts, not engineering/manufacturer specifications.

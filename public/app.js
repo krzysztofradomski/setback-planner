@@ -1,3 +1,4 @@
+import {fenceSchema,fenceSegments} from './core/fences.ts';
 import { objectLibrary, blocksPlacement } from './core/objects.ts';
 import { catalogRegistrations, loadCatalog, catalogAvailable } from './core/catalogs.ts';
 import { materialPresets, resolveAppearance, resetAppearance } from './core/materials.ts';
@@ -300,7 +301,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
   let viewer = null, view3d = false, parcelMap = null, mapActive = false;
   let originalAppearance = false;
   let C = compute();
-  function render(){ syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d)viewer.update(state,originalAppearance); if(parcelMap && mapActive)parcelMap.update(state); save(); }
+  function render(){ syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d)viewer.update(state,originalAppearance); if(parcelMap && mapActive)parcelMap.update(state); save(); }
 
   function dim(a, b, cls, text){
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
@@ -368,6 +369,9 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
         labels.push(`<text class="bname" x="${f(c.x)}" y="${f(c.y + (two ? -1 : 4))}" text-anchor="middle">${esc(it.name)}</text>`);
         if (two) labels.push(`<text class="bsize" x="${f(c.x)}" y="${f(c.y + 13)}" text-anchor="middle">${fmtD(it.w)} × ${fmtD(it.d)} m</text>`);
       }
+    }
+    for(const fence of state.fences)for(const segment of fenceSegments(fence)){
+      if(segment.gate&&fence.gate?.open)continue;const a=S(segment.a),b=S(segment.b);out.push(`<path d="M${a.x} ${a.y}L${b.x} ${b.y}" fill="none" stroke="${segment.gate?'#39799b':fence.color}" stroke-width="${fence.type.startsWith('hedge')?fence.width*k:3}"/>`);
     }
     out.push(...labels);
 
@@ -763,6 +767,11 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
   $('#view-capture').onclick=()=>{try{const a=document.createElement('a');a.download='setback-3d.png';a.href=viewer.screenshot();a.click();}catch{toast(t('viewerFailure'));}};
   window.addEventListener('pagehide',()=>{viewer?.dispose();viewer=null;parcelMap?.dispose();parcelMap=null;});
   // ---------- wiring ----------
+  const fencesPanel=document.createElement('details');fencesPanel.innerHTML=`<summary>Fences / Gates / Hedges · Ogrodzenia</summary><label>Design / Typ<select id="fence-type">${['metal-panel','palisade-horizontal','palisade-vertical','wood','gabion','masonry','mixed','hedge-evergreen','hedge-deciduous'].map(v=>`<option>${v}</option>`).join('')}</select></label><div class="grid2"><label>Height / Wysokość (m)<input id="fence-height" type="number" min="0.2" max="5" value="1.8" step=".1"></label><label>Post spacing / Rozstaw (m)<input id="fence-spacing" type="number" min=".5" max="10" value="2" step=".1"></label><label>Width / Szerokość (m)<input id="fence-width" type="number" min=".05" max="3" value=".15" step=".05"></label><label>Color / Kolor<input id="fence-color" type="color" value="#59645b"></label></div><label>Local path [[x,y],…] / Trasa lokalna<textarea id="fence-path" aria-label="Fence path"></textarea></label><button id="fence-boundary">Use parcel boundary / Granica działki</button><label>Gate on first edge / Brama na 1. boku<select id="fence-gate"><option value="">None / Brak</option><option>sliding</option><option>swing</option><option>wicket</option></select></label><label>Gate opening width / Światło bramy (m)<input id="fence-gate-width" type="number" min=".5" max="10" step=".1" value="3.5"></label><label class="check"><input id="fence-open" type="checkbox">Open / Otwarta</label><button id="fence-add">Add path / Dodaj trasę</button><div id="fence-list"></div><p id="fence-message" class="hint" role="status"></p>`;$('#sel').before(fencesPanel);
+  $('#fence-boundary').onclick=()=>{$('#fence-path').value=JSON.stringify([...state.plot,state.plot[0]].map(p=>[p.x,p.y]));};
+  function syncFences(){if(!$('#fence-list'))return;$('#fence-list').innerHTML=state.fences.map(f=>`<button data-remove-fence="${esc(f.id)}">× ${esc(f.name)} · ${f.height} m${f.gate?' · gate '+f.gate.width+' m':''}</button>`).join('');}
+  $('#fence-list').onclick=e=>{const id=e.target.dataset.removeFence;if(id){snapshot();state.fences=state.fences.filter(f=>f.id!==id);render();}};
+  $('#fence-add').onclick=()=>{try{if(state.fences.length>=12)throw new Error('Maximum 12 paths');const points=JSON.parse($('#fence-path').value),type=$('#fence-type').value;const fence=fenceSchema.parse({id:crypto.randomUUID(),name:type,type,path:points.map(([x,y])=>({x,y})),height:Number($('#fence-height').value),spacing:Number($('#fence-spacing').value),width:Number($('#fence-width').value),color:$('#fence-color').value,foundation:0,maturity:1,gate:$('#fence-gate').value?{edge:0,offset:0,width:Number($('#fence-gate-width').value),type:$('#fence-gate').value,open:$('#fence-open').checked,inward:true}:null});snapshot();state.fences.push(fence);$('#fence-message').textContent='';render();}catch{$('#fence-message').textContent='Invalid path or gate dimensions / Nieprawidłowa trasa lub wymiary bramy';}};
   const environmentPanel=document.createElement('details');environmentPanel.innerHTML=`<summary data-t="environment">${t('environment')}</summary><p class="hint" data-t="solarHint">${t('solarHint')}</p><div class="grid2"><label>Season / Pora roku<select id="env-season">${['spring','summer','autumn','winter'].map(v=>`<option>${v}</option>`).join('')}</select></label><label>Weather / Pogoda<select id="env-weather">${['clear','clouds','rain','snow'].map(v=>`<option>${v}</option>`).join('')}</select></label></div><label>Date / Data<input id="env-date" type="datetime-local"></label><div class="grid2"><label>Latitude / Szerokość<input id="env-latitude" type="number" min="-90" max="90" step="0.01"></label><label>Longitude / Długość<input id="env-longitude" type="number" min="-180" max="180" step="0.01"></label></div>`;$('#sel').before(environmentPanel);
   function syncEnvironment(){if(!$('#env-season'))return;const e=state.environment;setVal('env-season',e.season);setVal('env-weather',e.weather);setVal('env-latitude',e.latitude);setVal('env-longitude',e.longitude);const date=new Date(e.date);setVal('env-date',new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16));}
   for(const key of ['season','weather','latitude','longitude','date'])$('#env-'+key).onchange=e=>{let value=e.target.value;if(key==='date'){if(!Number.isFinite(new Date(value).getTime()))return;value=new Date(value).toISOString();}if(key==='latitude'||key==='longitude'){value=Number(value);if(!Number.isFinite(value)||Math.abs(value)>(key==='latitude'?90:180))return;}snapshot();state.environment[key]=value;render();};

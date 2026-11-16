@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { catalogReferenceSchema } from './catalogs.ts';
 import { appearanceSchema } from './materials.ts';
+import { fenceSchema } from './fences.ts';
 import { objectLibrary } from './objects.ts';
 import { validRing } from './geometry.ts';
 export const MAX_PROJECT_BYTES=262144;
@@ -24,6 +25,7 @@ export const sceneSchema=z.object({
   parcel:z.object({identifier:z.string().max(80).optional(),source:z.object({name:z.string().min(1).max(120),retrievedAt:z.iso.datetime({offset:true}),crs:z.enum(['EPSG:4326','EPSG:2180']),url:z.url().refine(s=>s.startsWith('https://')).optional()}).strict(),edited:z.boolean()}).strict().optional(),
   plot:z.array(pointSchema).min(3).max(512).refine(validRing,'Invalid parcel boundary'),
   items:z.array(itemSchema).max(100).refine(items=>new Set(items.map(i=>i.id)).size===items.length,'Duplicate object IDs'),
+  fences:z.array(fenceSchema).max(12).default([]),
   environment:z.object({season:z.enum(['spring','summer','autumn','winter']),date:z.iso.datetime(),latitude:finite.min(-90).max(90),longitude:finite.min(-180).max(180),weather:z.enum(['clear','clouds','rain','snow'])}).strict().default({season:'summer',date:'2026-06-21T10:00:00Z',latitude:52,longitude:19,weather:'clear'}),
   snap:z.union([z.literal(0),z.literal(0.1),z.literal(0.25),z.literal(0.5),z.literal(1)]).default(0.5),
   dimScope:z.enum(['all','selected']).default('all'),showPairs:z.boolean().default(true),

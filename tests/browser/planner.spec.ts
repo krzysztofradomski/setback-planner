@@ -177,3 +177,6 @@ test('garden objects are editable, persisted and excluded from building coverage
  await page.locator('#outdoor-maturity').fill('0.5');await page.locator('#f-name').fill('My tree');await page.waitForTimeout(400);await page.reload();
  await page.locator('#objs .obj').last().click();await expect(page.locator('#f-name')).toHaveValue('My tree');await expect(page.locator('#outdoor-maturity')).toHaveValue('0.5');
 });
+test('fence gate follows a path and restores through project sharing',async({page})=>{
+ await page.goto('/');await page.locator('#fence-type').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#fence-boundary').click();await page.locator('#fence-gate').selectOption('swing');await page.locator('#fence-add').click();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');await page.waitForTimeout(400);await page.reload();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');
+});

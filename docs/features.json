@@ -379,14 +379,22 @@
       "dependencies": [
         "F014"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Path-following configurable fence types",
         "Gate opening and driveway clearance",
         "Hedge spacing and growth"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build",
+        "npm run test:e2e"
+      ],
+      "knownLimitations": [
+        "Fence and hedge paths support editable dimensions, spacing, color and gate opening geometry. Designs are procedural concepts, not engineering/manufacturer specifications."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]
