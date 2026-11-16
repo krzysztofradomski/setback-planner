@@ -6,11 +6,11 @@ test('3D supports camera presets, live materials, screenshot and 2D return',asyn
   await expect(page.locator('#viewer canvas')).toBeVisible();await expect(page.locator('#sheet')).not.toBeVisible();
   await page.locator('#view-top').click();
   await page.locator('#view-axon').click();
-  await page.locator('#view-low').check();
+  await page.locator('.viewer-more summary').click();await page.locator('#view-low').check();
   await page.locator('#material-options').evaluate((el:HTMLDetailsElement)=>el.open=true);
   await page.locator('#f-facade').selectOption('brick-red');
   await page.locator('#viewer').screenshot({path:'test-results/viewer.png'});
-  const download=page.waitForEvent('download');await page.locator('#view-capture').click();
+  await page.locator('.viewer-more').evaluate((el:HTMLDetailsElement)=>el.open=true);const download=page.waitForEvent('download');await page.locator('#view-capture').click();
   expect((await download).suggestedFilename()).toBe('setback-3d.png');
   await page.locator('#view-2d').click();
   await expect(page.locator('#sheet')).toBeVisible();

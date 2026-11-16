@@ -701,11 +701,109 @@ body {
   max-width: calc(100% - 32px);
   gap: 6px;
 }
+.workspace #viewer-controls {
+  align-items: stretch;
+  z-index: 5;
+}
 .workspace #viewer-controls > * {
-  min-height: 34px;
-  padding: 6px 11px;
+  min-height: 36px;
+  border-radius: var(--r-md);
+  box-shadow: var(--lift);
+}
+.workspace .camera-group {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+}
+.workspace .camera-group button,
+.workspace .viewer-more-menu button {
+  border: 0;
+  background: transparent;
+  min-height: 30px;
+  padding: 4px 11px;
+  font-weight: 600;
+}
+.workspace #viewer-controls .context-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+.workspace .viewer-more {
+  position: relative;
+  padding: 0;
+}
+.workspace .viewer-more > summary {
+  min-height: 36px;
+  min-width: 40px;
+  justify-content: center;
+  font-size: 18px;
+  margin: 0;
+}
+.workspace .viewer-more > summary::after {
+  display: none;
+}
+.workspace .viewer-more[open] > summary {
+  margin: 0;
+}
+.workspace .viewer-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--float);
+  z-index: 6;
+}
+.workspace .viewer-more-menu button,
+.workspace .viewer-more-menu label {
+  justify-content: flex-start;
+  width: 100%;
+  padding: 8px 10px;
   border-radius: var(--r-sm);
+  background: transparent;
   box-shadow: none;
+  border: 0;
+}
+.workspace #context-hint:not([hidden]) {
+  display: flex;
+}
+.workspace #context-hint {
+  position: absolute;
+  left: 16px;
+  top: 112px;
+  z-index: 4;
+  max-width: min(520px, calc(100% - 32px));
+  align-items: center;
+  gap: 14px;
+  padding: 10px 10px 10px 16px;
+  background: var(--paper);
+  border-radius: var(--r-lg);
+  box-shadow: var(--float);
+}
+.workspace #context-hint p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.workspace #context-hint button {
+  flex: none;
+  background: var(--spruce);
+  border-color: var(--spruce);
+  color: #fff;
+  font-weight: 600;
+}
+.workspace #context-hint button:hover {
+  background: var(--spruce-hover);
 }
 .workspace #viewer-note {
   font-size: 12.5px;
@@ -714,11 +812,19 @@ body {
   right: auto;
   max-width: min(560px, calc(100% - 32px));
   bottom: 16px;
-  max-height: 110px;
+  max-height: 36px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   padding: 8px 12px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.88);
   border-radius: var(--r-sm);
+}
+.workspace #viewer-note:hover,
+.workspace #viewer-note:focus {
+  max-height: 140px;
+  white-space: normal;
 }
 .workspace #map-controls {
   top: 64px;
