@@ -43,3 +43,12 @@ See `docs/ui-review-2026-11-16.md` for the layout audit, independent review find
 ## Parcel-first flow (F028)
 
 A live Gruntometr usability study informed a guided entry: address/full identifier/map/GPS → confirm official boundary → choose a house → review geometric issues and surrounding sources. Fresh examples are not autosaved before a choice. Existing projects and shared links retain direct entry. Address candidates are explicitly distinguished from properties, and preview/confirmation guards protect edits. See `docs/gruntometr-flow-study.md` and `docs/address-search.md` for observations, source contracts, limits and review evidence.
+
+## Visual system and placement UX (2026-11-16)
+
+- One stylesheet, `public/ui.css`, replaces `workspace.css` and `parcel-journey.css`. It uses one token set (spruce green, surveyor's yellow as the single marker colour, Archivo throughout) and nothing smaller than 12px. All the drawing colours are tokens too.
+- The inspector column only appears when something is selected; otherwise the plan gets the width. The plan stays centred when panels open or close.
+- Welcome screen: an animated site-plan drawing (boundary → setback → house → clearance), which respects `prefers-reduced-motion`.
+- Confirming a parcel re-seats unlocked buildings into the free setback area (`fitItemsToParcel`). New houses and garages follow the parcel's longest edge (`parcelAxis`).
+- The fence, terrain, environment and showroom controls show one language at a time (`data-bi="EN|PL"`, updated by `applyLang`). An empty fence path now means the whole parcel boundary.
+- 3D: sky gradient, a surrounding meadow fading into horizon fog, ACES tone mapping, sharper shadows, and corner stakes at the boundary vertices.

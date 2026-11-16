@@ -20,3 +20,20 @@ export function suggestPlacements(scene:Scene,item:SceneItem){
  for(const rot of new Set([item.rot,0,90]))for(const p of points)if(feasible({...item,...p,rot}))found.push({...p,rot,score:Math.hypot(p.x-item.x,p.y-item.y)+Math.abs(rot-item.rot)*.01});
  found.sort((a,b)=>a.score-b.score||a.x-b.x||a.y-b.y||a.rot-b.rot);return {...area,suggestions:found.slice(0,8)};
 }
+/** Direction of the parcel's longest edge in degrees, folded to (-45,45] (a rectangle turned 90° is the same alignment). */
+export function parcelAxis(ring:Point[]){
+ let angle=0,longest=-1;
+ ring.forEach((a,i)=>{const b=ring[(i+1)%ring.length],len=Math.hypot(b.x-a.x,b.y-a.y);if(len>longest){longest=len;angle=Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI;}});
+ return Math.round((((angle%90)+135)%90-45)*10)/10;
+}
+/** Re-seat unlocked items on a newly chosen parcel: align with its longest edge, then take the free spot nearest its centre (largest first). */
+export function fitItemsToParcel(scene:Scene):SceneItem[]{
+ const ring=scene.plot,angle=parcelAxis(ring);
+ const cx=ring.reduce((n,p)=>n+p.x,0)/ring.length,cy=ring.reduce((n,p)=>n+p.y,0)/ring.length;
+ const placed=new Map<string,SceneItem>(scene.items.filter(i=>i.locked).map(i=>[i.id,i]));
+ for(const item of scene.items.filter(i=>!i.locked).sort((a,b)=>b.w*b.d-a.w*a.d||a.id.localeCompare(b.id))){
+  const start={...item,x:cx,y:cy,rot:angle},best=suggestPlacements({...scene,items:[...placed.values(),start]},start).suggestions[0];
+  placed.set(item.id,best?{...start,x:best.x,y:best.y,rot:best.rot}:start);// ponytail: no free spot -> centre; the layout review flags it
+ }
+ return scene.items.map(i=>placed.get(i.id)!);
+}

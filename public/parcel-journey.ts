@@ -1,4 +1,3 @@
-import "./parcel-journey.css";
 import { parcelArea } from "./core/topology.ts";
 import type { Scene } from "./core/scene.ts";
 import type { parseUldkResponse } from "./core/uldk.ts";
@@ -62,7 +61,7 @@ const words = {
     use: "Use this parcel",
     another: "Choose another",
     preserve:
-      "Your current project stays unchanged until you confirm. Existing buildings keep their local positions; check them after switching parcels.",
+      "Nothing changes until you confirm. Your buildings will then move into the free space on this parcel.",
     changed:
       "Your project changed while searching. Search again to preview the latest version.",
     source: "Boundary source",
@@ -94,6 +93,8 @@ const words = {
     exampleBadge: "Example project · not your parcel",
     back: "Back to search",
     close: "Close introduction",
+    drawingHouse: "House",
+    drawingFits: "Fits within a 4 m setback",
   },
   pl: {
     title: "Zacznij od swojej działki",
@@ -128,7 +129,7 @@ const words = {
     use: "Użyj tej działki",
     another: "Wybierz inną",
     preserve:
-      "Projekt zmieni się dopiero po potwierdzeniu. Istniejące budynki zachowają lokalne pozycje; sprawdź je po zmianie działki.",
+      "Nic się nie zmieni przed potwierdzeniem. Potem Twoje budynki przeniosą się w wolne miejsce na tej działce.",
     changed:
       "Projekt zmienił się podczas wyszukiwania. Wyszukaj ponownie, aby zobaczyć aktualny podgląd.",
     source: "Źródło granicy",
@@ -160,6 +161,8 @@ const words = {
     exampleBadge: "Projekt przykładowy · to nie Twoja działka",
     back: "Wróć do wyszukiwania",
     close: "Zamknij wprowadzenie",
+    drawingHouse: "Dom",
+    drawingFits: "Mieści się w odstępie 4 m",
   },
 };
 export function mountParcelJourney(o: Options) {
@@ -178,7 +181,19 @@ export function mountParcelJourney(o: Options) {
   const welcome = document.createElement("div");
   welcome.className = "journey-welcome";
   welcome.innerHTML =
-    '<div class="welcome-copy"><span>SETBACK PLANNER</span><h2></h2><p></p></div><div class="welcome-form"></div><ol class="welcome-explanation"></ol>';
+    '<div class="welcome-copy"><h2></h2><p></p></div><div class="welcome-form"></div><ol class="welcome-explanation"></ol>' +
+    // Illustrative site plan: boundary, setback line, house, garage and one clearance.
+    '<figure class="welcome-drawing" aria-hidden="true"><svg viewBox="0 0 600 440">' +
+    '<path class="wd-plot" d="M70 60 L520 40 L560 390 L40 400 Z"/>' +
+    '<path class="wd-setback" d="M106 95 L487 78 L521 357 L76 365 Z"/>' +
+    '<g class="wd-build"><rect class="wd-house" x="170" y="130" width="230" height="150"/><text class="wd-label" x="285" y="200" text-anchor="middle" data-wd="house"></text><text class="wd-size" x="285" y="220" text-anchor="middle">12 × 8 m</text></g>' +
+    '<g class="wd-build"><rect class="wd-garage" x="404" y="268" width="84" height="70"/><text class="wd-size" x="446" y="308" text-anchor="middle">6 × 5 m</text></g>' +
+    '<g class="wd-measure"><path class="wd-dim" d="M57 205 H170 M57 198 v14 M170 198 v14"/><text class="wd-dim-t" x="113" y="196" text-anchor="middle">6,30 m</text>' +
+    '<path class="wd-dim" d="M285 50 V130 M278 50 h14 M278 130 h14"/><text class="wd-dim-t" x="296" y="95">4,10 m</text></g>' +
+    '<g><circle class="wd-corner" cx="70" cy="60" r="6"/><circle class="wd-corner" cx="520" cy="40" r="6"/><circle class="wd-corner" cx="560" cy="390" r="6"/><circle class="wd-corner" cx="40" cy="400" r="6"/>' +
+    '<text class="wd-corner-t" x="56" y="48">A</text><text class="wd-corner-t" x="530" y="30">B</text><text class="wd-corner-t" x="572" y="404">C</text><text class="wd-corner-t" x="20" y="418">D</text></g>' +
+    '<g class="wd-badge"><rect x="150" y="300" width="234" height="34" rx="17"/><circle cx="170" cy="317" r="6"/><text x="184" y="322" data-wd="fits"></text></g>' +
+    "</svg></figure>";
   o.stage.append(welcome);
   o.container.prepend(root);
   const steps = document.createElement("nav");
@@ -310,11 +325,15 @@ export function mountParcelJourney(o: Options) {
     welcome.querySelector("p")!.textContent = l.intro;
     welcome.querySelector("ol")!.replaceChildren(
       ...[l.step1, l.step2, l.step3].map((text, i) => {
-        const li = document.createElement("li");
-        li.textContent = `0${i + 1}  ${text}`;
+        const li = document.createElement("li"),
+          n = document.createElement("b");
+        n.textContent = String(i + 1);
+        li.append(n, text);
         return li;
       }),
     );
+    welcome.querySelector('[data-wd="house"]')!.textContent = l.drawingHouse;
+    welcome.querySelector('[data-wd="fits"]')!.textContent = l.drawingFits;
     steps
       .querySelectorAll("button")
       .forEach(

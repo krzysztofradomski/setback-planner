@@ -7,8 +7,10 @@ test('existing editor adds, resizes, rotates, duplicates, deletes and undoes', a
   await page.locator('[data-workspace-tab=houses]').click();await page.locator('#add-house').click();
   await expect(page.locator('.obj')).toHaveCount(3);
   await page.locator('#f-w').fill('14');
+  const startRot = Number(await page.locator('#f-rot').inputValue()); // new houses follow the parcel's long edge
+  expect(Math.abs(startRot)).toBeLessThanOrEqual(45);
   await page.locator('#b-rot').click();
-  await expect(page.locator('#f-rot')).toHaveValue('90');
+  expect(Number(await page.locator('#f-rot').inputValue())).toBeCloseTo(startRot + 90, 5);
   await page.locator('#b-dup').click();
   await expect(page.locator('.obj')).toHaveCount(4);
   await page.locator('#b-del').click();
@@ -197,5 +199,5 @@ test('visibility, locking and attached structures survive scene operations',asyn
 test('showroom host keeps ordinary autosave and undo isolated from visitors',async({page})=>{
  await page.route('**/api/auth/logout',route=>route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
  await page.goto('/');await page.locator('#f-name').fill('Private ordinary project');await page.waitForTimeout(400);const stored=await page.evaluate(()=>localStorage.getItem('setback-planner-v1'));
- await page.locator('[data-workspace-tab=presentation]').click();await page.getByText('Showroom / Tryb pokazowy',{exact:true}).click();await page.getByRole('button',{name:'Start presentation / Rozpocznij pokaz'}).click();await page.getByRole('button',{name:'Touch to begin / Dotknij, aby rozpocząć'}).click();await page.locator('#f-name').fill('Visitor project');await page.waitForTimeout(400);expect(await page.evaluate(()=>localStorage.getItem('setback-planner-v1'))).toBe(stored);await page.getByRole('button',{name:'Exit presentation'}).click();await expect(page.locator('#f-name')).toHaveValue('Private ordinary project');
+ await page.locator('[data-workspace-tab=presentation]').click();await page.getByText('Showroom',{exact:true}).click();await page.getByRole('button',{name:'Start presentation'}).click();await page.getByRole('button',{name:'Touch to begin'}).click();await page.locator('#f-name').fill('Visitor project');await page.waitForTimeout(400);expect(await page.evaluate(()=>localStorage.getItem('setback-planner-v1'))).toBe(stored);await page.getByRole('button',{name:'Exit presentation'}).click();await expect(page.locator('#f-name')).toHaveValue('Private ordinary project');
 });

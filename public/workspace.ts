@@ -1,4 +1,4 @@
-import "./workspace.css";
+import "./ui.css";
 type Tab = "houses" | "parcel" | "garden" | "project" | "presentation";
 const copy = {
   en: {

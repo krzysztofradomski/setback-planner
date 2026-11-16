@@ -26,29 +26,29 @@ export function mountShowroom(options:ShowroomOptions){
   persistAttribution();
   let active=false,initialScene:Scene|null=null,lastActivity=Date.now(),warningShown=false,step=0,qrGeneration=0;
   const panel=document.createElement('section');panel.className='showroom';panel.setAttribute('aria-label','Showroom presentation');
-  panel.innerHTML=`<details class="showroom-setup"><summary>Showroom / Tryb pokazowy</summary>
+  panel.innerHTML=`<details class="showroom-setup"><summary><span data-bi="Showroom|Tryb pokazowy">${document.documentElement.lang==='pl'?'Tryb pokazowy':'Showroom'}</span></summary>
     <p>Presentation mode uses separate visitor sessions. Your current project is restored when you leave.</p>
     <label>Profile name <input name="profile" maxlength="80" placeholder="Setback Planner"></label>
     <label>Manufacturer label <input name="manufacturer" maxlength="80" autocomplete="off"></label>
     <label>Event label <input name="event" maxlength="80" autocomplete="off"></label>
     <label>Campaign label <input name="campaign" maxlength="80" autocomplete="off"></label>
     <p>Optional public campaign labels only. Do not enter names, email addresses or contact details.</p>
-    <button type="button" data-action="enter">Start presentation / Rozpocznij pokaz</button></details>
+    <button type="button" data-action="enter"><span data-bi="Start presentation|Rozpocznij pokaz">${document.documentElement.lang==='pl'?'Rozpocznij pokaz':'Start presentation'}</span></button></details>
     <div class="showroom-controls" hidden><strong data-role="brand">Setback Planner</strong>
       <button type="button" data-action="2d">Plan 2D</button><button type="button" data-action="3d">Explore 3D</button>
       <button type="button" data-action="compact">Example home</button><button type="button" data-action="garden">Example garden</button>
       <button type="button" data-action="guide">Guided demo</button><button type="button" data-action="share">Take project to phone</button>
-      <button type="button" data-action="reset">New visitor / Reset</button><button type="button" data-action="fullscreen">Fullscreen</button>
+      <button type="button" data-action="reset"><span data-bi="New visitor|Reset">${document.documentElement.lang==='pl'?'Reset':'New visitor'}</span></button><button type="button" data-action="fullscreen">Fullscreen</button>
       <button type="button" data-action="exit">Exit presentation</button>
       <p data-role="step" aria-live="polite"></p><p data-role="status" role="status"></p>
     </div>
     <dialog class="showroom-attract" aria-label="Welcome to the showroom" hidden><div><p data-role="welcome">Setback Planner</p><h2>Imagine your place.</h2>
-      <p>Explore an example home and garden, then take your project to your phone.</p><button type="button" data-action="begin">Touch to begin / Dotknij, aby rozpocząć</button></div></dialog>`;
+      <p>Explore an example home and garden, then take your project to your phone.</p><button type="button" data-action="begin"><span data-bi="Touch to begin|Dotknij, aby rozpocząć">${document.documentElement.lang==='pl'?'Dotknij, aby rozpocząć':'Touch to begin'}</span></button></div></dialog>`;
   container.append(panel);
   const find=<T extends HTMLElement>(selector:string)=>panel.querySelector<T>(selector)!;
   const setup=find<HTMLDetailsElement>('.showroom-setup'),controls=find('.showroom-controls'),attract=find<HTMLDialogElement>('.showroom-attract'),status=find('[data-role="status"]');
   const warning=document.createElement('dialog');warning.className='showroom-dialog';warning.setAttribute('aria-labelledby','showroom-warning-title');
-  warning.innerHTML='<h2 id="showroom-warning-title">Still planning?</h2><p data-role="countdown" aria-live="polite"></p><button type="button" data-action="continue">Keep planning / Kontynuuj</button><button type="button" data-action="reset">Finish and reset</button>';
+  warning.innerHTML='<h2 id="showroom-warning-title">Still planning?</h2><p data-role="countdown" aria-live="polite"></p><button type="button" data-action="continue"><span data-bi="Keep planning|Kontynuuj">'+(document.documentElement.lang==='pl'?'Kontynuuj':'Keep planning')+'</span></button><button type="button" data-action="reset">Finish and reset</button>';
   const transfer=document.createElement('dialog');transfer.className='showroom-dialog';transfer.setAttribute('aria-labelledby','showroom-transfer-title');
   transfer.innerHTML='<h2 id="showroom-transfer-title">Take your project with you</h2><p>Scan with your phone camera. The link contains this project; it does not contain contact details or campaign labels.</p><canvas aria-label="QR code for this project" role="img"></canvas><a target="_blank" rel="noopener noreferrer">Open project link</a><p data-role="qr-status" role="status"></p><button type="button" data-action="close-share">Close</button>';
   container.append(warning,transfer);
