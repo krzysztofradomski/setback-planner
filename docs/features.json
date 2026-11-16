@@ -196,14 +196,25 @@
         "F005",
         "F006"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Same transformed footprint and materials as SVG",
         "Orbit, top and axonometric cameras and screenshot",
         "Mobile quality settings and WebGL fallback"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/viewer.test.ts (2 tests for geometry/pitch/material consistency)",
+        "tests/browser/viewer.spec.ts (3 tests: desktop, WebGL fallback, mobile/GPU resource stability)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "Conceptual massing; concave pitched roofs explicitly use a flat schematic cap.",
+        "No terrain, exact neighboring heights, configured openings, walkthrough, or approved manufacturer assets yet.",
+        "Lighting is artistic and shadows approximate; solar simulation is F016.",
+        "Three.js lazy chunk is about 148 KB gzip; no 3D dependency loads until requested."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]

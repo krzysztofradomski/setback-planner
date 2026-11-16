@@ -41,6 +41,13 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-ui);}
 #sheet{display:block;width:100%;height:100%;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
 #sheet.panning{cursor:grabbing}
 
+.view-switch{position:absolute;left:10px;bottom:48px;display:flex;gap:4px;z-index:2}
+.view-switch [aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+#viewer{position:absolute;inset:0;touch-action:none}
+#viewer canvas{display:block;max-width:100%}
+#viewer-controls{position:absolute;left:10px;right:10px;top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#viewer-controls .check{background:var(--panel);padding:6px;border-radius:6px}
+#viewer-note{position:absolute;left:70px;right:10px;bottom:10px;background:var(--panel);padding:6px;border-radius:6px;max-height:90px;overflow:auto}
 /* rail */
 .brand{display:flex;gap:12px;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--rule)}
 .brand svg{flex:none}
@@ -272,6 +279,10 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
   </aside>
 
   <main class="stage">
+    <div class="view-switch" role="group" aria-label="View"><button id="view-2d" aria-pressed="true">2D</button><button id="view-3d" aria-pressed="false">3D</button></div>
+    <div id="viewer" hidden></div>
+    <div id="viewer-controls" hidden><button id="view-top" data-t="topView">Top</button><button id="view-axon" data-t="axonView">Axonometric</button><button id="view-capture" data-t="screenshot">Screenshot</button><label class="check"><input type="checkbox" id="view-low"><span data-t="lowQuality">Low power</span></label></div>
+    <p id="viewer-note" class="hint" hidden></p>
     <svg id="sheet" xmlns="http://www.w3.org/2000/svg" role="img" data-t-aria="plotPlan" aria-label="Plot plan">
       <defs>
         <pattern id="hatch-house" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">

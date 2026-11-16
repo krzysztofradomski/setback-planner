@@ -12,6 +12,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   // ---------- i18n ----------
   const I18N = {
     en: {
+      topView:'Top', axonView:'Axonometric', screenshot:'Screenshot', lowQuality:'Low power', viewerHint:'Conceptual massing. Artistic lighting; no terrain or neighboring heights. Shadows are approximate. Concave pitched roofs use a flat schematic cap.', viewerFailure:'3D is unavailable on this device. Continue planning in 2D.', loading3d:'Loading 3D…',
       catalogs:'Optional catalogs', catalogHint:'Source metadata only. Authoritative dimensions and approved assets are unavailable; generic houses remain available.', catalogUnavailable:'Catalog unavailable or disabled. Saved user-defined fallback geometry is retained.', enableCatalog:'Enable catalog', catalogError:'Catalog could not be loaded. Generic planning remains available.', source:'Source', verifiedOn:'Checked', noDimensions:'Dimensions unverified · placement unavailable',
       materials:'Materials', facade:'Façade finish', grout:'Grout color', roofColor:'Roof color', frameColor:'Window / door color', gutterColor:'Gutter color', trimColor:'Trim color', tileWidth:'Tile width (m)', tileHeight:'Tile height (m)', layout:'Tile direction', horizontal:'Horizontal', vertical:'Vertical', wallFinish:'Individual wall', allWalls:'All walls', inherit:'Use façade finish', resetMaterials:'Reset all finishes', resetFacade:'Reset façade', original:'Compare original', materialHint:'Conceptual finishes, not manufacturer-approved options. No price calculation. Patterns are schematic.',
       shape:'Footprint shape', rectangle:'Rectangular', wingRatio:'Wing proportion', height:'Wall height total (m)', storeys:'Storeys', roof:'Roof', flat:'Flat', gable:'Gable', pitch:'Roof pitch (°)', genericHint:'Generic conceptual house. Dimensions are user-defined; no manufacturer specifications or legal approval.',
@@ -42,6 +43,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      topView:'Z góry', axonView:'Aksonometria', screenshot:'Zrzut ekranu', lowQuality:'Oszczędzanie energii', viewerHint:'Bryły koncepcyjne. Oświetlenie artystyczne, brak terenu i wysokości sąsiadów. Cienie przybliżone. Dachy spadziste brył wklęsłych pokazano jako płaski schemat.', viewerFailure:'Widok 3D niedostępny na tym urządzeniu. Kontynuuj w 2D.', loading3d:'Wczytywanie 3D…',
       catalogs:'Katalogi opcjonalne', catalogHint:'Tylko metadane źródłowe. Brak potwierdzonych wymiarów i zatwierdzonych zasobów; domy ogólne są dostępne.', catalogUnavailable:'Katalog niedostępny lub wyłączony. Zachowano zapisany obrys użytkownika.', enableCatalog:'Włącz katalog', catalogError:'Nie można wczytać katalogu. Planowanie ogólne jest nadal dostępne.', source:'Źródło', verifiedOn:'Sprawdzono', noDimensions:'Wymiary niepotwierdzone · brak umieszczania',
       materials:'Materiały', facade:'Wykończenie elewacji', grout:'Kolor fugi', roofColor:'Kolor dachu', frameColor:'Kolor okien / drzwi', gutterColor:'Kolor rynien', trimColor:'Kolor detali', tileWidth:'Szerokość płytki (m)', tileHeight:'Wysokość płytki (m)', layout:'Kierunek płytek', horizontal:'Poziomo', vertical:'Pionowo', wallFinish:'Pojedyncza ściana', allWalls:'Wszystkie ściany', inherit:'Wykończenie elewacji', resetMaterials:'Resetuj wykończenia', resetFacade:'Resetuj elewację', original:'Porównaj oryginał', materialHint:'Wykończenia koncepcyjne, bez zatwierdzenia producenta i kalkulacji cen. Wzory są schematyczne.',
       shape:'Kształt obrysu', rectangle:'Prostokątny', wingRatio:'Proporcja skrzydła', height:'Łączna wysokość ścian (m)', storeys:'Kondygnacje', roof:'Dach', flat:'Płaski', gable:'Dwuspadowy', pitch:'Kąt dachu (°)', genericHint:'Dom koncepcyjny. Wymiary określa użytkownik; bez specyfikacji producenta i potwierdzenia zgodności z prawem.',
@@ -298,9 +300,10 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   }
 
   // ---------- rendering ----------
+  let viewer = null, view3d = false;
   let originalAppearance = false;
   let C = compute();
-  function render(){ C = compute(); renderSheet(); syncPanel(); save(); }
+  function render(){ C = compute(); renderSheet(); syncPanel(); if(viewer && view3d)viewer.update(state,originalAppearance); save(); }
 
   function dim(a, b, cls, text){
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
@@ -704,6 +707,29 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     else if (e.key === 'Escape'){ selected = null; buildPanel(); render(); }
   });
 
+  function setViewerMode(enabled){
+    view3d=enabled; $('#viewer').hidden=!enabled; $('#sheet').hidden=enabled;$('#viewer-controls').hidden=!enabled;
+    $('.tools').hidden=enabled;$('.legend').hidden=enabled;$('#chipbar').hidden=enabled;$('#viewer-note').hidden=!enabled;
+    $('#view-2d').setAttribute('aria-pressed',String(!enabled));$('#view-3d').setAttribute('aria-pressed',String(enabled));
+    if(viewer){viewer.setActive(enabled);if(enabled)viewer.update(state,originalAppearance);}
+    if(!enabled)renderSheet();
+  }
+  $('#view-2d').onclick=()=>setViewerMode(false);
+  $('#view-3d').onclick=async()=>{
+    $('#view-3d').disabled=true;
+    try {
+      if(!viewer){
+        const {createViewer}=await import('./viewer/viewer.ts');
+        viewer=createViewer($('#viewer'),()=>{viewer?.dispose();viewer=null;setViewerMode(false);toast(t('viewerFailure'));});
+      }
+      $('#viewer-note').textContent=t('viewerHint');setViewerMode(true);
+    } catch {viewer?.dispose();viewer=null;setViewerMode(false);toast(t('viewerFailure'));}
+    finally {$('#view-3d').disabled=false;}
+  };
+  $('#view-top').onclick=()=>viewer?.view('top');$('#view-axon').onclick=()=>viewer?.view('axonometric');
+  $('#view-low').onchange=e=>viewer?.quality(e.target.checked);
+  $('#view-capture').onclick=()=>{try{const a=document.createElement('a');a.download='setback-3d.png';a.href=viewer.screenshot();a.click();}catch{toast(t('viewerFailure'));}};
+  window.addEventListener('pagehide',()=>{viewer?.dispose();viewer=null;});
   // ---------- wiring ----------
   $('#add-house').onclick = () => addItem('house');
   $('#add-garage').onclick = () => addItem('garage');
@@ -805,7 +831,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   document.querySelectorAll('.lang button').forEach(b => b.onclick = () => {
     lang = b.dataset.lang;
     try { localStorage.setItem(LANG_LS, lang); } catch (e) {}
-    applyLang(); renderCatalogs();
+    applyLang(); renderCatalogs(); $('#viewer-note').textContent=t('viewerHint');
     'ABCD'.split('').forEach((c, i) => ['x', 'y'].forEach(axis =>
       document.getElementById(`pc-${axis}-${i}`).setAttribute('aria-label', t('cornerAxis', {c, axis}))));
     buildPanel(); render();
