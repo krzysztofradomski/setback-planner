@@ -185,3 +185,6 @@ test('a multipart parcel retains holes in area and the drawn boundary',async({pa
  const ring=(x:number,y:number,w:number)=>[[x,y],[x+w,y],[x+w,y+w],[x,y+w],[x,y]];const value={type:'MultiPolygon',coordinates:[[ring(500000,500000,20),ring(500005,500005,5)],[ring(500040,500000,10)]]};
  await page.locator('#parcel-file').setInputFiles({name:'parts.geojson',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});await expect(page.locator('#p-area')).toHaveText('475 m²');expect((await page.locator('.plot-fill').getAttribute('d'))!.split('M')).toHaveLength(4);await expect(page.locator('.plot-fill')).toHaveAttribute('fill-rule','evenodd');
 });
+test('placement analysis produces selectable deterministic geometric options',async({page})=>{
+ await page.goto('/');await page.locator('#placement-analyze').evaluate((el:HTMLButtonElement)=>el.closest('details')!.open=true);await page.locator('#placement-analyze').click();await expect(page.locator('#placement-result')).toContainText('sampled placements');await expect(page.locator('#placement-options button').first()).toBeVisible();await page.locator('#placement-options button').first().click();await expect(page.locator('.obj')).toHaveCount(2);
+});

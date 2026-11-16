@@ -63,3 +63,5 @@ F016 completed: Solar position is calculated with SunCalc 2.1.4 (degrees clockwi
 F015 completed: Fence and hedge paths support editable dimensions, spacing, color and gate opening geometry. Designs are procedural concepts, not engineering/manufacturer specifications.
 
 F025 completed: Multipart polygons and holes persist, render and participate in containment and area calculations. Total topology is bounded to 512 vertices; intersecting or touching hole boundaries are rejected.
+
+F013 completed: Uniform user-defined setback geometry uses deterministic millimetre miter offsets; suggestions use a bounded grid and are not exhaustive or a legal feasibility decision.

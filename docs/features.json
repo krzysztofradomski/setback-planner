@@ -334,14 +334,22 @@
         "F005",
         "F009"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Rule provenance",
         "Available building area and deterministic suggestions",
         "Distinguish geometry from compliance"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build",
+        "npm run test:e2e"
+      ],
+      "knownLimitations": [
+        "Uniform user-defined setback geometry uses deterministic millimetre miter offsets; suggestions use a bounded grid and are not exhaustive or a legal feasibility decision."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]
