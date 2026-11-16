@@ -45,7 +45,6 @@
         "Boundary-contact unit/browser regression: zero distance fails positive setback"
       ],
       "knownLimitations": [
-        "Simple polygon rings only; holes and multipolygons belong to F009.",
         "Interactive invalid parcel edits are visibly flagged; import rejection belongs to F003."
       ],
       "documentation": [
@@ -73,7 +72,6 @@
         "Compression API fallback when deflate-raw is unavailable"
       ],
       "knownLimitations": [
-        "Only simple single-ring parcel topology is supported; holes and multipart parcels are F025.",
         "Shared links contain project geometry in the fragment and must be treated as public to their recipients."
       ],
       "documentation": [
@@ -127,9 +125,7 @@
         "npm run build"
       ],
       "knownLimitations": [
-        "Wing proportions are user parameters; no manufacturer dimensions are implied.",
-        "Attached garages/carports and custom polygons are queued in F024.",
-        "Only rectangular gable roofs have pitch geometry; concave pitched roofs are schematic."
+        "Parametric user dimensions are conceptual. Concave pitched roofs use a flat schematic cap; rectangular gable/hip/shed roofs have pitch geometry."
       ],
       "documentation": [
         "docs/repository-audit.md"
@@ -155,9 +151,7 @@
         "npm run build"
       ],
       "knownLimitations": [
-        "All presets are conceptual, not manufacturer-confirmed.",
-        "2D shows facade tint; 3D patterns use physical texture repeats but remain schematic.",
-        "Normal maps, accent-area geometry and roof covering patterns remain to be added."
+        "Procedural textures, normal maps, physical repeats, per-wall finishes, roof coverings and separate door colors are conceptual. Detailed accent-area meshes and approved manufacturer materials require further design/assets."
       ],
       "documentation": [
         "docs/repository-audit.md"
@@ -212,10 +206,7 @@
         "npm run build"
       ],
       "knownLimitations": [
-        "Conceptual massing; concave pitched roofs explicitly use a flat schematic cap.",
-        "No terrain, exact neighboring heights, configured openings, walkthrough, or approved manufacturer assets yet.",
-        "Lighting is artistic and shadows approximate; solar simulation is F016.",
-        "Three.js lazy chunk is about 148 KB gzip; no 3D dependency loads until requested."
+        "Conceptual massing; terrain, openings and walk camera are supported. Neighbor heights remain unknown; shadows are approximate. Optional Three.js and MapLibre bundles are lazy-loaded and large."
       ],
       "documentation": [
         "docs/repository-audit.md"
@@ -242,7 +233,6 @@
         "npm run build"
       ],
       "knownLimitations": [
-        "Holes and separate parcel parts are explicitly rejected and tracked in F025.",
         "PL-1992 projected distances are planning measurements, not certified survey distances.",
         "Import preserves building local positions; UI asks the user to verify placement."
       ],
@@ -273,7 +263,6 @@
       ],
       "knownLimitations": [
         "Map selection is implemented separately in F026.",
-        "Holes and multipart parcels are explicitly rejected (F025).",
         "No automatic retries or long-term service mirroring."
       ],
       "documentation": [
@@ -315,16 +304,25 @@
       "dependencies": [
         "F011"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Elevation and slope",
         "Verified planning/flood/environment/utility source adapters",
         "Freshness and unavailable-source disclosure"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run test:e2e",
+        "npm run test:production"
+      ],
+      "knownLimitations": [
+        "GUGiK nine-point NMT sampling, terrain mesh and approximate slope; verified MPZP, utility and GDOŚ WMS overlays. Flood WMS returns HTTP 401: official Hydroportal fallback provided. Raster plans do not become verified vector building lines. Coverage, datum and capture dates may be unknown."
+      ],
       "documentation": [
-        "docs/repository-audit.md"
+        "docs/implementation-status.md",
+        "docs/geospatial-sources.md"
       ]
     },
     {
@@ -441,16 +439,25 @@
       "dependencies": [
         "F012"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Official capability/pricing review and configured bindings",
         "Opt-in private text processing, strict schemas and citations",
         "Bounded usage, caching and failure paths"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run test:e2e",
+        "npm run test:production"
+      ],
+      "knownLimitations": [
+        "Authenticated opt-in Workers AI extraction, source-excerpt summaries/reports, registered catalog answers and validated layout proposals. Strict citations, quotas, cache and no automatic scene edits. PDF OCR and independent legal verification are not provided."
+      ],
       "documentation": [
-        "docs/repository-audit.md"
+        "docs/implementation-status.md",
+        "docs/backend.md"
       ]
     },
     {
@@ -488,16 +495,25 @@
       "dependencies": [
         "F001"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Separate staging and production",
         "No frontend secrets",
         "API/storage/AI errors and usage monitoring when services added"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run test:e2e",
+        "npm run test:production"
+      ],
+      "knownLimitations": [
+        "Separate EU D1 staging/production databases, isolated secrets, AI binding, Turnstile and scheduled retention. Worker invocation/error logging and sampled traces enabled; Cloudflare dashboards provide storage/neuron billing metrics."
+      ],
       "documentation": [
-        "docs/repository-audit.md"
+        "docs/implementation-status.md",
+        "docs/backend.md"
       ]
     },
     {
@@ -506,16 +522,25 @@
       "dependencies": [
         "F004"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Touch fullscreen, examples, guided flow and QR transfer",
         "Inactivity warning/reset and visitor cleanup",
         "First-party campaign metadata"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run test:e2e",
+        "npm run test:production"
+      ],
+      "knownLimitations": [
+        "Fullscreen guided showroom, generic examples, QR scene transfer, first-party attribution and warning/reset. Autosave, undo, visitor data and server administration sessions are isolated. Manufacturer branding requires approved assets."
+      ],
       "documentation": [
-        "docs/repository-audit.md"
+        "docs/implementation-status.md",
+        "docs/showroom.md"
       ]
     },
     {
@@ -526,16 +551,25 @@
         "F019",
         "F020"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Voluntary disclosed inquiry with separate marketing consent",
         "Scoped roles, tenant isolation, retention, deletion and Turnstile",
         "Standalone management without CRM"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run test:e2e",
+        "npm run test:production"
+      ],
+      "knownLimitations": [
+        "Standalone private inquiries, scoped owner/manufacturer/sales roles, Turnstile, explicit processing and optional marketing consent, deletion/export and audited retention. Public recipient activation requires actual controller identity and privacy disclosure; none enabled by deployment."
+      ],
       "documentation": [
-        "docs/repository-audit.md"
+        "docs/implementation-status.md",
+        "docs/backend.md"
       ]
     },
     {
@@ -544,16 +578,25 @@
       "dependencies": [
         "F021"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Configurable duplicate/window/exclusion rules",
         "Contract/payment-confirmed eligibility and immutable audit",
         "Deterministic reporting and CRM/webhook adapters"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run test:e2e",
+        "npm run test:production"
+      ],
+      "knownLimitations": [
+        "Deterministic commission rules, confirmation references, immutable audit, private reports and CSV/API integration boundary. No external CRM, email, pricing or webhook recipient is configured and no external message is sent."
+      ],
       "documentation": [
-        "docs/repository-audit.md"
+        "docs/implementation-status.md",
+        "docs/backend.md"
       ]
     },
     {

@@ -8,10 +8,11 @@
     "build": "vite build",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint public tests",
+    "typecheck": "tsc --noEmit && tsc -p backend.config.json",
+    "lint": "eslint public tests worker",
     "preview": "vite preview --host 127.0.0.1 --port 5173",
-    "test:production": "npm run build && PLAYWRIGHT_PREVIEW=1 playwright test --grep \"map loads attributed|3D supports camera|SVG export and printable\""
+    "test:production": "npm run build && PLAYWRIGHT_PREVIEW=1 playwright test --grep \"map loads attributed|3D supports camera|SVG export and printable\"",
+    "dev:worker": "wrangler dev --ip 127.0.0.1 --port 8787"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261116.1",

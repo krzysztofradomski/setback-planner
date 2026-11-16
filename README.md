@@ -1,6 +1,6 @@
 # Setback Planner
 
-**Production:** [setback-planner.paperplane.builders](https://setback-planner.paperplane.builders). The development work on `codex/scene-foundation` has not been deployed.
+**Production:** [setback-planner.paperplane.builders](https://setback-planner.paperplane.builders).
 
 A bilingual parcel and house concept planner. The existing SVG editor is retained, with typed domain modules and optional Three.js and MapLibre views.
 
@@ -14,7 +14,7 @@ A bilingual parcel and house concept planner. The existing SVG editor is retaine
 - SVG export and printable EN/PL reports with browser PDF saving and explicit unknown requirements.
 - Optional manufacturer catalog metadata. Current Udana Budowa model entries have no inferred dimensions, prices or reused renders.
 
-Setbacks are user-selected geometric inputs (defaults: 4 m for houses, 3 m for garages). This tool does not establish legal or technical building feasibility. Holes and separate parcel components are currently rejected explicitly. Terrain, planning/risk overlays, landscaping, seasons, Workers AI, showroom and private lead management remain in the backlog.
+Setbacks are user-selected geometric inputs (defaults: 4 m for houses, 3 m for garages). This tool does not establish legal or technical building feasibility. Multipart parcels and holes are supported. Terrain, planning/utility/protected-area overlays, garden objects, fences, seasons, showroom, private lead management and source-based Workers AI are implemented. See the status document for explicit external blockers and practical limits.
 
 ## Development
 
@@ -45,11 +45,11 @@ npm run build
 npm run preview
 ```
 
-Cloudflare Worker Static Assets serves `dist` after the build. The existing custom domain configuration is preserved. No D1, R2, AI binding, credentials or new Cloudflare resources have been provisioned.
+Cloudflare Worker Static Assets serves `dist` after the build. The existing custom domain configuration is preserved. Separate staging/production D1 databases, Workers AI, Turnstile and private server authentication are configured. R2 is unnecessary because no binary upload service is provided.
 
 ```bash
 npm run build
 npx wrangler deploy
 ```
 
-Separate staging and backend observability remain in F019; production deployment has not been performed during this implementation.
+Staging uses `npx wrangler deploy --env staging`; production uses `--env ''`. See [backend operations](docs/backend.md) for migrations, secrets, recipient activation and retention. For local API development, run `npm run dev:worker` alongside Vite and apply local D1 migrations; Vite proxies `/api` to port 8787. Never commit `.dev.vars` files.
