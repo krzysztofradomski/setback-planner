@@ -3,7 +3,7 @@ test('3D supports camera presets, live materials, screenshot and 2D return',asyn
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',msg=>{if((msg.type()==='error'||msg.type()==='warning')&&!/GL Driver Message.*GPU stall due to ReadPixels/.test(msg.text()))errors.push(msg.text());});
   await page.goto('/');
   await page.locator('#view-3d').click();
-  await expect(page.locator('#viewer canvas')).toBeVisible();
+  await expect(page.locator('#viewer canvas')).toBeVisible();await expect(page.locator('#sheet')).not.toBeVisible();
   await page.locator('#view-top').click();
   await page.locator('#view-axon').click();
   await page.locator('#view-low').check();

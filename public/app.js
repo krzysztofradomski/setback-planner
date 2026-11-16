@@ -757,7 +757,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   function setStageMode(mode){
     view3d=mode==='3d';mapActive=mode==='map';
     if(!mapActive){mapPick=false;$('#map-pick').setAttribute('aria-pressed','false');}
-    $('#viewer').hidden=!view3d;$('#sheet').hidden=mode!=='2d';$('#viewer-controls').hidden=!view3d;
+    $('#viewer').hidden=!view3d;$('#sheet').toggleAttribute('hidden',mode!=='2d');$('#viewer-controls').hidden=!view3d;
     $('#parcel-map').hidden=!mapActive;$('#map-controls').hidden=!mapActive;$('#map-status').hidden=!mapActive;
     $('.tools').hidden=mode!=='2d';$('.legend').hidden=mode!=='2d';$('#chipbar').hidden=mode!=='2d';$('#viewer-note').hidden=!view3d;
     $('#view-2d').setAttribute('aria-pressed',String(mode==='2d'));$('#view-3d').setAttribute('aria-pressed',String(view3d));$('#view-map').setAttribute('aria-pressed',String(mapActive));

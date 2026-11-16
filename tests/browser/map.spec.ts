@@ -4,7 +4,7 @@ test('map loads attributed providers, layers and georeferenced overlay without a
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',msg=>{if(msg.type()==='error')errors.push(msg.text());});
   await page.route(/https:\/\/(tile.openstreetmap.org|mapy.geoportal.gov.pl|integracja.gugik.gov.pl)\//,route=>route.fulfill({status:200,contentType:'image/png',body:tile}));
   await page.goto('/');await page.locator('#view-map').click();
-  await expect(page.locator('#parcel-map canvas')).toBeVisible();
+  await expect(page.locator('#parcel-map canvas')).toBeVisible();await expect(page.locator('#sheet')).not.toBeVisible();
   await expect(page.locator('#parcel-map')).toHaveAttribute('data-ready','true');
   await expect(page.locator('.maplibregl-ctrl-attrib')).toContainText('OpenStreetMap');
   await page.locator('#map-base').selectOption('ortho');await page.locator('#map-cadastre').check();
