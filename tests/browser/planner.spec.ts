@@ -1,0 +1,36 @@
+import { test, expect } from '@playwright/test';
+test('existing editor adds, resizes, rotates, duplicates, deletes and undoes', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await expect(page.locator('.obj')).toHaveCount(2);
+  await page.locator('#add-house').click();
+  await expect(page.locator('.obj')).toHaveCount(3);
+  await page.locator('#f-w').fill('14');
+  await page.locator('#b-rot').click();
+  await expect(page.locator('#f-rot')).toHaveValue('90');
+  await page.locator('#b-dup').click();
+  await expect(page.locator('.obj')).toHaveCount(4);
+  await page.locator('#b-del').click();
+  await expect(page.locator('.obj')).toHaveCount(3);
+  await page.locator('#t-undo').click();
+  await expect(page.locator('.obj')).toHaveCount(4);
+  expect(errors).toEqual([]);
+});
+test('legacy uncompressed shared URLs remain readable', async ({ page }) => {
+  const legacy = { plot: [{x:0,y:0},{x:30,y:0},{x:30,y:40},{x:0,y:40}], items: [{id:'o7', type:'house', name:'Legacy', x:15,y:20,w:10,d:8,rot:30,setback:4}], snap:1 };
+  await page.goto('/#p=' + Buffer.from(JSON.stringify(legacy)).toString('base64url'));
+  await expect(page.locator('#f-name')).toHaveValue('Legacy');
+  await expect(page.locator('#f-rot')).toHaveValue('30');
+  await page.reload();
+  await expect(page.locator('#f-name')).toHaveValue('Legacy');
+});
+test('Polish translation and mobile plan are usable', async ({ page }) => {
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/');
+  await page.getByRole('button', {name:'PL',exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('lang','pl');
+  await expect(page.locator('#add-house')).toHaveText('Dom');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(page.locator('#sheet .bld')).toHaveCount(2);
+});

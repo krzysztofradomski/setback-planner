@@ -19,16 +19,26 @@ Draw a four-corner plot on a 1 m grid, place houses and garages, and see every c
 
 ## Development
 
-The whole app is one static file, `public/index.html`, with no build step. Open it in a browser or serve the folder:
+The existing SVG editor is bundled with Vite. New domain modules use TypeScript. Node 22.18+ is required for the unit test runner.
 
 ```bash
-python3 -m http.server -d public 8765
+npm ci
+npx playwright install chromium
+npm run dev
+npm run typecheck
+npm run lint
+npm test
+npm run test:e2e
+npm run build
 ```
+
+Feature backlog: [docs/features.json](docs/features.json). Inventory and decisions: [docs/repository-audit.md](docs/repository-audit.md). Handoff: [docs/implementation-status.md](docs/implementation-status.md).
 
 ## Deploy
 
-The site is served as static assets by the `setback-planner` Cloudflare Worker on the custom domain set in `wrangler.jsonc`:
+Cloudflare Worker Static Assets serves `dist` after `npm run build`. Existing custom domain configuration is preserved. Deployment is separate from local implementation:
 
 ```bash
+npm run build
 npx wrangler deploy
 ```

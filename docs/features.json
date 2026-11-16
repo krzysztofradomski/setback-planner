@@ -1,0 +1,454 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    {
+      "id": "F001",
+      "description": "Repository audit and regression harness",
+      "dependencies": [],
+      "status": "completed",
+      "acceptanceCriteria": [
+        "Inventory existing behavior and risks",
+        "Reproducible build, typecheck, lint and browser regressions"
+      ],
+      "tests": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "tests/backlog.test.ts",
+        "tests/browser/planner.spec.ts (3 passing)"
+      ],
+      "knownLimitations": [
+        "Existing editor remains JavaScript; new domain modules are TypeScript."
+      ],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F002",
+      "description": "Deterministic polygon geometry",
+      "dependencies": [
+        "F001"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Reject invalid rings",
+        "Correct touching/overlapping polygons and concave containment",
+        "Metric transforms and measurements tested"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F003",
+      "description": "Versioned canonical scene and legacy sharing",
+      "dependencies": [
+        "F002"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Strict scene validation and migration from unversioned JSON and #p/#z",
+        "Full scene persists in local storage, JSON and new share URLs",
+        "Reject future versions without data loss"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F004",
+      "description": "Project files, variants and full undo/redo",
+      "dependencies": [
+        "F003"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Download and import JSON projects",
+        "Named local variants restore full scene",
+        "Undo and redo restore full scene"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F005",
+      "description": "Generic parametric house footprints",
+      "dependencies": [
+        "F003"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Rectangle, L, T and U footprints with editable dimensions",
+        "Same footprint drives SVG, collisions and coverage",
+        "Architectural height and roof controls persist"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F006",
+      "description": "Architectural material presets and overrides",
+      "dependencies": [
+        "F005"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Brick slip variants plus plaster, wood, clinker, stone, concrete and composite",
+        "Separate base and override data with per-material reset",
+        "Conceptual finishes clearly distinguished"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F007",
+      "description": "Optional manufacturer catalog metadata",
+      "dependencies": [
+        "F003"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Explicitly registered lazy catalog with verified model names and dated sources",
+        "Enable/disable without deleting placed objects",
+        "Unknown dimensions never invented"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F008",
+      "description": "Synchronized interactive 3D viewer",
+      "dependencies": [
+        "F005",
+        "F006"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Same transformed footprint and materials as SVG",
+        "Orbit, top and axonometric cameras and screenshot",
+        "Mobile quality settings and WebGL fallback"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F009",
+      "description": "CRS-aware arbitrary parcel import",
+      "dependencies": [
+        "F002",
+        "F003"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Validated polygon and multipolygon fixtures",
+        "Metric projection and source metadata",
+        "Arbitrary vertex parcel editor"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F010",
+      "description": "GUGiK ULDK parcel search",
+      "dependencies": [
+        "F009"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Identifier and map selection",
+        "Bounded requests, service failure fallback and attribution",
+        "Mocked authoritative response fixtures"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F011",
+      "description": "Geographical map layers",
+      "dependencies": [
+        "F010"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "MapLibre orthophoto, cadastre and base maps where available",
+        "Visible attribution and provenance",
+        "North and nearby geometry"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F012",
+      "description": "Terrain, planning and environmental layers",
+      "dependencies": [
+        "F011"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Elevation and slope",
+        "Verified planning/flood/environment/utility source adapters",
+        "Freshness and unavailable-source disclosure"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F013",
+      "description": "Planning rules and placement suggestions",
+      "dependencies": [
+        "F005",
+        "F009"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Rule provenance",
+        "Available building area and deterministic suggestions",
+        "Distinguish geometry from compliance"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F014",
+      "description": "Garden object library",
+      "dependencies": [
+        "F005",
+        "F008"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Parametric structures, surfaces, furniture and vegetation",
+        "Physical dimensions and mature sizes",
+        "Consistent placement and rendering"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F015",
+      "description": "Fences, gates and hedges",
+      "dependencies": [
+        "F014"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Path-following configurable fence types",
+        "Gate opening and driveway clearance",
+        "Hedge spacing and growth"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F016",
+      "description": "Seasons and solar simulation",
+      "dependencies": [
+        "F008",
+        "F011",
+        "F014"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Four seasonal presets",
+        "Independent physical solar position",
+        "Explicit approximate shadows"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F017",
+      "description": "Source-based Workers AI planning assistant",
+      "dependencies": [
+        "F012"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Official capability/pricing review and configured bindings",
+        "Opt-in private text processing, strict schemas and citations",
+        "Bounded usage, caching and failure paths"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F018",
+      "description": "Printable reports and visual exports",
+      "dependencies": [
+        "F003"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "SVG export and print-to-PDF overview",
+        "Source timestamps and unknown restrictions",
+        "Catalog and conceptual customization disclosures"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F019",
+      "description": "Cloudflare environments and observability",
+      "dependencies": [
+        "F001"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Separate staging and production",
+        "No frontend secrets",
+        "API/storage/AI errors and usage monitoring when services added"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F020",
+      "description": "Showroom and campaign attribution",
+      "dependencies": [
+        "F004"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Touch fullscreen, examples, guided flow and QR transfer",
+        "Inactivity warning/reset and visitor cleanup",
+        "First-party campaign metadata"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F021",
+      "description": "Private lead submission and management",
+      "dependencies": [
+        "F007",
+        "F019",
+        "F020"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Voluntary disclosed inquiry with separate marketing consent",
+        "Scoped roles, tenant isolation, retention, deletion and Turnstile",
+        "Standalone management without CRM"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F022",
+      "description": "Attribution, commissions and adapters",
+      "dependencies": [
+        "F021"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Configurable duplicate/window/exclusion rules",
+        "Contract/payment-confirmed eligibility and immutable audit",
+        "Deterministic reporting and CRM/webhook adapters"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F023",
+      "description": "Verified manufacturer geometry and approved assets",
+      "dependencies": [
+        "F007",
+        "F008"
+      ],
+      "status": "blocked",
+      "acceptanceCriteria": [
+        "Authoritative footprints, roof heights, openings and options",
+        "Approved asset rights and default appearance",
+        "Version migrations and fallback geometry"
+      ],
+      "tests": [],
+      "knownLimitations": [
+        "Authoritative manufacturer drawings and asset reuse rights not established."
+      ],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F024",
+      "description": "Advanced scene operations",
+      "dependencies": [
+        "F004",
+        "F009"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Object grouping, visibility and locking",
+        "Custom footprint, garage/carport assemblies",
+        "Variant comparison and walkthrough camera"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/repository-audit.md"
+      ]
+    }
+  ]
+}

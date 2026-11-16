@@ -2,3 +2,8 @@
 node_modules/
 .DS_Store
 .playwright-mcp/
+dist/
+test-results/
+playwright-report/
+.env
+.env.*
