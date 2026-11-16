@@ -2,7 +2,7 @@ import { Map, NavigationControl, AttributionControl, GeoJSONSource, setWorkerUrl
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 setWorkerUrl(workerUrl);
-import { mapSources } from './sources.ts';
+import { mapSources, isMapOverlay } from './sources.ts';
 import { projectOverlay } from './overlay.ts';
 import type { Scene } from '../core/scene.ts';
 export function createParcelMap(container:HTMLElement,onError:()=>void){
@@ -18,7 +18,7 @@ export function createParcelMap(container:HTMLElement,onError:()=>void){
       const visible=id==='cadastre'?cadastre:overlays.has(id)||base===id;
       if(visible&&!map.getSource(id)){
         map.addSource(id,source as RasterSourceSpecification);
-        map.addLayer({id,type:'raster',source:id,paint:{'raster-opacity':id==='cadastre'?0.85:1}},'project-fill');
+        map.addLayer({id,type:'raster',source:id,paint:{'raster-opacity':id==='cadastre'?0.85:id==='relief'?0.65:id==='flood'||id==='groundwater'?0.7:1}},'project-fill');
       }
       if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visible?'visible':'none');
     }
@@ -48,7 +48,7 @@ export function createParcelMap(container:HTMLElement,onError:()=>void){
   const observer=new ResizeObserver(()=>map.resize());observer.observe(container);
   return {ready,update,fitProject,
     setBase(value:'osm'|'ortho'|'none'){base=value;sources();if(value==='ortho'&&map.getZoom()<10)map.jumpTo({zoom:10});},
-    setOverlay(id:string,value:boolean){if(!['planning','utilities','environment'].includes(id))return;if(value)overlays.add(id);else overlays.delete(id);sources();},
+    setOverlay(id:string,value:boolean){if(!isMapOverlay(id))return;if(value)overlays.add(id);else overlays.delete(id);sources();},
     setCadastre(value:boolean){cadastre=value;sources();},
     setActive(active:boolean){if(active)map.resize();},
     onClick(callback:(longitude:number,latitude:number)=>void){map.on('click',event=>callback(event.lngLat.lng,event.lngLat.lat));},
