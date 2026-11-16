@@ -1,0 +1,63 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
+import worker from '../worker/index.ts';
+import { rulesSchema, evidenceSchema, transition, csvCell, validateExtraction } from '../worker/domain.ts';
+import type { Database, Statement, Env } from '../worker/types.ts';
+function setup() { const db = new DatabaseSync(':memory:'); db.exec(readFileSync(new URL('../migrations/0001_business.sql', import.meta.url), 'utf8')); const adapt = (sql: string, params: unknown[] = []): Statement => ({ bind(...p: unknown[]) { return adapt(sql, p); }, async first<T>() { return (db.prepare(sql).get(...params as never[]) ?? null) as T | null; }, async all<T>() { return { results: db.prepare(sql).all(...params as never[]) as T[] }; }, async run() { return { meta: { changes: Number(db.prepare(sql).run(...params as never[]).changes) } }; } }); const DB: Database = { prepare: adapt, async batch(statements) { db.exec('BEGIN'); try {
+        const r = [];
+        for (const s of statements)
+            r.push(await s.run());
+        db.exec('COMMIT');
+        return r;
+    }
+    catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+    } } }; const env: Env = { DB, ASSETS: { async fetch() { return new Response('asset'); } }, SESSION_SECRET: 's'.repeat(40), BOOTSTRAP_SECRET: 'b'.repeat(40) }; return { db, env }; }
+const origin = 'https://planner.example';
+async function api(env: Env, path: string, body?: unknown, cookie?: string, method = body ? 'POST' : 'GET') { return worker.fetch(new Request(origin + path, { method, headers: { Origin: origin, 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }), env); }
+async function ownerSession(env: Env) { const r = await api(env, '/api/auth/bootstrap', { email: 'owner@example.com', password: 'a secure password 1234', bootstrapSecret: 'b'.repeat(40) }); assert.equal(r.status, 200); return r.headers.get('set-cookie')!.split(';')[0]; }
+test('bootstrap, secure sessions, tenant isolation, role enforcement and CSRF', async () => { const { env, db } = setup(); const cookie = await ownerSession(env); assert.match(cookie, /__Host-sp_session=/); assert.equal((await api(env, '/api/auth/bootstrap', { email: 'other@example.com', password: 'another secure password', bootstrapSecret: 'b'.repeat(40) })).status, 409); const tenant = await (await api(env, '/api/tenants', { name: 'Independent recipient' }, cookie)).json() as {
+    id: string;
+}; const other = await (await api(env, '/api/tenants', { name: 'Other recipient' }, cookie)).json() as {
+    id: string;
+}; assert.equal((await api(env, '/api/users', { email: 'sales@example.com', password: 'sales password 12345', role: 'sales', tenantId: tenant.id }, cookie)).status, 201); const login = await api(env, '/api/auth/login', { email: 'sales@example.com', password: 'sales password 12345' }); const salesCookie = login.headers.get('set-cookie')!.split(';')[0]; assert.equal((await api(env, '/api/leads?tenant=' + other.id, undefined, salesCookie)).status, 404); assert.equal((await api(env, '/api/tenants', { name: 'Unauthorized' }, salesCookie)).status, 403); assert.equal((await worker.fetch(new Request(origin + '/api/auth/logout', { method: 'POST', headers: { Cookie: cookie } }), env)).status, 403); assert.throws(() => db.exec("UPDATE audit SET action='tampered'"), /immutable/); assert.throws(() => db.exec('DELETE FROM audit'), /immutable/); assert.equal((await api(env, '/api/auth/logout', {}, cookie)).status, 200); assert.equal((await api(env, '/api/auth/me', undefined, cookie)).status, 401); });
+test('inquiries and AI fail closed before configuration and consent', async () => { const { env } = setup(); assert.deepEqual(await (await api(env, '/api/recipients')).json(), { recipients: [], reason: 'Public inquiries have not been configured' }); assert.equal((await api(env, '/api/inquiries', {})).status, 503); const cookie = await ownerSession(env); assert.equal((await api(env, '/api/ai/extract', {}, cookie)).status, 503); });
+test('deterministic eligibility requires agreed attribution and confirmations', () => { const lead = { status: 'paid', duplicate: 0, existing_customer: 0, created: 10000, attributed: 1000, attribution: '{"campaign":"fair"}' }; const rules = rulesSchema.parse({ agreement: 'Agreement 2026', campaign: 'fair', mode: 'basis_points', value: 125 }); const evidence = evidenceSchema.parse({ contractRef: 'C-1', contractCents: 1234567, paymentRef: 'P-1' }); assert.equal(transition(lead, 'commission_eligible', evidence, rules), 15432); assert.throws(() => transition({ ...lead, duplicate: 1 }, 'commission_eligible', evidence, rules), /eligibility/); assert.throws(() => transition(lead, 'commission_eligible', { ...evidence, paymentRef: '' }, rules), /eligibility/); assert.throws(() => transition({ ...lead, status: 'new' }, 'commission_eligible', evidence, rules), /transition/); assert.throws(() => transition({ ...lead, status: 'commission_settled' }, 'reversed', evidence, rules), /explanation/); assert.equal(transition({ ...lead, status: 'commission_settled' }, 'reversed', { ...evidence, resolution: 'Order cancelled' }, rules), 0); });
+test('AI extracts only exact verifiable quotes and treats every claim uncertain', () => { const source = 'The maximum height is 9 metres.'; assert.equal(validateExtraction({ claims: [{ parameter: 'height', value: '9 metres', quote: source, uncertain: true }], unknowns: [] }, source).claims.length, 1); assert.throws(() => validateExtraction({ claims: [{ parameter: 'height', value: '12 metres', quote: source, uncertain: true }], unknowns: [] }, source)); assert.throws(() => validateExtraction({ claims: [{ parameter: 'height', value: '9 metres', quote: source, uncertain: false }], unknowns: [] }, source)); assert.equal(csvCell('=cmd()'), '"\'=cmd()"'); });
+test('status updates are scoped, audited, reversible and erase personal data', async () => { const { env, db } = setup(); const cookie = await ownerSession(env); const t = await (await api(env, '/api/tenants', { name: 'Recipient' }, cookie)).json() as {
+    id: string;
+}; db.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent) VALUES(?,?,?,?,?,?,?,?,?,?)').run('lead', t.id, 'p', '{"email":"private@example.com"}', 'hash', '{"secret":true}', '{}', Date.now(), Date.now(), '{}'); const result = await api(env, '/api/leads/lead', { status: 'qualified', evidence: {}, existingCustomer: false, revision: 0 }, cookie, 'PATCH'); assert.equal(result.status, 200, await result.text()); assert.equal((await api(env, '/api/leads/lead', { status: 'accepted', evidence: {}, existingCustomer: false, revision: 0 }, cookie, 'PATCH')).status, 409); assert.equal(db.prepare("SELECT count(*) AS n FROM audit WHERE action='status_changed'").get()!.n, 1); assert.equal((await api(env, '/api/leads/lead', undefined, cookie, 'DELETE')).status, 200); assert.equal(db.prepare('SELECT contact FROM leads WHERE id=?').get('lead')!.contact, '{}'); });
+test('AI requires opt-in, verifies output, caches privately and enforces global budget', async () => { const { env } = setup(); const cookie = await ownerSession(env); const t = await (await api(env, '/api/tenants', { name: 'AI tenant' }, cookie)).json() as {
+    id: string;
+}; const source = 'The maximum building height is 9 metres.'; let calls = 0; env.AI_ENABLED = 'true'; env.AI_DAILY_LIMIT = '1'; env.AI = { async run() { calls++; return { response: { claims: [{ parameter: 'height', value: '9 metres', quote: source, uncertain: true }], unknowns: [] }, usage: { input_tokens: 100, output_tokens: 50 } }; } }; assert.equal((await api(env, '/api/ai/extract', { tenantId: t.id, text: source, source: 'Document 1', consent: false }, cookie)).status, 400); const body = { tenantId: t.id, text: source, source: 'Document 1', consent: true }; assert.equal((await api(env, '/api/ai/extract', body, cookie)).status, 200); const cached = await (await api(env, '/api/ai/extract', body, cookie)).json() as {
+    cached: boolean;
+}; assert.equal(cached.cached, true); assert.equal(calls, 1); assert.equal((await api(env, '/api/ai/extract', { ...body, source: 'Document 2' }, cookie)).status, 429); });
+test('public inquiry validates recipient consent and Turnstile hostname/action, deduplicates and stores privately', async () => { const { env, db } = setup(); const cookie = await ownerSession(env); const t = await (await api(env, '/api/tenants', { name: 'Recipient' }, cookie)).json() as {
+    id: string;
+}; const privacy = 'Recipient controller and privacy contact. Purpose: respond to inquiry. Retention: 90 days.'; await api(env, '/api/tenants/' + t.id, { recipient_enabled: true, privacy_notice: privacy, retention_days: 90, rules: {} }, cookie, 'PATCH'); env.TURNSTILE_SITEKEY = 'site'; env.TURNSTILE_SECRET_KEY = 'server-secret'; const body = { tenantId: t.id, projectId: 'project', contact: { name: 'Visitor', email: 'visitor@example.com' }, project: { schemaVersion: 1 }, attribution: { campaign: 'fair', firstSeenAt: new Date(Date.now() - 1000).toISOString() }, processingConsent: true, privacyNotice: privacy, turnstileToken: 'token' }; const original = globalThis.fetch; let hostname = 'evil.example'; globalThis.fetch = async () => Response.json({ success: true, hostname, action: 'inquiry' }); try {
+    assert.equal((await api(env, '/api/inquiries', { ...body, processingConsent: false })).status, 400);
+    assert.equal((await api(env, '/api/inquiries', body)).status, 403);
+    hostname = 'planner.example';
+    assert.equal((await api(env, '/api/inquiries', body)).status, 201);
+    assert.equal((await api(env, '/api/inquiries', body)).status, 201);
+    assert.equal(db.prepare('SELECT sum(duplicate) AS n FROM leads').get()!.n, 1);
+    assert.equal((await api(env, '/api/leads?tenant=' + t.id)).status, 401);
+    assert.equal((await api(env, '/api/recipients')).status, 200);
+}
+finally {
+    globalThis.fetch = original;
+} });
+test('settlement uses snapshotted commission agreement and cannot rewrite confirmed contract', async () => { const { env, db } = setup(); const cookie = await ownerSession(env); const t = await (await api(env, '/api/tenants', { name: 'Financial recipient' }, cookie)).json() as {
+    id: string;
+}; const rules = rulesSchema.parse({ agreement: 'A-1', mode: 'fixed', value: 50000 }); db.prepare('UPDATE tenants SET rules=? WHERE id=?').run(JSON.stringify(rules), t.id); db.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent,status) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('financial', t.id, 'p', '{}', 'h', '{}', '{}', Date.now(), Date.now(), '{}', 'paid'); const evidence = { contractRef: 'C-1', contractCents: 1000000, paymentRef: 'P-1' }; assert.equal((await api(env, '/api/leads/financial', { status: 'commission_eligible', evidence, existingCustomer: false, revision: 0 }, cookie, 'PATCH')).status, 200); db.prepare('UPDATE tenants SET rules=? WHERE id=?').run(JSON.stringify({ ...rules, value: 999999 }), t.id); assert.equal((await api(env, '/api/leads/financial', { status: 'commission_settled', evidence: { ...evidence, contractRef: 'changed', settlementRef: 'S-1' }, existingCustomer: false, revision: 1 }, cookie, 'PATCH')).status, 422); const result = await (await api(env, '/api/leads/financial', { status: 'commission_settled', evidence: { ...evidence, settlementRef: 'S-1' }, existingCustomer: false, revision: 1 }, cookie, 'PATCH')).json() as {
+    commission_cents: number;
+}; assert.equal(result.commission_cents, 50000); const report = await (await api(env, '/api/report?tenant=' + t.id, undefined, cookie)).json() as {
+    currency: {
+        PLN: {
+            settledCents: number;
+        };
+    };
+}; assert.equal(report.currency.PLN.settledCents, 50000); });

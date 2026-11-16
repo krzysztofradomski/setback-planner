@@ -1,0 +1,16 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, recipient_enabled INTEGER NOT NULL DEFAULT 0, privacy_notice TEXT NOT NULL DEFAULT '', retention_days INTEGER NOT NULL DEFAULT 90 CHECK(retention_days BETWEEN 1 AND 3650), rules TEXT NOT NULL DEFAULT '{}');
+CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, password TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('owner','manufacturer','sales')), tenant_id TEXT REFERENCES tenants(id), active INTEGER NOT NULL DEFAULT 1, CHECK(role='owner' OR tenant_id IS NOT NULL));
+CREATE UNIQUE INDEX one_owner ON users(role) WHERE role='owner';
+CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires INTEGER NOT NULL);
+CREATE INDEX session_expiry ON sessions(expires);
+CREATE TABLE leads (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), project_id TEXT NOT NULL, contact TEXT NOT NULL, email_hash TEXT NOT NULL, project TEXT NOT NULL, attribution TEXT NOT NULL, created INTEGER NOT NULL, attributed INTEGER NOT NULL, consent TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'new', duplicate INTEGER NOT NULL DEFAULT 0, existing_customer INTEGER NOT NULL DEFAULT 0, crm_status TEXT NOT NULL DEFAULT 'standalone', evidence TEXT NOT NULL DEFAULT '{}', commission_cents INTEGER NOT NULL DEFAULT 0 CHECK(commission_cents>=0), currency TEXT NOT NULL DEFAULT 'PLN', commission_rules TEXT NOT NULL DEFAULT '{}', revision INTEGER NOT NULL DEFAULT 0, anonymized INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX lead_tenant_created ON leads(tenant_id,created);
+CREATE INDEX lead_email ON leads(tenant_id,email_hash);
+CREATE TABLE audit (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), lead_id TEXT, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL, created INTEGER NOT NULL);
+CREATE INDEX audit_tenant ON audit(tenant_id,created);
+CREATE TRIGGER immutable_audit_update BEFORE UPDATE ON audit BEGIN SELECT RAISE(ABORT,'immutable audit'); END;
+CREATE TRIGGER immutable_audit_delete BEFORE DELETE ON audit BEGIN SELECT RAISE(ABORT,'immutable audit'); END;
+CREATE TABLE rate_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
+CREATE INDEX rate_expiry ON rate_limits(expires);
+CREATE TABLE ai_cache (key TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), result TEXT NOT NULL, expires INTEGER NOT NULL);
