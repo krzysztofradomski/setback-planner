@@ -22,3 +22,14 @@ test('lookup validates request parameters and handles upstream and oversized fai
   await assert.rejects(()=>lookupParcel('141201_1.0001.6509',async()=>new Response('error',{status:503})));
   await assert.rejects(()=>lookupParcel('141201_1.0001.6509',async()=>new Response('a'.repeat(300000))));
 });
+test('map-point lookup requests explicit coordinate order and validates returned parcel identity',async()=>{
+  const {lookupParcelAt}=await import('../public/core/uldk.ts');
+  let called=false;
+  const result=await lookupParcelAt(21.01,52.23,async input=>{
+    called=true;const url=new URL(String(input));assert.equal(url.searchParams.get('request'),'GetParcelByXY');assert.equal(url.searchParams.get('xy'),'21.01,52.23,4326');
+    return new Response(fixture.replace('\nSRID=','\n141201_1.0001.6509|SRID='));
+  });
+  assert.ok(called);assert.equal(result.parcel.identifier,'141201_1.0001.6509');
+  await assert.rejects(()=>lookupParcelAt(Infinity,52));
+  await assert.rejects(()=>lookupParcelAt(0,0));
+});

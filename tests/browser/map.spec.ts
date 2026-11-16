@@ -17,3 +17,16 @@ test('map layer failures leave a visible fallback and a working editor',async({p
   await page.goto('/');await page.locator('#view-map').click();await expect(page.locator('#map-status')).toContainText('unavailable');
   await page.locator('#view-2d').click();await page.locator('#add-house').click();await expect(page.locator('.obj')).toHaveCount(3);
 });
+test('map selection is explicit and imports the clicked parcel identity',async({page})=>{
+  await page.route('https://tile.openstreetmap.org/**',route=>route.fulfill({status:200,contentType:'image/png',body:tile}));
+  const {readFileSync}=await import('node:fs');const fixture=readFileSync('tests/fixtures/uldk-parcel.txt','utf8');
+  await page.route('https://uldk.gugik.gov.pl/**',route=>{
+    expect(new URL(route.request().url()).searchParams.get('request')).toBe('GetParcelByXY');
+    return route.fulfill({status:200,body:fixture.replace('\nSRID=','\n141201_1.0001.6509|SRID=')});
+  });
+  await page.goto('/');await page.locator('#view-map').click();await expect(page.locator('#parcel-map')).toHaveAttribute('data-ready','true');
+  await page.locator('#parcel-map canvas').click({position:{x:250,y:250}});await expect(page.locator('#p-corners tr')).toHaveCount(4);
+  await page.locator('#map-pick').click();await page.locator('#parcel-map canvas').click({position:{x:250,y:250}});
+  await expect(page.locator('#p-corners tr')).toHaveCount(7);await expect(page.locator('#parcel-source')).toContainText('141201_1.0001.6509');
+  await expect(page.locator('#map-pick')).toHaveAttribute('aria-pressed','false');
+});

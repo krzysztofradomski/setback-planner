@@ -576,14 +576,24 @@
         "F010",
         "F011"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Select a parcel by map click using GetParcelByXY",
         "Display imported boundary at its geographic location",
         "Preserve current project when remote lookup fails or the project changes"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/uldk.test.ts (4 tests including coordinate query validation)",
+        "tests/browser/map.spec.ts (3 passing)",
+        "tests/browser/uldk.spec.ts (3 passing)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "Parcel topology restrictions from F025 still apply.",
+        "Buildings retain local positions after boundary replacement; verify placement."
+      ],
       "documentation": [
         "docs/geospatial-sources.md"
       ]
