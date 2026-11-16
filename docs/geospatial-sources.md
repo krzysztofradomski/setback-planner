@@ -12,3 +12,11 @@ Scene x is east and y is south in local projected metres. `coordinates.projected
 Supported import: one simple closed Polygon ring, or MultiPolygon containing exactly one simple ring, directly or in one Feature/FeatureCollection. Up to 512 vertices and 256 KiB. Reject holes, separate components, implicit legacy CRS declarations, invalid/self-crossing rings and unsupported coordinates. F025 tracks full topology support; no geometry is silently dropped.
 
 Provenance includes source filename/service, source CRS and retrieval timestamp. Manual boundary edits flag the source geometry as changed. Creating a new rectangle clears georeferencing/provenance. Building local coordinates are retained after parcel replacement; users must verify placement. Import is one undoable operation.
+
+## ULDK identifier lookup
+
+`GetParcelById`, `result=geom_wkt`, `srid=2180`, exact full identifier only. Official example `141201_1.0001.6509` returned a seven-vertex polygon on 2026-11-16; fixture is stored under `tests/fixtures/uldk-parcel.txt`. Live response included `Access-Control-Allow-Origin: *`. Availability is not guaranteed by this observation.
+
+Browser sends the user-entered identifier directly to GUGiK; the UI discloses this. Credentials and referrer are omitted; redirects are refused; no automatic retries or retained remote cache; at most one UI request per two seconds. Timeout: 10 seconds; streamed response limit: 256 KiB. No bulk service mirroring. No published numerical service quota was found in the API description; limits here are client safeguards, not a provider allowance.
+
+Success is strictly one status line `0` plus WKT with the requested SRID. Invalid data and upstream failures leave the project untouched. A response arriving after project edits is discarded. Service attribution and retrieval time persist with the parcel.

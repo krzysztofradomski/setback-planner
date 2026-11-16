@@ -12,6 +12,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   // ---------- i18n ----------
   const I18N = {
     en: {
+      findParcel:'Find Polish parcel (ULDK)', parcelId:'Full parcel identifier', uldkHint:'Lookup sends this identifier to GUGiK ULDK. Service availability varies. The imported boundary replaces the parcel; verify building positions. You can still draw or import a parcel when the service is unavailable.', uldkLoading:'Looking up parcel…', uldkError:'Could not import this parcel. Check its full identifier, service availability and supported geometry. Current plan retained.', uldkChanged:'Project changed during lookup. Request again to replace the parcel.',
       importParcel:'Import parcel (GeoJSON)', sourceCrs:'Source coordinates', openParcel:'Open parcel file', parcelImportHint:'One polygon, up to 512 vertices. Holes and separate parts are rejected. Replaces the parcel; keeps buildings at their local positions. Confirm their placement after import.', parcelImportError:'Parcel import failed. Check CRS, closure and geometry; holes and separate parts are not supported.', parcelEdited:'Boundary edited locally; source geometry has changed.', north:'Grid north ↑',
       topView:'Top', axonView:'Axonometric', screenshot:'Screenshot', lowQuality:'Low power', viewerHint:'Conceptual massing. Artistic lighting; no terrain or neighboring heights. Shadows are approximate. Concave pitched roofs use a flat schematic cap.', viewerFailure:'3D is unavailable on this device. Continue planning in 2D.', loading3d:'Loading 3D…',
       catalogs:'Optional catalogs', catalogHint:'Source metadata only. Authoritative dimensions and approved assets are unavailable; generic houses remain available.', catalogUnavailable:'Catalog unavailable or disabled. Saved user-defined fallback geometry is retained.', enableCatalog:'Enable catalog', catalogError:'Catalog could not be loaded. Generic planning remains available.', source:'Source', verifiedOn:'Checked', noDimensions:'Dimensions unverified · placement unavailable',
@@ -44,6 +45,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      findParcel:'Znajdź działkę (ULDK)', parcelId:'Pełny identyfikator działki', uldkHint:'Zapytanie wysyła identyfikator do GUGiK ULDK. Dostępność usługi jest zmienna. Granica zastąpi działkę; sprawdź pozycje budynków. Przy awarii możesz nadal rysować lub importować działkę.', uldkLoading:'Wyszukiwanie działki…', uldkError:'Nie można zaimportować działki. Sprawdź identyfikator, usługę i obsługiwaną geometrię. Bieżący plan zachowano.', uldkChanged:'Projekt zmieniono podczas wyszukiwania. Ponów zapytanie, aby zastąpić działkę.',
       importParcel:'Import działki (GeoJSON)', sourceCrs:'Współrzędne źródłowe', openParcel:'Otwórz plik działki', parcelImportHint:'Jeden wielokąt, do 512 wierzchołków. Otwory i odrębne części są odrzucane. Zastępuje działkę; budynki pozostają na pozycjach lokalnych. Sprawdź ich położenie po imporcie.', parcelImportError:'Import nieudany. Sprawdź układ, zamknięcie i geometrię; otwory i odrębne części nie są obsługiwane.', parcelEdited:'Granica edytowana lokalnie; geometria źródłowa została zmieniona.', north:'Północ siatki ↑',
       topView:'Z góry', axonView:'Aksonometria', screenshot:'Zrzut ekranu', lowQuality:'Oszczędzanie energii', viewerHint:'Bryły koncepcyjne. Oświetlenie artystyczne, brak terenu i wysokości sąsiadów. Cienie przybliżone. Dachy spadziste brył wklęsłych pokazano jako płaski schemat.', viewerFailure:'Widok 3D niedostępny na tym urządzeniu. Kontynuuj w 2D.', loading3d:'Wczytywanie 3D…',
       catalogs:'Katalogi opcjonalne', catalogHint:'Tylko metadane źródłowe. Brak potwierdzonych wymiarów i zatwierdzonych zasobów; domy ogólne są dostępne.', catalogUnavailable:'Katalog niedostępny lub wyłączony. Zachowano zapisany obrys użytkownika.', enableCatalog:'Włącz katalog', catalogError:'Nie można wczytać katalogu. Planowanie ogólne jest nadal dostępne.', source:'Źródło', verifiedOn:'Sprawdzono', noDimensions:'Wymiary niepotwierdzone · brak umieszczania',
@@ -797,6 +799,18 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     const file=e.target.files[0]; if(!file)return;
     try { if(file.size>MAX_PROJECT_BYTES)throw new Error('large'); applyPlan(parseScene(JSON.parse(await file.text())),t('planLoaded')); }
     catch { toast(t('notAPlan')); } finally { e.target.value=''; }
+  };
+  let lastParcelLookup=0;
+  $('#parcel-search').onclick=async()=>{
+    if(Date.now()-lastParcelLookup<2000)return;lastParcelLookup=Date.now();
+    const before=JSON.stringify(state),identifier=$('#parcel-id').value.trim();
+    $('#parcel-search').disabled=true;$('#parcel-result').textContent=t('uldkLoading');
+    try{
+      const {lookupParcel}=await import('./core/uldk.ts');const parcel=await lookupParcel(identifier);
+      if(JSON.stringify(state)!==before){$('#parcel-result').textContent=t('uldkChanged');return;}
+      applyPlan(parseScene({...state,...parcel}),t('planLoaded'));$('#parcel-result').textContent=t('planLoaded');
+    }catch{$('#parcel-result').textContent=t('uldkError');}
+    finally{$('#parcel-search').disabled=false;}
   };
   $('#parcel-file-button').onclick=()=>$('#parcel-file').click();
   $('#parcel-file').onchange=async e=>{

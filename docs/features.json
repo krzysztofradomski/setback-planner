@@ -251,18 +251,29 @@
     },
     {
       "id": "F010",
-      "description": "GUGiK ULDK parcel search",
+      "description": "GUGiK ULDK parcel identifier lookup",
       "dependencies": [
         "F009"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
-        "Identifier and map selection",
+        "Full identifier lookup with official WKT response fixture",
         "Bounded requests, service failure fallback and attribution",
-        "Mocked authoritative response fixtures"
+        "Late responses cannot overwrite edited projects"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/uldk.test.ts (3 tests)",
+        "tests/browser/uldk.spec.ts (3 passing)",
+        "Live official example response and CORS header checked",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "Identifier lookup only; map selection follows geographical map integration.",
+        "Holes and multipart parcels are explicitly rejected (F025).",
+        "No automatic retries or long-term service mirroring."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]
@@ -540,6 +551,25 @@
         "Preserve all components and holes in the scene",
         "Containment, dimensions, rendering and export honor excluded areas",
         "No silent geometry flattening"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/geospatial-sources.md"
+      ]
+    },
+    {
+      "id": "F026",
+      "description": "ULDK parcel selection by geographical map position",
+      "dependencies": [
+        "F010",
+        "F011"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Select a parcel by map click using GetParcelByXY",
+        "Display imported boundary at its geographic location",
+        "Preserve current project when remote lookup fails or the project changes"
       ],
       "tests": [],
       "knownLimitations": [],

@@ -212,6 +212,12 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
         <thead><tr><th></th><th>x (m)</th><th>y (m)</th><th style="text-align:right" data-t="side">Side</th></tr></thead>
         <tbody id="p-corners"></tbody>
       </table>
+      <details id="parcel-lookup"><summary data-t="findParcel">Find Polish parcel (ULDK)</summary>
+        <div class="field"><label for="parcel-id" data-t="parcelId">Full parcel identifier</label><input id="parcel-id" type="text" maxlength="80" placeholder="141201_1.0001.6509"></div>
+        <button id="parcel-search" data-t="findParcel">Find parcel</button><p id="parcel-result" class="hint" role="status"></p>
+        <p class="hint" data-t="uldkHint">Lookup sends this identifier to GUGiK ULDK. Service availability varies. The imported boundary replaces the parcel; verify building positions. You can still draw or import a parcel when the service is unavailable.</p>
+        <a href="https://uldk.gugik.gov.pl/opis.html" target="_blank" rel="noopener noreferrer">GUGiK ULDK · API</a>
+      </details>
       <details id="parcel-import"><summary data-t="importParcel">Import parcel (GeoJSON)</summary>
         <div class="field"><label for="parcel-crs" data-t="sourceCrs">Source coordinates</label><select id="parcel-crs"><option value="EPSG:4326">WGS84 · longitude, latitude</option><option value="EPSG:2180">PL-1992 · easting, northing</option></select></div>
         <button id="parcel-file-button" data-t="openParcel">Open parcel file</button><input id="parcel-file" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden>
