@@ -1,3 +1,4 @@
+import {projectAssistantScene} from './core/assistant.ts';
 /** Private business data uses HttpOnly server sessions and never enters scene/share state. */
 type Recipient = {
     id: string;
@@ -235,6 +236,14 @@ export function mountBusiness({ container, getScene, getAttribution = () => null
             const result = await api('/api/ai/extract', { tenantId: t.id, text: documentText.value, source: source.value, consent: true });
             text('pre', JSON.stringify(result, null, 2), ai);
         }, ai);
+        const question = area('Pytanie / jawne instrukcje układu', '', ai);
+        for (const [mode,label] of [['summary','Podsumuj cytowane źródło'],['report','Przygotuj cytowany opis raportu'],['catalog','Zapytaj o zweryfikowane metadane katalogu'],['layout','Pokaż propozycje zmian (bez zastosowania)']]) {
+            button(label, async () => {
+                if (!consent.checked) throw Error('Wymagana zgoda na przetwarzanie AI.');
+                const result=await api('/api/ai/assist',{tenantId:t.id,mode,question:question.value,consent:true,...(mode==='layout'?{scene:projectAssistantScene(getScene())}:mode==='catalog'?{catalogIds:['udana-budowa']}:{sources:[{id:'document',title:source.value,text:documentText.value}]})});
+                text('pre',JSON.stringify(result,null,2),ai);
+            },ai);
+        }
     }
     root.addEventListener('toggle', () => {
         if (root.open && !content.childElementCount)

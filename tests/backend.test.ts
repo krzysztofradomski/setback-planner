@@ -237,3 +237,28 @@ test('over-user-limit AI requests cannot consume remaining shared processing bud
     const result = await api(env, '/api/ai/extract', { tenantId: t.id, text: 'A document with no explicit planning dimensions.', source: 'Source ' + i, consent: true }, cookie);
     assert.equal(result.status, i < 10 ? 200 : 429);
 } assert.equal(calls, 10); const { digest } = await import('../worker/security.ts'); const key = await digest('ai:global:' + Math.floor(Date.now() / 86400000)); assert.equal(db.prepare('SELECT count FROM rate_limits WHERE key=?').get(key)!.count, 10); });
+test('assistant modes validate exact citations, scene references, locks and shared budgets',async()=>{
+ const {env}=setup(),cookie=await ownerSession(env);
+ const t=await (await api(env,'/api/tenants',{name:'Assistant'},cookie)).json() as {id:string};
+ env.AI_ENABLED='true';let answer:unknown={points:[{sourceId:'doc',quote:'The height limit is nine metres.'}],questionsToVerify:[]};
+ env.AI={async run(){return {response:answer}}};
+ const body={tenantId:t.id,mode:'summary',question:'Summarize the height limit',sources:[{id:'doc',title:'Source',text:'The height limit is nine metres.'}],consent:true};
+ assert.equal((await api(env,'/api/ai/assist',body,cookie)).status,200);
+ answer={points:[{sourceId:'doc',quote:'Invented height'}],questionsToVerify:[]};
+ assert.equal((await api(env,'/api/ai/assist',{...body,question:'Another summary please'},cookie)).status,502);
+ const scene={units:'m',items:[{id:'house',name:'House',type:'house',x:0,y:0,w:10,d:8,rot:0,locked:true}]};
+ answer={operations:[{type:'rotate',id:'house',degrees:90,quote:'Rotate House 90 degrees'}],questionsToVerify:[]};
+ assert.equal((await api(env,'/api/ai/assist',{tenantId:t.id,mode:'layout',question:'Rotate House 90 degrees',scene,consent:true},cookie)).status,502);
+ scene.items[0].locked=false;
+ const r=await api(env,'/api/ai/assist',{tenantId:t.id,mode:'layout',question:'Rotate House 90 degrees',scene,consent:true},cookie);
+ assert.equal(r.status,200);assert.equal((await r.json() as {applied:boolean}).applied,false);
+});
+test('retention erases more than one hundred expired leads atomically',async()=>{
+ const {env,db}=setup(),cookie=await ownerSession(env);
+ const t=await (await api(env,'/api/tenants',{name:'Retention volume'},cookie)).json() as {id:string};
+ const insert=db.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent) VALUES(?,?,?,?,?,?,?,?,?,?)');
+ for(let n=0;n<150;n++)insert.run('expired'+n,t.id,'p','{"email":"private@example.com"}','hash','{}','{}',1,1,'{}');
+ await worker.scheduled({},env);
+ assert.equal(db.prepare('SELECT count(*) n FROM leads WHERE anonymized=0').get()!.n,0);
+ assert.equal(db.prepare("SELECT count(*) n FROM audit WHERE action='personal_data_erased'").get()!.n,150);
+});

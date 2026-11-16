@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import {assistantRequestSchema,registeredCatalogSources,groundedAnswerSchema,layoutAnswerSchema,validateGroundedAnswer,validateLayoutAnswer,assistantInstructions} from '../public/core/assistant.ts';
+import {objectLibrary} from '../public/core/objects.ts';
 import type { Env, User, Lead, Tenant } from './types.ts';
 import { rulesSchema, evidenceSchema, statuses, transition, csvCell, extractionSchema, validateExtraction } from './domain.ts';
 import { HttpError, fail, randomToken, digest, tokenHash, passwordHash, equal, authenticate, owner, tenantScope, rate, jsonBody } from './security.ts';
@@ -234,6 +236,7 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
         await anonymize(env, row, user.id);
         return response({ ok: true, retained: 'Anonymous financial audit' });
     }
+    if(path === '/api/ai/assist' && method === 'POST') return assist(req,env,user);
     if (path === '/api/ai/extract' && method === 'POST')
         return extract(req, env, user);
     return fail(404, 'API route not found');
@@ -274,6 +277,22 @@ async function extract(req: Request, env: Env, user: User) {
             }).claims.length, model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' })]);
     return response({ ...result, cached: false });
 }
+async function assist(req:Request,env:Env,user:User) {
+    if(env.AI_ENABLED!=='true'||!env.AI)fail(503,'AI processing disabled');
+    const b=assistantRequestSchema.parse(await jsonBody(req));tenantScope(user,b.tenantId);await tenant(env,b.tenantId);
+    let sources=b.sources;
+    if(b.mode==='catalog'){try{sources=await registeredCatalogSources(b.catalogIds)}catch{fail(400,'Catalog not registered or metadata invalid')}}
+    const payload={mode:b.mode,question:b.question,sources,...(b.scene?{scene:b.scene,allowedKinds:Object.keys(objectLibrary)}:{})};
+    const key=await digest(b.tenantId+':assist-v1:'+JSON.stringify(payload));
+    const cached=await env.DB.prepare('SELECT result FROM ai_cache WHERE key=? AND tenant_id=? AND expires>?').bind(key,b.tenantId,Date.now()).first<{result:string}>();if(cached)return response({...JSON.parse(cached.result),cached:true});
+    const configured=Number(env.AI_DAILY_LIMIT??'20'),limit=Number.isInteger(configured)&&configured>0?Math.min(configured,100):20;
+    await rate(env,'ai:'+user.id,10,86400000);await rate(env,'ai:global',limit,86400000);
+    const schema=b.mode==='layout'?layoutAnswerSchema:groundedAnswerSchema;
+    const raw=await env.AI!.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast',{messages:[{role:'system',content:b.mode==='layout'?assistantInstructions.layout:assistantInstructions.grounded},{role:'user',content:JSON.stringify(payload)}],max_tokens:1800,temperature:0,response_format:{type:'json_schema',json_schema:z.toJSONSchema(schema)}}) as {response?:unknown;usage?:unknown};
+    let answer:unknown=raw.response;try{if(typeof answer==='string')answer=JSON.parse(answer);answer=b.mode==='layout'?validateLayoutAnswer(answer,b.question,b.scene!):validateGroundedAnswer(answer,sources)}catch{fail(502,'AI response rejected: unsupported citation or scene operation')}
+    const result={mode:b.mode,answer,sources:sources.map(({id,title,url,retrievedAt})=>({id,title,url,retrievedAt})),retrievedAt:new Date().toISOString(),requiresHumanReview:true,applied:false,notice:b.mode==='layout'?'Proposals only. No geometry, collisions, legal compliance or feasibility evaluated. Nothing has been applied.':'Extractive source excerpts, not independently verified conclusions. Review sources and missing information.',usage:raw.usage??null};
+    await env.DB.batch([env.DB.prepare('INSERT OR REPLACE INTO ai_cache(key,tenant_id,result,expires) VALUES(?,?,?,?)').bind(key,b.tenantId,JSON.stringify(result),Date.now()+86400000),audit(env,b.tenantId,null,user.id,'ai_assisted',{mode:b.mode,inputCharacters:JSON.stringify(payload).length,model:'@cf/meta/llama-3.3-70b-instruct-fp8-fast'})]);return response({...result,cached:false});
+}
 export default {
     async fetch(req: Request, env: Env) {
         if (!new URL(req.url).pathname.startsWith('/api/'))
@@ -292,9 +311,11 @@ export default {
     },
     async scheduled(_event: unknown, env: Env) {
         const now = Date.now();
-        const rows = (await env.DB.prepare('SELECT l.* FROM leads l JOIN tenants t ON l.tenant_id=t.id WHERE l.anonymized=0 AND l.created < ? - t.retention_days*86400000 LIMIT 100').bind(now).all<Lead>()).results;
-        for (const row of rows)
-            await anonymize(env, row, 'retention');
+        const expired="SELECT l.id FROM leads l JOIN tenants t ON l.tenant_id=t.id WHERE l.anonymized=0 AND l.created < ? - t.retention_days*86400000";
+        await env.DB.batch([
+            env.DB.prepare("INSERT INTO audit(id,tenant_id,lead_id,actor,action,detail,created) SELECT lower(hex(randomblob(16))),tenant_id,id,'retention','personal_data_erased','{}',? FROM leads WHERE id IN ("+expired+")").bind(now,now),
+            env.DB.prepare("UPDATE leads SET contact='{}',email_hash='',project='{}',attribution='{}',consent='{}',anonymized=1,revision=revision+1 WHERE id IN ("+expired+")").bind(now),
+        ]);
         await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now), env.DB.prepare('DELETE FROM ai_cache WHERE expires<?').bind(now), env.DB.prepare('DELETE FROM rate_limits WHERE expires<?').bind(now)]);
     }
 };
