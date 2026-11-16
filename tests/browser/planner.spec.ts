@@ -34,3 +34,27 @@ test('Polish translation and mobile plan are usable', async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.locator('#sheet .bld')).toHaveCount(2);
 });
+test('invalid and future projects do not replace stored data or the scene', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('setback-planner-v1', JSON.stringify({schemaVersion:999,secret:'recover me'})));
+  await page.goto('/');
+  await expect(page.locator('#project-warning')).toBeVisible();
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('setback-planner-v1')!).schemaVersion)).toBe(999);
+  await page.locator('#io-box').evaluate((el:HTMLDetailsElement)=>el.open=true);
+  await page.locator('#io').fill('{"schemaVersion":999}');
+  await page.locator('#b-load').click();
+  await expect(page.locator('.obj')).toHaveCount(2);
+});
+test('copy share link contains the latest edit and all drawing settings', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read','clipboard-write']);
+  await page.goto('/');
+  await page.locator('#f-name').fill('Latest edit');
+  await page.locator('#o-dims').selectOption('selected');
+  await page.locator('#o-pairs').uncheck();
+  await page.locator('#b-link').click();
+  const url=await page.evaluate(()=>navigator.clipboard.readText());
+  await page.goto(url);
+  await expect(page.locator('#f-name')).toHaveValue('Latest edit');
+  await expect(page.locator('#o-dims')).toHaveValue('selected');
+  await expect(page.locator('#o-pairs')).not.toBeChecked();
+});

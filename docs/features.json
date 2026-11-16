@@ -57,14 +57,23 @@
       "dependencies": [
         "F002"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Strict scene validation and migration from unversioned JSON and #p/#z",
         "Full scene persists in local storage, JSON and new share URLs",
         "Reject future versions without data loss"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/scene.test.ts (4 tests)",
+        "tests/browser/planner.spec.ts (5 passing)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "Scene currently supports four-corner local metric parcels; geographic import is F009.",
+        "Shared links contain project geometry in the fragment and must be treated as public to their recipients."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]

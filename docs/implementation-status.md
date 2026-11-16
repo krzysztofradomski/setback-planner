@@ -11,3 +11,5 @@ F001 completed: inventory, build, lint, typecheck and three browser regressions 
 F002 completed: validated simple-ring geometry, explicit touching/overlap classification, concave containment, transform invariance. SVG checks use the shared module. Next: F003 canonical scene. Keep each completed feature in a separate reviewed/tested commit. Never mark an entire broad capability complete because only its foundation exists.
 
 Dependency review: transitive minimatch override uses patched 11.x; npm audit reports zero vulnerabilities. Review: containment boundary behavior is explicit; touching buildings are flagged; no planning-law claims added.
+
+F003 completed: strict v2 scene, atomic legacy migration, bounded decompression, full-state sharing, latest-edit clipboard sharing, and startup recovery without overwriting unsupported stored projects. Tests: 9 unit and 5 browser tests. Next: F004 project files, variants and full undo/redo.

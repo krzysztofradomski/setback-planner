@@ -1,3 +1,4 @@
+import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
 import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts';
 
 (async () => {
@@ -91,58 +92,38 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
   });
 
   // ---------- state ----------
-  const num = v => typeof v === 'number' && isFinite(v);
-  function clean(o){
-    if (!o || !Array.isArray(o.plot) || o.plot.length !== 4) return null;
-    if (!o.plot.every(p => p && num(p.x) && num(p.y))) return null;
-    const items = (Array.isArray(o.items) ? o.items : []).filter(i =>
-      i && TYPES[i.type] && num(i.x) && num(i.y) && num(i.w) && num(i.d)
-    ).map((i, n) => ({
-      id: String(i.id || ('o' + (n + 1))), type: i.type, name: String(i.name || t(i.type)).slice(0, 60),
-      x: i.x, y: i.y, w: Math.max(0.5, i.w), d: Math.max(0.5, i.d),
-      rot: num(i.rot) ? i.rot : 0, setback: num(i.setback) ? i.setback : TYPES[i.type].setback,
-    }));
-    const base = DEFAULT();
-    return {
-      plot: o.plot.map(p => ({x:p.x, y:p.y})), items,
-      snap: num(o.snap) ? o.snap : base.snap,
-      dimScope: o.dimScope === 'selected' ? 'selected' : 'all',
-      showPairs: typeof o.showPairs === 'boolean' ? o.showPairs : true,
-    };
+  let persistencePaused = false;
+  function projectWarning(message, pause = true){
+    persistencePaused = pause;
+    const el = $('#project-warning'); el.hidden = false;
+    el.textContent = message + (pause ? (lang === 'pl' ? ' Automatyczny zapis wstrzymany. Wczytaj poprawny projekt lub przywróć przykład.' : ' Autosave paused. Load a valid project or reset the example to continue.') : '');
   }
-  function load(){ try { const s = localStorage.getItem(LS); return s ? clean(JSON.parse(s)) : null; } catch (e) { return null; } }
-  // Shareable link: #z=<base64url(deflate-raw(positional JSON))>, numbers rounded to mm.
-  // Older #p=<base64url(JSON)> links still load, and browsers without CompressionStream still write them.
-  const r3 = v => Math.round(v * 1000) / 1000;
-  const b64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-  const pipe = (bytes, stream) => new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer().then(b => new Uint8Array(b));
-  async function toHash(s){
-    if (typeof CompressionStream === 'undefined')
-      return '#p=' + b64(new TextEncoder().encode(JSON.stringify(s, (k, v) => typeof v === 'number' ? r3(v) : v)));
-    const c = [s.plot.flatMap(p => [r3(p.x), r3(p.y)]), s.items.map(i => [i.type, i.name, r3(i.x), r3(i.y), r3(i.w), r3(i.d), r3(i.rot), r3(i.setback)]),
-      s.snap, s.dimScope, s.showPairs ? 1 : 0];
-    return '#z=' + b64(await pipe(new TextEncoder().encode(JSON.stringify(c)), new CompressionStream('deflate-raw')));
+  function clean(o){ try { return parseScene(o); } catch { return null; } }
+  function load(){
+    try { const s = localStorage.getItem(LS); if (!s) return null;
+      if (new TextEncoder().encode(s).length > MAX_PROJECT_BYTES) throw new Error('large');
+      const result = clean(JSON.parse(s)); if (!result) throw new Error('invalid'); return result;
+    } catch { projectWarning(lang === 'pl' ? 'Nie można odczytać zapisanego projektu.' : 'Stored project could not be read.'); return null; }
   }
   async function fromHash(){
-    try {
-      const m = location.hash.match(/^#([pz])=([\w-]+)$/); if (!m) return null;
-      const bytes = unb64(m[2]);
-      if (m[1] === 'p') return clean(JSON.parse(new TextDecoder().decode(bytes)));
-      const [plot, items, snap, dimScope, showPairs] = JSON.parse(new TextDecoder().decode(await pipe(bytes, new DecompressionStream('deflate-raw'))));
-      return clean({
-        plot: [0, 2, 4, 6].map(i => ({x: plot[i], y: plot[i + 1]})),
-        items: items.map(([type, name, x, y, w, d, rot, setback]) => ({type, name, x, y, w, d, rot, setback})),
-        snap, dimScope, showPairs: !!showPairs,
-      });
-    } catch (e) { return null; }
+    if (!location.hash) return null;
+    try { return await decodeShare(location.hash); }
+    catch { projectWarning(lang === 'pl' ? 'Nieprawidłowy lub nieobsługiwany link projektu.' : 'Invalid or unsupported project link.'); return null; }
   }
-  let state = (await fromHash()) || load() || DEFAULT();
-  let saveT;
-  function save(){ clearTimeout(saveT); saveT = setTimeout(() => {
-    try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {}
-    toHash(state).then(h => { try { window.history.replaceState(null, '', h); } catch (e) {} });
-  }, 300); }
+  let state = (await fromHash()) || load() || parseScene(DEFAULT());
+  let saveT, saveRevision = 0;
+  function save(){
+    clearTimeout(saveT); const revision = ++saveRevision;
+    if (persistencePaused) return;
+    saveT = setTimeout(async () => {
+      try {
+        const json = serializeScene(state);
+        localStorage.setItem(LS, json); $('#project-warning').hidden = true;
+        const hash = await encodeShare(JSON.parse(json));
+        if (revision === saveRevision && !persistencePaused) window.history.replaceState(null, '', hash);
+      } catch { projectWarning(lang === 'pl' ? 'Nie można zapisać projektu. Sprawdź geometrię i pamięć przeglądarki.' : 'Project could not be saved. Check geometry and browser storage.', false); }
+    }, 300);
+  }
   let uid = state.items.reduce((m, i) => Math.max(m, parseInt(String(i.id).replace(/\D/g, '')) || 0), 0) + 1;
   let selected = state.items[0] ? state.items[0].id : null;
   const get = id => state.items.find(i => i.id === id);
@@ -666,7 +647,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
   pairChk.onchange = () => { state.showPairs = pairChk.checked; render(); };
 
   $('#b-copy').onclick = () => {
-    const txt = JSON.stringify({plot: state.plot, items: state.items, snap: state.snap}, null, 2);
+    let txt; try { txt = serializeScene(state); } catch { toast(t('notAPlan')); return; }
     const fallback = () => {
       const box = $('#io-box'), io = $('#io');
       box.open = true; io.value = txt; io.focus(); io.select();
@@ -677,22 +658,22 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     } catch (_) { fallback(); }
   };
   $('#b-link').onclick = () => {
-    // ponytail: copies the address bar, which save() keeps ≤300 ms behind; awaiting the encoder here would cost Safari's clipboard permission
-    const url = location.href;
+    // Build synchronously from the current scene to preserve clipboard activation and the latest edit.
+    let url; try { url = location.href.split('#')[0] + plainShare(state); } catch { toast(t('notAPlan')); return; }
     const fallback = () => toast(t('linkBlocked'));
     try { navigator.clipboard.writeText(url).then(() => toast(t('linkCopied')), fallback); } catch (_) { fallback(); }
   };
   function applyPlan(o, msg){
     snapshot();
-    state.plot = o.plot; state.items = o.items; state.snap = o.snap;
-    state.dimScope = o.dimScope; state.showPairs = o.showPairs;
+    state = parseScene(o);
+    persistencePaused = false; $('#project-warning').hidden = true;
     snapSel.value = String(state.snap); dimSel.value = state.dimScope; pairChk.checked = state.showPairs;
     uid = state.items.reduce((m, i) => Math.max(m, parseInt(String(i.id).replace(/\D/g, '')) || 0), 0) + 1;
     selected = state.items[0] ? state.items[0].id : null;
     fit(); buildPanel(); render(); toast(msg);
   }
   $('#b-load').onclick = () => {
-    let o; try { o = clean(JSON.parse($('#io').value)); } catch (_) { o = null; }
+    let o; try { if (new TextEncoder().encode($('#io').value).length > MAX_PROJECT_BYTES) throw new Error('large'); o = clean(JSON.parse($('#io').value)); } catch (_) { o = null; }
     if (!o){ toast(t('notAPlan')); return; }
     applyPlan(o, t('planLoaded'));
   };
@@ -703,7 +684,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     const b = e.currentTarget;
     if (!resetArmed){ resetArmed = true; b.textContent = t('resetConfirm'); resetT = setTimeout(() => { resetArmed = false; b.textContent = t('resetExample'); }, 3000); return; }
     clearTimeout(resetT); resetArmed = false; b.textContent = t('resetExample');
-    snapshot(); const d = DEFAULT(); state.plot = d.plot; state.items = d.items;
+    snapshot(); state = parseScene(DEFAULT()); persistencePaused = false; $('#project-warning').hidden = true;
     uid = 3; selected = 'o1'; fit(); buildPanel(); render(); toast(t('exampleRestored'));
   };
   $('#t-undo').onclick = undo;
