@@ -425,14 +425,25 @@
       "dependencies": [
         "F003"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "SVG export and print-to-PDF overview",
         "Source timestamps and unknown restrictions",
         "Catalog and conceptual customization disclosures"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/reports.test.ts (2 tests, including escaped user input)",
+        "tests/browser/reports.spec.ts (preview and SVG download)",
+        "Polish print PDF rendered and both pages visually inspected",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "PDF uses the browser print/save dialog; no server PDF service.",
+        "No official planning restrictions or manufacturer prices are available; unknowns are explicit.",
+        "Report can include the current 3D view; external map imagery is not embedded."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]
