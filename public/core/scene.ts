@@ -47,8 +47,11 @@ const b64=(bytes:Uint8Array)=>{
 export const plainShare=(scene:Scene)=>'#p='+b64(new TextEncoder().encode(serializeScene(scene)));
 export async function encodeShare(scene:Scene,compressed=true):Promise<string> {
   if(!compressed||typeof CompressionStream==='undefined') return plainShare(scene);
-  const stream=new Blob([serializeScene(scene)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
-  return '#s='+b64(new Uint8Array(await new Response(stream).arrayBuffer()));
+  const json=serializeScene(scene);
+  try {
+    const stream=new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return '#s='+b64(new Uint8Array(await new Response(stream).arrayBuffer()));
+  } catch { return plainShare(scene); }
 }
 export async function decodeShare(hash:string):Promise<Scene> {
   if(hash.length>MAX_PROJECT_BYTES*1.4) throw new Error('Shared project is too large');

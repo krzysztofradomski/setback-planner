@@ -28,3 +28,9 @@ test('rotation and translation preserve area and distances across deterministic 
     assert.equal(validRing(shape),true);
   }
 });
+test('a wall touching the parcel boundary has zero clearance rather than no hit',async()=>{
+  const {perpendicularClearance}=await import('../public/core/geometry.ts');
+  const parcel=rect(0,0,30,40);
+  assert.equal(perpendicularClearance({x:0,y:10},{x:0,y:20},{x:-1,y:0},parcel)?.t,0);
+  assert.equal(perpendicularClearance({x:5,y:10},{x:5,y:20},{x:-1,y:0},parcel)?.t,5);
+});

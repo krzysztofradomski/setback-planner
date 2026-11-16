@@ -34,3 +34,10 @@ test('bounds both compressed and uncompressed input and rejects truncated state'
   const zipped=await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
   await assert.rejects(()=>decodeShare('#s='+Buffer.from(zipped).toString('base64url')));
 });
+test('browsers without deflate-raw support still write a readable plain link',async()=>{
+  const original=globalThis.CompressionStream;
+  try{
+    Object.defineProperty(globalThis,'CompressionStream',{configurable:true,value:class{constructor(){throw new Error('Unsupported format');}}});
+    const scene=parseScene(legacy()),hash=await encodeShare(scene);assert.ok(hash.startsWith('#p='));assert.deepEqual(await decodeShare(hash),scene);
+  }finally{Object.defineProperty(globalThis,'CompressionStream',{configurable:true,value:original});}
+});

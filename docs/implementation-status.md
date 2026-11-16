@@ -1,33 +1,57 @@
-# Implementation status
+# Implementation status — 2026-11-16
 
-Work branch: `codex/scene-foundation`. Feature order and acceptance criteria live in `features.json`; dependencies determine the next unblocked feature. No production deployment has been performed.
+Branch: `codex/scene-foundation`. Baseline: `04fc331`. All work is local and committed feature by feature. Production has not been deployed. `docs/features.json` is the machine-readable source of acceptance criteria, dependencies, evidence and limitations.
 
-## Current work
+## Completed cohesive features
 
-F001 completed: inventory, build, lint, typecheck and three browser regressions passed. Existing SVG editor retained. Read `repository-audit.md` for architectural decisions and source checks.
+| ID | Implemented scope |
+| --- | --- |
+| F001 | Full baseline audit, Vite build, TypeScript domain tooling, lint and browser regressions |
+| F002 | Validated simple-ring geometry, touching/overlap classification, concave containment, metric transforms and zero-distance clearance |
+| F003 | Strict v2 canonical scene, atomic legacy JSON/#p/#z migration, full-state #s sharing, bounded decompression and safe storage recovery |
+| F004 | JSON files, 20 local named variants, full-scene undo/redo, detached duplication and settings recovery |
+| F005 | Generic rectangle/L/T/U footprints, wing proportions, storeys, wall height and roof parameters |
+| F006 | Ten conceptual material presets, including four brick slips, per-wall finishes, physical repeat scale, grout/colors and reset/comparison |
+| F007 | Explicit trusted catalog registry, lazy Udana Budowa metadata, source dates/versions and enable/disable with fallback preservation |
+| F008 | On-demand synchronized Three.js massing, physical texture repeats, rectangular gable roofs, orbit/top/axonometric controls, PNG and low-power/WebGL fallback |
+| F009 | WGS84/PL-1992 single-ring parcel import, arbitrary editable vertex counts, reversible projected origin, grid north and provenance/edit labels |
+| F010 | ULDK identifier lookup, strict real-response fixture, byte/time/request bounds, outage fallback and stale-response protection |
+| F011 | Optional MapLibre view, OSM streets, GUGiK orthophoto and cadastral/building raster context, geographic project overlays and attribution |
+| F026 | Explicit map-click parcel selection with validated identity and shared ULDK protections |
+| F018 | Metric SVG export, printable EN/PL reports, browser PDF saving, selected 3D image, source timestamps and explicit unverified requirements |
 
-## Resume
+These entries are scoped slices, not claims that the entire requested product is finished. Detailed remaining scope is tracked rather than represented by working-looking stubs.
 
-F002 completed: validated simple-ring geometry, explicit touching/overlap classification, concave containment, transform invariance. SVG checks use the shared module. Next: F003 canonical scene. Keep each completed feature in a separate reviewed/tested commit. Never mark an entire broad capability complete because only its foundation exists.
+## Validation and review
 
-Dependency review: transitive minimatch override uses patched 11.x; npm audit reports zero vulnerabilities. Review: containment boundary behavior is explicit; touching buildings are flagged; no planning-law claims added.
+- 32 unit tests: geometry, coordinate conversion, scene migration/sharing, storage variants, catalog lifecycle, materials, 2D/3D footprint consistency, ULDK integration and report escaping.
+- 22 Playwright journeys: legacy editor, latest-edit links, invalid/future-state preservation, variants/files, generic shapes, materials, catalog disabling, arbitrary parcels, boundary contact, 320px Polish controls, reports, service failures, stale responses, map selection, WebGL fallback and repeated-edit GPU resource stability.
+- Three additional production-build smoke journeys cover bundled MapLibre worker/layers, 3D and report/SVG export with `npm run test:production`.
+- Typecheck, lint and build pass. `npm audit` reports zero vulnerabilities. The transitive minimatch override selects patched 11.x.
+- A Polish report was printed to PDF, rendered with Poppler and inspected on both pages. The 3D screenshot was visually inspected.
+- Live ULDK example geometry/CORS and point-query response were checked; ORTO/KIEG capabilities were checked. Automated tests mock providers and do not guarantee ongoing external availability.
+- Review fixed zero-distance boundary hits, unsafe ID attributes, stale asynchronous URL/parcel results, shared mutable duplication, details collapsing, narrow toolbar clipping and MapLibre's explicit worker bundling.
+- Browser screenshot tests ignore only Chromium's GPU ReadPixels diagnostic. Application warnings/errors remain failures in the 3D check. Map failure tests intentionally exercise unavailable upstream layers.
 
-F003 completed: strict v2 scene, atomic legacy migration, bounded decompression, full-state sharing, latest-edit clipboard sharing, and startup recovery without overwriting unsupported stored projects. Tests: 9 unit and 5 browser tests. Next: F004 project files, variants and full undo/redo.
+## Architecture and current limits
 
-F004 completed: JSON files, 20 named local variants, full-scene undo/redo, detached duplication, and settings recovery. Review covered storage failures, invalid imports, undo after import, ID regeneration and redo invalidation. 11 unit/6 browser tests pass; build/lint/typecheck pass. Next: F005 generic footprints.
+The existing SVG controller remains JavaScript. Typed geometry, scene, persistence, material, catalog, map and reporting modules are independent; both renderers use the same footprint function. React was not introduced because replacing the working renderer was unjustified by this work. See `repository-audit.md` and `geospatial-sources.md`.
 
-F005 completed: generic rectangle/L/T/U footprints, wing proportion, storeys, height, roof and pitch settings. SVG, coverage and collision checks use shared transformed footprints; resizing retains four bounding handles. ID validation prevents markup injection via data attributes. Review verified concave wall iteration and independent duplicated architecture. 13 unit/7 browser tests pass. Next: F006 materials.
+Projects support up to 100 buildings and 512 parcel vertices; imports are bounded to 256 KiB. Holes and separate parcel parts are rejected explicitly (F025). Imported buildings retain local coordinates; users must check placement after parcel replacement. PL-1992 distances are planning measurements, not certified survey measurements.
 
-F006 completed: 10 material presets including four brick-slip colors, wall-specific finishes, physical tile size/direction, grout/roof/frame/gutter/trim colors, original comparison and resets. Defaults remain immutable; overrides serialize separately. Review caught and fixed details collapsing on shape change. 15 unit/8 browser tests pass. Next: F007 optional catalog metadata, then F008 3D.
+3D is conceptual massing. Concave pitched roofs use a labeled flat cap. Doors/windows, normal maps, roof coverings, detailed manufacturer geometry, terrain, walkthrough and mature vegetation remain outstanding. Lighting is artistic and shadows approximate. Map imagery dates and neighboring heights are unknown.
 
-F007 completed: trusted explicit registry, lazy metadata module, default enabled preference, date/source/model versions, disable/re-enable behavior and saved geometry preservation. No dimensions, renders or prices invented. Review verified unregistered module rejection and no privileged data access. 17 unit/9 browser tests pass. Next: F008 synchronized 3D.
+Manufacturer metadata has verified model names only. No dimensions, floor/coverage areas, heights, prices or licensed renders were inferred. F023 is blocked specifically on authoritative drawings and asset rights. Disabling catalogs does not delete scene objects. Unknown references preserve saved fallback geometry.
 
-F008 completed: synchronized on-demand Three.js massing view, per-wall physical texture repeats, roof pitch for rectangles, orbit/pan/zoom, top/axonometric views, PNG screenshot and low-power mode. Mobile/WebGL fallback and repeated-edit GPU resource checks pass. Visual screenshot inspected. Review fixed removed Three.js shadow constant and preflighted unsupported WebGL without renderer errors. Screenshot tests ignore only the Chromium GPU ReadPixels diagnostic produced by readback; application warnings/errors remain test failures. Full requested 3D scope (openings/walkthrough/terrain/complex roofs) remains queued. Next: F009 CRS-aware parcel import.
+Map/3D/projection/catalog/report code is lazy-loaded. Vite reports large optional chunks (Three.js about 148 KB gzip; MapLibre about 291 KB gzip plus its local worker/CSS). These do not load during ordinary 2D planning; further bundle optimization remains useful.
 
-F009 completed for single-ring parcels: explicit WGS84/PL-1992 import, arbitrary vertex editing, projected origin, grid north and source/edit metadata. 22 unit/13 browser tests pass; typecheck/lint/build pass. The backlog separates holes and multipart topology into F025 instead of silently dropping them. Next: F010 ULDK identifier lookup.
+No D1/R2/Workers AI bindings, personal-data forms, accounts, showroom, commission workflows, staging resources or backend monitoring have been provisioned. The only Cloudflare configuration change is serving built `dist` assets instead of raw `public`. The existing production domain remains configured.
 
-F010 completed: ULDK full-identifier lookup, streamed size/time bounds, conservative UI request spacing, real response fixture, outage handling and late-response protection. 25 unit tests and 3 additional ULDK browser journeys pass; build/lint/typecheck pass. Map selection is separated into F026. Next: F011 geographic map view.
+## Resume directly
 
-F011 completed: optional MapLibre view, OSM streets, GUGiK orthophoto and cadastre/building raster context, geographic scene overlay, compass and attribution. Review found/fixed explicit worker asset bundling for MapLibre 6; idle-state and console error checks cover worker readiness. 27 unit tests and 2 map browser journeys pass; build/typecheck/lint pass. Next: F026 map selection, then remaining source/rule features or report exports.
+1. Read `docs/features.json`, verify branch/worktree and preserve any new user changes.
+2. Next dependency-ordered queued feature is **F012: terrain, planning and environmental layers**. Start by verifying authoritative provider capabilities, terms, coverage, freshness and output schemas. Do not invent a planning restriction or treat raster imagery as authoritative vector/height data.
+3. F013 placement/rule work, F014–F016 landscaping/seasons, F019 staging/security/observability and F020 showroom can then proceed according to dependencies. Private leads/commissions require complete access control and abuse protection; Workers AI requires official capability/pricing checks and real bindings before integration.
+4. Before future deployment, implement/verify staging configuration under F019 and run the existing checks. No approval has been requested for continuing ordinary implementation.
 
-F026 completed: explicit map-click parcel selection with validated returned identity and shared ULDK safeguards. 28 unit tests and 6 focused map/ULDK browser journeys pass. Next available independent feature: F018 printable reports and SVG exports. F012–F017 need additional source-backed environmental, rule, landscaping and AI work.
+Useful commands: `npm ci`, `npx playwright install chromium`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run test:e2e`, `npm run test:production`, `npm run dev`.

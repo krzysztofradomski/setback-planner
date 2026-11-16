@@ -41,7 +41,8 @@
         "npm run typecheck",
         "npm run lint",
         "npm run build",
-        "npm run test:e2e (3 passing)"
+        "npm run test:e2e (3 passing)",
+        "Boundary-contact unit/browser regression: zero distance fails positive setback"
       ],
       "knownLimitations": [
         "Simple polygon rings only; holes and multipolygons belong to F009.",
@@ -68,10 +69,11 @@
         "tests/browser/planner.spec.ts (5 passing)",
         "npm run typecheck",
         "npm run lint",
-        "npm run build"
+        "npm run build",
+        "Compression API fallback when deflate-raw is unavailable"
       ],
       "knownLimitations": [
-        "Scene currently supports four-corner local metric parcels; geographic import is F009.",
+        "Only simple single-ring parcel topology is supported; holes and multipart parcels are F025.",
         "Shared links contain project geometry in the fragment and must be treated as public to their recipients."
       ],
       "documentation": [
@@ -125,9 +127,9 @@
         "npm run build"
       ],
       "knownLimitations": [
-        "Wing proportions are generic user parameters; no manufacturer dimensions are implied.",
+        "Wing proportions are user parameters; no manufacturer dimensions are implied.",
         "Attached garages/carports and custom polygons are queued in F024.",
-        "Roof/height properties are stored now; 3D rendering is F008."
+        "Only rectangular gable roofs have pitch geometry; concave pitched roofs are schematic."
       ],
       "documentation": [
         "docs/repository-audit.md"
@@ -154,7 +156,7 @@
       ],
       "knownLimitations": [
         "All presets are conceptual, not manufacturer-confirmed.",
-        "2D shows facade tint; physical texture rendering is F008.",
+        "2D shows facade tint; 3D patterns use physical texture repeats but remain schematic.",
         "Normal maps, accent-area geometry and roof covering patterns remain to be added."
       ],
       "documentation": [
@@ -270,7 +272,7 @@
         "npm run build"
       ],
       "knownLimitations": [
-        "Identifier lookup only; map selection follows geographical map integration.",
+        "Map selection is implemented separately in F026.",
         "Holes and multipart parcels are explicitly rejected (F025).",
         "No automatic retries or long-term service mirroring."
       ],

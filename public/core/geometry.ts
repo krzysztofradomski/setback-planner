@@ -92,3 +92,22 @@ export function polygonDistance(a:Point[],b:Point[]) {
   }
   return best;
 }
+/** Minimum perpendicular wall-to-boundary distance along an outward unit normal. */
+export function perpendicularClearance(a:Point,b:Point,normal:Point,target:Point[]):{P:Point;Q:Point;t:number}|null {
+  const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;if(l2<EPS*EPS)return null;
+  const samples=[0,1];
+  for(const p of target){const s=((p.x-a.x)*dx+(p.y-a.y)*dy)/l2;if(s>0&&s<1)samples.push(s);}
+  let best:{P:Point;Q:Point;t:number}|null=null;
+  for(const s of samples){
+    const p={x:a.x+s*dx,y:a.y+s*dy};let nearest=Infinity;
+    for(const [q,r] of edges(target)){
+      // A coincident starting point is a zero-distance hit, even for parallel edges.
+      if(onSegment(p,q,r)){nearest=0;break;}
+      const ex=r.x-q.x,ey=r.y-q.y,den=normal.x*ey-normal.y*ex;if(Math.abs(den)<1e-12)continue;
+      const wx=q.x-p.x,wy=q.y-p.y,t=(wx*ey-wy*ex)/den,u=(wx*normal.y-wy*normal.x)/den;
+      if(t>0&&u>=-EPS&&u<=1+EPS)nearest=Math.min(nearest,t);
+    }
+    if(Number.isFinite(nearest)&&(!best||nearest<best.t))best={P:p,Q:{x:p.x+normal.x*nearest,y:p.y+normal.y*nearest},t:nearest};
+  }
+  return best;
+}

@@ -2,7 +2,7 @@
 
 Checked 2026-11-16:
 
-- [Polish state reference system, Dz.U. 2024 poz.342](https://dziennikustaw.gov.pl/D2024000034201.pdf), annex 4: PL-1992 uses central meridian 19°, scale 0.9993, false easting 500000 m and false northing -5300000 m; GRS80. This establishes transformation parameters, not a legal building assessment.
+- [Polish state reference system, Dz.U. 2024 poz.342](https://dziennikustaw.gov.pl/D2024000034201.pdf), table 10 (printed pages 14–15): PL-1992 uses central meridian 19°, scale 0.9993, false easting 500000 m and false northing -5300000 m; GRS80. This establishes transformation parameters, not a legal building assessment.
 - [Proj4js](https://proj4js.org/): explicit source/target transformations. WGS84 to ETRS89 is a planning approximation without epoch/grid corrections; projected distances are not certified ground survey distances.
 - [GeoJSON RFC 7946](https://datatracker.ietf.org/doc/html/rfc7946): longitude/latitude order and closed polygon rings. Imported PL-1992 JSON uses an explicit CRS selector and easting/northing tuple order; it is not RFC 7946 WGS84 GeoJSON.
 - [GUGiK ULDK API](https://uldk.gugik.gov.pl/opis.html): parcel lookup and WKT output contracts; integration is F010.

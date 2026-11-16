@@ -3,7 +3,7 @@ import { materialPresets, resolveAppearance, resetAppearance } from './core/mate
 import { worldFootprint, boundingCorners } from './core/footprints.ts';
 import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
 import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
-import { containsPolygon, polygonRelation, validRing, polygonArea } from './core/geometry.ts';
+import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicularClearance } from './core/geometry.ts';
 
 (async () => {
   const $ = s => document.querySelector(s);
@@ -12,6 +12,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   // ---------- i18n ----------
   const I18N = {
     en: {
+      objectLimit:'This project supports up to 100 buildings.',
       exportSvg:'Export SVG', report:'Report / PDF', printReport:'Print / Save PDF', close:'Close',
       pickParcel:'Select parcel', pickHint:'Click a parcel to replace the current boundary. Coordinates are sent to GUGiK ULDK. Buildings keep their local positions.',
       mapView:'Map', mapLayer:'Map layer', ortho:'Orthophoto · GUGiK', cadastre:'Cadastre · GUGiK', mapHint:'Visual context only. Image dates and neighboring heights are unknown. Import a georeferenced parcel to see your project here. Map views contact the selected tile providers.', mapError:'Map or layer unavailable. Switch layers or continue planning in 2D.',
@@ -30,7 +31,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       showGaps: 'Show gaps between buildings', save: 'Save', copyLink: 'Copy share link', copyJson: 'Copy plan JSON', resetExample: 'Reset example',
       resetConfirm: 'Click again to reset', loadFromJson: 'Load plan from JSON', pastePlan: 'Paste a copied plan', loadPlan: 'Load plan',
       autosaveHint: 'Your plan autosaves in this browser and in the page address, so the link always opens this exact plan.',
-      foot: 'Drag empty space to pan, scroll or pinch to zoom. With a building selected: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> nudge, <kbd>R</kbd> rotates 90°, <kbd>Del</kbd> removes. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes.<br>Default setbacks follow Polish WT §12: 4&nbsp;m for a wall with windows or doors facing the boundary, 3&nbsp;m for a blank wall. Check your local plan (MPZP) for building lines.',
+      foot: 'Drag empty space to pan, scroll or pinch to zoom. With a building selected: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> nudge, <kbd>R</kbd> rotates 90°, <kbd>Del</kbd> removes. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes.<br>Setbacks are user-selected geometric parameters: defaults are 4&nbsp;m for houses and 3&nbsp;m for garages. This tool does not verify legal applicability. Check official planning documents and other requirements.',
       plotPlan: 'Plot plan', undo: 'Undo', undoTitle: 'Undo (Ctrl+Z)', zoomOut: 'Zoom out', zoomIn: 'Zoom in', fit: 'Fit', fitTitle: 'Fit plot to view',
       lgBoundary: 'to boundary', lgBetween: 'between buildings', lgBelow: 'below min. setback',
       selection: 'Selection', selectionHint: 'Select a building on the plan to change its size, rotation and minimum setback. Drag its corner squares to resize it.',
@@ -38,7 +39,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       rotate90: 'Rotate 90°', duplicate: 'Duplicate', del: 'Delete', clearance: 'Clearance to boundary', gaps: 'Gaps to other buildings',
       outside: 'Part of the building is outside the plot', check: 'Check', noBoundary: 'No boundary', wall: '{side} wall', under: 'Under {v} m', ok: 'OK',
       Right: 'Right', Left: 'Left', Top: 'Top', Bottom: 'Bottom',
-      overlap: 'Overlap', wallToWall: 'Wall to wall', corner: 'Corner', noOthers: 'No other buildings yet.',
+      overlap: 'Touch / overlap', wallToWall: 'Wall to wall', corner: 'Corner', noOthers: 'No other buildings yet.',
       noBuildings: 'No buildings yet. Add a house or garage above; it lands in the middle of the plot.',
       built: 'built {v} %', toCheck: '{n} to check', allMet: 'Geometric checks passed', cornerAxis: 'Corner {c} {axis} in metres', copySuffix: ' copy',
       nothingToUndo: 'Nothing to undo', removed: '{name} removed. Ctrl+Z brings it back.', badRect: 'Enter a width and depth above 0 m',
@@ -48,6 +49,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      objectLimit:'Projekt obsługuje do 100 budynków.',
       exportSvg:'Eksport SVG', report:'Raport / PDF', printReport:'Drukuj / Zapisz PDF', close:'Zamknij',
       pickParcel:'Wybierz działkę', pickHint:'Kliknij działkę, aby zastąpić granicę. Współrzędne zostaną wysłane do GUGiK ULDK. Budynki zachowają pozycje lokalne.',
       mapView:'Mapa', mapLayer:'Warstwa mapy', ortho:'Ortofotomapa · GUGiK', cadastre:'Ewidencja · GUGiK', mapHint:'Kontekst wizualny. Daty zdjęć i wysokości sąsiadów są nieznane. Zaimportuj działkę z georeferencją, aby zobaczyć projekt. Mapa łączy się z wybranymi dostawcami kafelków.', mapError:'Mapa lub warstwa niedostępna. Zmień warstwę lub kontynuuj w 2D.',
@@ -66,7 +68,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       showGaps: 'Pokaż odstępy między budynkami', save: 'Zapis', copyLink: 'Kopiuj link do udostępnienia', copyJson: 'Kopiuj plan (JSON)', resetExample: 'Przywróć przykład',
       resetConfirm: 'Kliknij ponownie, aby przywrócić', loadFromJson: 'Wczytaj plan z JSON', pastePlan: 'Wklej skopiowany plan', loadPlan: 'Wczytaj plan',
       autosaveHint: 'Plan zapisuje się automatycznie w tej przeglądarce i w adresie strony, więc link zawsze otwiera dokładnie ten plan.',
-      foot: 'Przeciągnij puste miejsce, aby przesunąć widok; przewiń lub uszczypnij, aby przybliżyć. Z zaznaczonym budynkiem: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> przesuwa, <kbd>R</kbd> obraca o 90°, <kbd>Del</kbd> usuwa. <kbd>Ctrl</kbd>+<kbd>Z</kbd> cofa.<br>Domyślne odległości wg §12 WT: 4&nbsp;m dla ściany z oknami lub drzwiami zwróconej w stronę granicy, 3&nbsp;m dla ściany bez otworów. Linie zabudowy sprawdź w miejscowym planie (MPZP).',
+      foot: 'Przeciągnij puste miejsce, aby przesunąć widok; przewiń lub uszczypnij, aby przybliżyć. Z zaznaczonym budynkiem: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> przesuwa, <kbd>R</kbd> obraca o 90°, <kbd>Del</kbd> usuwa. <kbd>Ctrl</kbd>+<kbd>Z</kbd> cofa.<br>Odległości to parametry geometryczne użytkownika: domyślnie 4&nbsp;m dla domu i 3&nbsp;m dla garażu. Narzędzie nie sprawdza zgodności z prawem. Zweryfikuj oficjalne dokumenty planistyczne i pozostałe wymagania.',
       plotPlan: 'Plan działki', undo: 'Cofnij', undoTitle: 'Cofnij (Ctrl+Z)', zoomOut: 'Oddal', zoomIn: 'Przybliż', fit: 'Dopasuj', fitTitle: 'Dopasuj działkę do widoku',
       lgBoundary: 'do granicy', lgBetween: 'między budynkami', lgBelow: 'poniżej min. odległości',
       selection: 'Zaznaczenie', selectionHint: 'Zaznacz budynek na planie, aby zmienić jego wymiary, obrót i minimalną odległość od granicy. Przeciągnij kwadraty w narożnikach, aby zmienić rozmiar.',
@@ -74,7 +76,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       rotate90: 'Obróć o 90°', duplicate: 'Duplikuj', del: 'Usuń', clearance: 'Odległość od granicy', gaps: 'Odstępy od innych budynków',
       outside: 'Część budynku wychodzi poza działkę', check: 'Sprawdź', noBoundary: 'Brak granicy', wall: 'Ściana {side}', under: 'Poniżej {v} m', ok: 'OK',
       Right: 'prawa', Left: 'lewa', Top: 'górna', Bottom: 'dolna',
-      overlap: 'Kolizja', wallToWall: 'Ściana–ściana', corner: 'Narożnik', noOthers: 'Brak innych budynków.',
+      overlap: 'Styk / kolizja', wallToWall: 'Ściana–ściana', corner: 'Narożnik', noOthers: 'Brak innych budynków.',
       noBuildings: 'Brak budynków. Dodaj dom lub garaż powyżej; pojawi się na środku działki.',
       built: 'zabudowa {v} %', toCheck: 'Do sprawdzenia: {n}', allMet: 'Testy geometryczne spełnione', cornerAxis: 'Narożnik {c}, {axis} w metrach', copySuffix: ' kopia',
       nothingToUndo: 'Nie ma czego cofnąć', removed: 'Usunięto: {name}. Ctrl+Z przywraca.', badRect: 'Podaj szerokość i głębokość większe od 0 m',
@@ -191,33 +193,10 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   const add = (a,b) => ({x:a.x+b.x, y:a.y+b.y});
   const mul = (a,k) => ({x:a.x*k, y:a.y*k});
   const dot = (a,b) => a.x*b.x + a.y*b.y;
-  const cross = (a,b) => a.x*b.y - a.y*b.x;
   const len = a => Math.hypot(a.x, a.y);
   const edges = poly => poly.map((p,i) => [p, poly[(i+1) % poly.length]]);
 
   const corners = worldFootprint;
-  function rayHit(P, n, segs){
-    let best = Infinity;
-    for (const [Q,R] of segs){
-      const e = sub(R,Q), den = cross(n,e);
-      if (Math.abs(den) < 1e-12) continue;
-      const w = sub(Q,P), t = cross(w,e)/den, s = cross(w,n)/den;
-      if (t > 1e-9 && s >= -1e-9 && s <= 1 + 1e-9 && t < best) best = t;
-    }
-    return best;
-  }
-  // Shortest perpendicular distance from wall segment AB (outward normal n) to target segments.
-  // The minimum of the nearest-hit distance lies at a wall end or where the ray passes a target vertex.
-  function clearance(A, B, n, segs, verts){
-    const ab = sub(B,A), L2 = dot(ab,ab), ss = [0, 1];
-    for (const V of verts){ const s = dot(sub(V,A), ab) / L2; if (s > 0 && s < 1) ss.push(s); }
-    let best = null;
-    for (const s of ss){
-      const P = add(A, mul(ab, s)), t = rayHit(P, n, segs);
-      if (t < Infinity && (!best || t < best.t)) best = {P, Q: add(P, mul(n, t)), t};
-    }
-    return best;
-  }
   const overlap = (a,b) => polygonRelation(a,b) !== 'disjoint';
   function closestOnSeg(V, Q, R){
     const e = sub(R,Q), L2 = dot(e,e);
@@ -236,10 +215,9 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     if (overlap(ca, cb)) return {overlap: true, t: 0};
     let best = null;
     for (const [X,Y] of [[ca,cb],[cb,ca]]){
-      const segs = edges(Y);
       for (let i = 0; i < X.length; i++){
         const A = X[i], B = X[(i+1)%X.length];
-        const r = clearance(A, B, outwardNormal(A,B), segs, Y);
+        const r = perpendicularClearance(A, B, outwardNormal(A,B), Y);
         if (r && (!best || r.t < best.t)) best = {...r, perp: true};
       }
     }
@@ -254,13 +232,13 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   function polyArea(p){ let a = 0; for (let i = 0; i < p.length; i++){ const q = p[(i+1)%p.length]; a += p[i].x*q.y - q.x*p[i].y; } return Math.abs(a)/2; }
 
   function compute(){
-    const plotSegs = edges(state.plot), res = new Map();
+    const plotValid = validRing(state.plot), res = new Map();
     for (const it of state.items){
-      const c = corners(it), inside = validRing(state.plot) && containsPolygon(state.plot, c);
+      const c = corners(it), inside = plotValid && containsPolygon(state.plot, c);
       const sides = [];
       for (let i = 0; i < c.length; i++){
         const A = c[i], B = c[(i+1)%c.length], n = outwardNormal(A,B);
-        const r = clearance(A, B, n, plotSegs, state.plot);
+        const r = perpendicularClearance(A, B, n, state.plot);
         sides.push({name: sideName(n), P: r && r.P, Q: r && r.Q, t: r ? r.t : null, warn: r ? r.t < it.setback - 1e-9 : false});
       }
       const ts = sides.filter(s => s.t != null).map(s => s.t);
@@ -297,7 +275,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     const pad = W < 500 ? 36 : 64;
-    const top = matchMedia('(max-width:760px)').matches ? 96 : pad; // phones: status chips sit below the tool row
+    const top = matchMedia('(max-width:760px)').matches ? Math.max(96, $('#chipbar').offsetTop + $('#chipbar').offsetHeight + 16, $('.tools').offsetTop + $('.tools').offsetHeight + 16) : pad; // phones: status chips sit below the tool row
     const k = Math.max(1, Math.min(200, Math.min((W - 2*pad) / Math.max(1, maxX - minX), (H - top - pad - 20) / Math.max(1, maxY - minY))));
     view.k = k;
     view.ox = W/2 - (minX + maxX)/2 * k;
@@ -315,7 +293,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   let viewer = null, view3d = false, parcelMap = null, mapActive = false;
   let originalAppearance = false;
   let C = compute();
-  function render(){ C = compute(); renderSheet(); syncPanel(); if(viewer && view3d)viewer.update(state,originalAppearance); if(parcelMap && mapActive)parcelMap.update(state); save(); }
+  function render(){ C = compute(); syncPanel(); renderSheet(); if(viewer && view3d)viewer.update(state,originalAppearance); if(parcelMap && mapActive)parcelMap.update(state); save(); }
 
   function dim(a, b, cls, text){
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
@@ -588,6 +566,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     } else { it.x = snapV(it.x); it.y = snapV(it.y); }
   }
   function addItem(type){
+    if(state.items.length>=100){toast(t('objectLimit'));return;}
     snapshot();
     const ty = TYPES[type], n = state.items.filter(i => i.type === type).length;
     const cx = state.plot.reduce((s,p)=>s+p.x,0)/state.plot.length, cy = state.plot.reduce((s,p)=>s+p.y,0)/state.plot.length;
@@ -597,6 +576,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     buildPanel(); render();
   }
   function duplicate(){
+    if(state.items.length>=100){toast(t('objectLimit'));return;}
     const it = get(selected); if (!it) return;
     snapshot();
     const c = {...structuredClone(it), id: 'o' + (uid++), name: (it.name + t('copySuffix')).slice(0, 60), x: it.x + 2, y: it.y + 2};
@@ -723,6 +703,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
 
   function setStageMode(mode){
     view3d=mode==='3d';mapActive=mode==='map';
+    if(!mapActive){mapPick=false;$('#map-pick').setAttribute('aria-pressed','false');}
     $('#viewer').hidden=!view3d;$('#sheet').hidden=mode!=='2d';$('#viewer-controls').hidden=!view3d;
     $('#parcel-map').hidden=!mapActive;$('#map-controls').hidden=!mapActive;$('#map-status').hidden=!mapActive;
     $('.tools').hidden=mode!=='2d';$('.legend').hidden=mode!=='2d';$('#chipbar').hidden=mode!=='2d';$('#viewer-note').hidden=!view3d;
@@ -816,7 +797,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     snapSel.value = String(state.snap); dimSel.value = state.dimScope; pairChk.checked = state.showPairs;
     uid = state.items.reduce((m, i) => Math.max(m, parseInt(String(i.id).replace(/\D/g, '')) || 0), 0) + 1;
     selected = state.items[0] ? state.items[0].id : null;
-    fit(); buildCorners(); buildPanel(); render(); toast(msg);
+    buildCorners(); buildPanel(); fit(); render(); toast(msg);
   }
   $('#b-load').onclick = () => {
     let o; try { if (new TextEncoder().encode($('#io').value).length > MAX_PROJECT_BYTES) throw new Error('large'); o = clean(JSON.parse($('#io').value)); } catch (_) { o = null; }
@@ -885,14 +866,14 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   };
   updateVariants();
   // A shared link pasted into an already-open tab only changes the hash.
-  window.addEventListener('hashchange', async () => { const o = await fromHash(); if (o) applyPlan(o, t('planFromLink')); });
+  window.addEventListener('hashchange', async () => { const hash=location.hash;const o = await fromHash(); if (o && location.hash===hash) applyPlan(o, t('planFromLink')); });
   let resetArmed = false, resetT;
   $('#b-reset').onclick = e => {
     const b = e.currentTarget;
     if (!resetArmed){ resetArmed = true; b.textContent = t('resetConfirm'); resetT = setTimeout(() => { resetArmed = false; b.textContent = t('resetExample'); }, 3000); return; }
     clearTimeout(resetT); resetArmed = false; b.textContent = t('resetExample');
     snapshot(); state = parseScene(DEFAULT()); persistencePaused = false; $('#project-warning').hidden = true;
-    uid = 3; selected = 'o1'; fit(); buildCorners(); buildPanel(); render(); toast(t('exampleRestored'));
+    uid = 3; selected = 'o1'; buildCorners(); buildPanel(); fit(); render(); toast(t('exampleRestored'));
   };
   $('#t-undo').onclick = undo; $('#t-redo').onclick = redo;
   $('#t-in').onclick = () => zoomAt(svg.clientWidth/2, svg.clientHeight/2, 1.25);

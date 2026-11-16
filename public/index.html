@@ -169,8 +169,10 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
   .stage{order:-1;height:62svh;min-height:340px}
   .rail{overflow:visible;padding-right:0}
   .legend{display:none}
+  .tools{max-width:calc(100% - 20px);flex-wrap:wrap;justify-content:flex-end}
   .chipbar{top:50px;max-width:calc(100% - 20px)} /* below the tool buttons, which are wider in Polish */
 }
+@media (max-width:359px){.chipbar{top:90px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -292,7 +294,7 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
 
     <p class="foot" data-t-html="foot">
       Drag empty space to pan, scroll or pinch to zoom. With a building selected: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> nudge, <kbd>R</kbd> rotates 90°, <kbd>Del</kbd> removes. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes.<br>
-      Default setbacks follow Polish WT §12: 4&nbsp;m for a wall with windows or doors facing the boundary, 3&nbsp;m for a blank wall. Check your local plan (MPZP) for building lines.
+      Setbacks are user-selected geometric parameters: defaults are 4&nbsp;m for houses and 3&nbsp;m for garages. This tool does not verify legal applicability. Check official planning documents and other requirements.
     </p>
   </aside>
 

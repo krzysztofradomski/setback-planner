@@ -2,7 +2,7 @@ import proj4 from 'proj4';
 import { z } from 'zod';
 import { validRing, signedArea } from './geometry.ts';
 import { sceneSchema } from './scene.ts';
-// PL-1992 parameters: Dz.U. 2024 poz.342, annex 4. proj4 uses easting,northing.
+// PL-1992 parameters: Dz.U. 2024 poz.342, table 10 (pp. 14–15). proj4 uses easting,northing.
 proj4.defs('EPSG:2180','+proj=tmerc +lat_0=0 +lon_0=19 +k=0.9993 +x_0=500000 +y_0=-5300000 +ellps=GRS80 +units=m +no_defs');
 export type ImportCrs='EPSG:4326'|'EPSG:2180';
 export const projectPoint=(p:[number,number])=>proj4('EPSG:4326','EPSG:2180',p) as [number,number];

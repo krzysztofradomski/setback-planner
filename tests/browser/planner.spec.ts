@@ -156,3 +156,16 @@ test('projected GeoJSON imports arbitrary corners and preserves provenance throu
   await page.locator('#pc-x-0').fill('1');await page.locator('#rw').focus();
   await expect(page.locator('#parcel-source')).toContainText('edited locally');
 });
+test('a building touching a parcel edge fails its positive setback',async({page})=>{
+  const legacy={plot:[{x:0,y:0},{x:30,y:0},{x:30,y:40},{x:0,y:40}],items:[{id:'touching',type:'house',name:'Touching',x:5,y:20,w:10,d:8,setback:4}]};
+  await page.goto('/#p='+Buffer.from(JSON.stringify(legacy)).toString('base64url'));
+  await expect(page.locator('#f-clear .ro').filter({hasText:'Left wall'}).getByText('0.00 m',{exact:true})).toHaveCount(1);
+  await expect(page.locator('#chipbar')).toContainText('1 to check');
+});
+test('Polish controls remain inside the plan at 320px',async({page})=>{
+  await page.setViewportSize({width:320,height:750});await page.goto('/');await page.getByRole('button',{name:'PL',exact:true}).click();
+  const stage=await page.locator('.stage').boundingBox();
+  for(const button of await page.locator('.tools button').all()){
+    const rect=await button.boundingBox();expect(rect!.x).toBeGreaterThanOrEqual(stage!.x);expect(rect!.x+rect!.width).toBeLessThanOrEqual(stage!.x+stage!.width);
+  }
+});

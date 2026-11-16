@@ -6,7 +6,7 @@ Baseline: `04fc331` on main; clean worktree. Three source/config files and three
 
 `public/index.html` contains the entire responsive EN/PL SVG editor: four editable parcel corners; rectangle creation; houses/garages; building naming, size, orientation, setback; duplication/deletion; pointer drag/resize; grid snapping; pan/zoom/pinch; keyboard controls; undo; boundary and pair measurements; coverage statistics; browser autosave; JSON import/export; compressed #z and uncompressed #p shared links. Cloudflare Static Assets hosts `public` on the configured custom domain.
 
-## Findings
+## Baseline findings (before implementation)
 
 - There is no canonical versioned scene contract. Import silently drops unknown objects and fields; duplicate IDs are accepted; invalid/self-intersecting parcels are accepted.
 - Pair intersection misses some collinear overlaps. Building containment checks corners only and can miss edges crossing a concave parcel. Numeric and decompression sizes are unbounded.

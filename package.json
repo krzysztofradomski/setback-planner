@@ -9,7 +9,9 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint public tests"
+    "lint": "eslint public tests",
+    "preview": "vite preview --host 127.0.0.1 --port 5173",
+    "test:production": "npm run build && PLAYWRIGHT_PREVIEW=1 playwright test --grep \"map loads attributed|3D supports camera|SVG export and printable\""
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
