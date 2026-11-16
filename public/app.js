@@ -1,6 +1,8 @@
 import {createCatalogItem} from './catalogs/placement.ts';
 import {sourceDirectory,mapOverlayIds} from './map/sources.ts';
 import {mountWorkspace} from './workspace.ts';
+import {mountParcelJourney} from './parcel-journey.ts';
+import {renderLayoutReview as renderReview} from './layout-review.ts';
 import {transformGroup} from './core/operations.ts';
 import {parcelPolygons,parcelContains,parcelArea} from './core/topology.ts';
 import {fenceSchema,fenceSegments} from './core/fences.ts';
@@ -25,7 +27,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       objectLimit:'This project supports up to 100 buildings.',
       exportSvg:'Export SVG', report:'Report / PDF', printReport:'Print / Save PDF', close:'Close',
       pickParcel:'Select parcel', pickHint:'Click a parcel to replace the current boundary. Coordinates are sent to GUGiK ULDK. Buildings keep their local positions.',
-      mapView:'Map', mapLayer:'Map layer', ortho:'Orthophoto · GUGiK', cadastre:'Cadastre · GUGiK', mapHint:'Visual context only. Image dates and neighboring heights are unknown. Import a georeferenced parcel to see your project here. Map views contact the selected tile providers.', mapError:'Map or layer unavailable. Switch layers or continue planning in 2D.',
+      mapView:'Map', mapLayer:'Map layer', ortho:'Orthophoto · GUGiK', cadastre:'Cadastre · GUGiK', mapHint:'Visual context only. Image dates and neighboring heights are unknown. Import a georeferenced parcel to see your project here. Map views contact the selected tile providers.', mapError:'Some map imagery could not load. Other layers may still work; your project is unchanged.',
       findParcel:'Find Polish parcel (ULDK)', parcelId:'Full parcel identifier', uldkHint:'Lookup sends this identifier to GUGiK ULDK. Service availability varies. The imported boundary replaces the parcel; verify building positions. You can still draw or import a parcel when the service is unavailable.', uldkLoading:'Looking up parcel…', uldkError:'Could not import this parcel. Check its full identifier, service availability and supported geometry. Current plan retained.', uldkChanged:'Project changed during lookup. Request again to replace the parcel.',
       importParcel:'Import parcel (GeoJSON)', sourceCrs:'Source coordinates', openParcel:'Open parcel file', parcelImportHint:'One polygon, up to 512 vertices. Holes and separate components are preserved. Replaces the parcel; keeps buildings at their local positions. Confirm their placement after import.', parcelImportError:'Parcel import failed. Check CRS, closure and geometry; rings must be valid and components disjoint.', parcelEdited:'Boundary edited locally; source geometry has changed.', north:'Grid north ↑',
       topView:'Top', axonView:'Axonometric', screenshot:'Screenshot', lowQuality:'Low power', viewerHint:'Conceptual massing. Calculated sunlight; no terrain or neighboring heights. Shadows are approximate. Concave pitched roofs use a flat schematic cap.', viewerFailure:'3D is unavailable on this device. Continue planning in 2D.', loading3d:'Loading 3D…',
@@ -65,7 +67,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       objectLimit:'Projekt obsługuje do 100 budynków.',
       exportSvg:'Eksport SVG', report:'Raport / PDF', printReport:'Drukuj / Zapisz PDF', close:'Zamknij',
       pickParcel:'Wybierz działkę', pickHint:'Kliknij działkę, aby zastąpić granicę. Współrzędne zostaną wysłane do GUGiK ULDK. Budynki zachowają pozycje lokalne.',
-      mapView:'Mapa', mapLayer:'Warstwa mapy', ortho:'Ortofotomapa · GUGiK', cadastre:'Ewidencja · GUGiK', mapHint:'Kontekst wizualny. Daty zdjęć i wysokości sąsiadów są nieznane. Zaimportuj działkę z georeferencją, aby zobaczyć projekt. Mapa łączy się z wybranymi dostawcami kafelków.', mapError:'Mapa lub warstwa niedostępna. Zmień warstwę lub kontynuuj w 2D.',
+      mapView:'Mapa', mapLayer:'Warstwa mapy', ortho:'Ortofotomapa · GUGiK', cadastre:'Ewidencja · GUGiK', mapHint:'Kontekst wizualny. Daty zdjęć i wysokości sąsiadów są nieznane. Zaimportuj działkę z georeferencją, aby zobaczyć projekt. Mapa łączy się z wybranymi dostawcami kafelków.', mapError:'Nie udało się wczytać części mapy. Inne warstwy mogą działać; projekt pozostał bez zmian.',
       findParcel:'Znajdź działkę (ULDK)', parcelId:'Pełny identyfikator działki', uldkHint:'Zapytanie wysyła identyfikator do GUGiK ULDK. Dostępność usługi jest zmienna. Granica zastąpi działkę; sprawdź pozycje budynków. Przy awarii możesz nadal rysować lub importować działkę.', uldkLoading:'Wyszukiwanie działki…', uldkError:'Nie można zaimportować działki. Sprawdź identyfikator, usługę i obsługiwaną geometrię. Bieżący plan zachowano.', uldkChanged:'Projekt zmieniono podczas wyszukiwania. Ponów zapytanie, aby zastąpić działkę.',
       importParcel:'Import działki (GeoJSON)', sourceCrs:'Współrzędne źródłowe', openParcel:'Otwórz plik działki', parcelImportHint:'Jeden wielokąt, do 512 wierzchołków. Otwory i odrębne części są zachowane. Zastępuje działkę; budynki pozostają na pozycjach lokalnych. Sprawdź ich położenie po imporcie.', parcelImportError:'Import nieudany. Sprawdź układ, zamknięcie i geometrię; pierścienie muszą być poprawne, a części rozłączne.', parcelEdited:'Granica edytowana lokalnie; geometria źródłowa została zmieniona.', north:'Północ siatki ↑',
       topView:'Z góry', axonView:'Aksonometria', screenshot:'Zrzut ekranu', lowQuality:'Oszczędzanie energii', viewerHint:'Bryły koncepcyjne. Obliczona pozycja słońca, brak terenu i wysokości sąsiadów. Cienie przybliżone. Dachy spadziste brył wklęsłych pokazano jako płaski schemat.', viewerFailure:'Widok 3D niedostępny na tym urządzeniu. Kontynuuj w 2D.', loading3d:'Wczytywanie 3D…',
@@ -186,11 +188,13 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     catch { projectWarning(lang === 'pl' ? 'Nieprawidłowy lub nieobsługiwany link projektu.' : 'Invalid or unsupported project link.'); return null; }
   }
   let showroomActive=false;
-  let state = (await fromHash()) || load() || parseScene(DEFAULT());
+  const sharedScene=await fromHash(),savedScene=sharedScene?null:load();let freshScene=!sharedScene&&!savedScene&&!persistencePaused,entryDismissed=false;try{entryDismissed=window.sessionStorage.getItem('setback-entry-dismissed')==='1';}catch{}
+  const freshVisit=freshScene&&!entryDismissed;let entryPending=freshVisit,journey=null,workspace=null;
+  let state = sharedScene || savedScene || parseScene(DEFAULT());
   let saveT, saveRevision = 0;
   function save(){
     clearTimeout(saveT); const revision = ++saveRevision;
-    if (persistencePaused || showroomActive) return;
+    if (persistencePaused || showroomActive || entryPending) return;
     saveT = setTimeout(async () => {
       try {
         const json = serializeScene(state);
@@ -207,7 +211,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   function markParcelEdited(){if(state.parcel)state.parcel.edited=true;}
 
   let history = new ProjectHistory();
-  function snapshot(){ history.record(state); }
+  function snapshot(){ freshScene=false;history.record(state); }
   function restoreHistory(next){
     if (!next){ toast(t('nothingToUndo')); return; }
     state = next;
@@ -324,7 +328,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   let viewer = null, view3d = false, parcelMap = null, mapActive = false;
   let originalAppearance = false;
   let C = compute();
-  function render(){ syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d)viewer.update(state,originalAppearance); if(parcelMap && mapActive)parcelMap.update(state); save(); }
+  function render(){ syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d)viewer.update(state,originalAppearance); if(parcelMap && mapActive)parcelMap.update(state); save(); journey?.refresh(); }
 
   function dim(a, b, cls, text){
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
@@ -765,7 +769,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   $('#view-map').onclick=async()=>{
     $('#view-map').disabled=true;
     try{
-      if(!parcelMap){const {createParcelMap}=await import('./map/map.ts');parcelMap=createParcelMap($('#parcel-map'),()=>{$('#map-status').textContent=t('mapError');});parcelMap.onClick(pickMapParcel);parcelMap.setBase($('#map-base').value);parcelMap.setCadastre($('#map-cadastre').checked);for(const id of mapOverlayIds)parcelMap.setOverlay(id,$('#map-'+id).checked);}
+      if(!parcelMap){const {createParcelMap}=await import('./map/map.ts');parcelMap=createParcelMap($('#parcel-map'),source=>{const entry=sourceDirectory.find(s=>s.id===({ortho:'imagery',cadastre:'parcels'}[source]||source));$('#map-status').textContent=t('mapError')+(entry?' '+(lang==='pl'?entry.plName:entry.name):'');});parcelMap.onClick(pickMapParcel);parcelMap.setBase($('#map-base').value);parcelMap.setCadastre($('#map-cadastre').checked);for(const id of mapOverlayIds)parcelMap.setOverlay(id,$('#map-'+id).checked);}
       $('#map-status').textContent=t('mapHint');setStageMode('map');
     }catch{parcelMap?.dispose();parcelMap=null;setStageMode('2d');toast(t('mapError'));}
     finally{$('#view-map').disabled=false;}
@@ -775,8 +779,9 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   for(const [id,label]of [['planning','Planning / MPZP'],['utilities','Utilities / Uzbrojenie'],['environment','Protected areas / Ochrona przyrody'],['flood','Flood zones / Powódź'],['groundwater','Groundwater / Podtopienia'],['relief','Terrain relief / Rzeźba terenu'],['landslides','Landslides / Osuwiska'],['mining','Mining and deposits / Górnictwo i złoża'],['wells','Hydrogeological objects / Otwory hydrogeologiczne']]){const labelEl=document.createElement('label');labelEl.className='check';const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.id='map-'+id;checkbox.onchange=()=>parcelMap?.setOverlay(id,checkbox.checked);const text=document.createElement('span');text.dataset.ui='layer'+id;text.textContent=label;labelEl.append(checkbox,text);$('#map-controls').append(labelEl);}
   $('#map-fit').onclick=()=>parcelMap?.fitProject();
   let mapPick=false;
-  $('#map-pick').onclick=()=>{mapPick=!mapPick;$('#map-pick').setAttribute('aria-pressed',String(mapPick));$('#map-status').textContent=t(mapPick?'pickHint':'mapHint');};
+  $('#map-pick').onclick=()=>{if(journey){if(journey.isPicking())journey.stopSelection();else void journey.beginMapPick();return;}mapPick=!mapPick;$('#map-pick').setAttribute('aria-pressed',String(mapPick));$('#map-status').textContent=t(mapPick?'pickHint':'mapHint');};
   async function pickMapParcel(longitude,latitude){
+    if(journey?.isPicking()){await journey.previewAt(longitude,latitude);return;}
     if(!mapPick||Date.now()-lastParcelLookup<2000)return;
     mapPick=false;lastParcelLookup=Date.now();$('#map-pick').setAttribute('aria-pressed','false');$('#map-pick').disabled=true;
     const before=JSON.stringify(state);$('#map-status').textContent=t('uldkLoading');
@@ -959,7 +964,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   document.querySelectorAll('.lang button').forEach(b => b.onclick = () => {
     lang = b.dataset.lang;
     try { localStorage.setItem(LANG_LS, lang); } catch (e) {}
-    applyLang(); renderCatalogs(); renderSourceDirectory(); $('#viewer-note').textContent=t('viewerHint');
+    applyLang(); renderCatalogs(); renderSourceDirectory(); renderLayoutReview(); $('#viewer-note').textContent=t('viewerHint');
     state.plot.forEach((_, i) => ['x', 'y'].forEach(axis =>
       document.getElementById(`pc-${axis}-${i}`).setAttribute('aria-label', t('cornerAxis', {c:cornerName(i), axis}))));
     buildPanel(); render();
@@ -975,7 +980,17 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   },onSessionReset:()=>{history=new ProjectHistory();selected=null;$('#io').value='';$('#report-frame').srcdoc='';$('#report-dialog').close();business?.clearPersonalData?.();}});
   const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');business=mountBusiness({container:businessHost,getScene:()=>structuredClone(state),getAttribution:()=>showroom.getAttribution()});
 
-  mountWorkspace();
+  workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='project')renderLayoutReview();}});
+  const parcelPanel=document.querySelector('[data-panel=parcel]'),parcelAdvanced=document.createElement('details');parcelAdvanced.className='parcel-advanced';parcelAdvanced.innerHTML=`<summary>${lang==='pl'?'Rysowanie, import i współrzędne':'Drawing, import & coordinates'}</summary>`;parcelAdvanced.append($('#p-area').closest('section'));parcelPanel.append(parcelAdvanced);
+  const review=document.createElement('section');review.id='review-layout';document.querySelector('[data-panel=project]').prepend(review);
+  function renderLayoutReview(){const data=compute();renderReview(review,{scene:state,language:lang,checks:state.items.map(i=>({id:i.id,...data.res.get(i.id)})),selectedId:selected,onShowPlan:id=>{if(id){selected=id;buildPanel();}setStageMode('2d');fit();render();workspace.activate('houses');if(matchMedia('(max-width:1000px)').matches)document.querySelector('.library-close').click();},onReport:()=>$('#b-report').click(),onSources:()=>{workspace.activate('parcel');document.querySelector('.journey-topics').scrollIntoView({block:'start'});}});}
+  async function journeyMap(point){await $('#view-map').onclick();if(!parcelMap||!mapActive)throw new Error('Map unavailable');await parcelMap.ready;$('#map-cadastre').checked=true;parcelMap.setCadastre(true);if(point)parcelMap.focusLocation(point.longitude,point.latitude,point.label);}
+  journey=mountParcelJourney({container:parcelPanel,stage:$('.stage'),fresh:freshVisit,language:()=>lang,getScene:()=>state,onIntroEnd:()=>{entryPending=false;requestAnimationFrame(()=>{fit();renderSheet();});},onExploreExample:()=>{freshScene=false;entryPending=false;},
+    lookupId:async id=>(await import('./core/uldk.ts')).lookupParcel(id),lookupAt:async(longitude,latitude)=>(await import('./core/uldk.ts')).lookupParcelAt(longitude,latitude),
+    showMap:journeyMap,showPreview:parcel=>{if(parcelMap){parcelMap.clearLocation();parcelMap.update(parcel?parseScene({...state,...parcel,items:[],terrain:undefined}):state);if(parcel)parcelMap.fitProject();}},
+    applyParcel:parcel=>{entryPending=false;applyPlan(parseScene({...state,...parcel,items:freshScene?[]:state.items,terrain:undefined}),t('planLoaded'));freshScene=false;setStageMode('2d');fit();render();requestAnimationFrame(()=>{fit();renderSheet();});},activate:tab=>workspace.activate(tab),
+    pickMap:()=>{mapPick=true;$('#map-pick').setAttribute('aria-pressed','true');},stopPicking:()=>{mapPick=false;$('#map-pick').setAttribute('aria-pressed','false');},
+    showTopic:async topic=>{workspace.activate('parcel');await journeyMap();const ids={planning:['planning'],water:['flood','groundwater'],utilities:['utilities'],nature:['environment'],ground:['relief','landslides','mining','wells']}[topic];for(const id of mapOverlayIds){const enabled=ids.includes(id);$('#map-'+id).checked=enabled;parcelMap.setOverlay(id,enabled);}},reviewLayout:renderLayoutReview});
   applyLang(); renderCatalogs();
   buildCorners();
   buildPanel();

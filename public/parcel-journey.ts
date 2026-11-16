@@ -1,0 +1,627 @@
+import "./parcel-journey.css";
+import { parcelArea } from "./core/topology.ts";
+import type { Scene } from "./core/scene.ts";
+import type { parseUldkResponse } from "./core/uldk.ts";
+type Parcel = ReturnType<typeof parseUldkResponse>;
+type Tab = "houses" | "parcel" | "garden" | "project" | "presentation";
+type Topic = "planning" | "water" | "utilities" | "nature" | "ground";
+interface Options {
+  container: HTMLElement;
+  stage: HTMLElement;
+  fresh: boolean;
+  language: () => "en" | "pl";
+  getScene: () => Scene;
+  lookupId: (id: string) => Promise<Parcel>;
+  lookupAt: (longitude: number, latitude: number) => Promise<Parcel>;
+  showMap: (point?: {
+    longitude: number;
+    latitude: number;
+    label: string;
+  }) => Promise<void>;
+  showPreview: (parcel: Parcel | null) => void;
+  applyParcel: (parcel: Parcel) => void;
+  onIntroEnd: () => void;
+  onExploreExample: () => void;
+  activate: (tab: Tab) => void;
+  pickMap: () => void;
+  stopPicking: () => void;
+  showTopic: (topic: Topic) => Promise<void>;
+  reviewLayout: () => void;
+}
+const words = {
+  en: {
+    title: "Start with your parcel",
+    intro: "Find its boundary, choose a house, then review your layout.",
+    address: "Address or place",
+    id: "Parcel identifier",
+    addressLabel: "Town, street and house number",
+    idLabel: "Full cadastral parcel identifier",
+    placeholder: "e.g. Marki, Andersa 1",
+    idPlaceholder: "e.g. 141201_1.0001.6509",
+    search: "Find parcel",
+    pick: "Choose on map",
+    gps: "Use my location",
+    example: "Explore the example project",
+    examples: "Try an example",
+    privacy:
+      "Your query is sent to GUGiK only when you search. Location access is optional.",
+    finding: "Finding matching locations in GUGiK…",
+    boundary: "Retrieving the parcel boundary from GUGiK…",
+    pickHint:
+      "Click the parcel you want on the map. You will confirm its boundary before changing your project.",
+    addressHint:
+      "This pin locates the address, not a confirmed parcel. Click the correct parcel on the map.",
+    results: "Choose the right location",
+    empty:
+      "No matching locations. Add a town and street, or choose directly on the map.",
+    failed:
+      "The public search service did not return a result. Try again or choose on the map. Your project is unchanged.",
+    shortId:
+      "A local parcel number is not unique. Enter its full identifier, or search the town and select the parcel on the map.",
+    confirm: "Is this the right parcel?",
+    use: "Use this parcel",
+    another: "Choose another",
+    preserve:
+      "Your current project stays unchanged until you confirm. Existing buildings keep their local positions; check them after switching parcels.",
+    changed:
+      "Your project changed while searching. Search again to preview the latest version.",
+    source: "Boundary source",
+    known: "Parcel selected",
+    chooseHouse: "Choose a house",
+    change: "Change parcel",
+    location: "Finding your location…",
+    gpsError:
+      "Location is unavailable. Search an address or choose on the map instead.",
+    gpsHint:
+      "Location found. Click the parcel boundary to confirm it. GPS accuracy is approximate.",
+    next: "Next: review your layout",
+    review: "Review layout & surroundings",
+    overview: "What to check next",
+    overviewText:
+      "Review the geometric layout and open the relevant official maps. Viewing a layer is not a verified finding.",
+    planning: "Planning rules",
+    water: "Flood & groundwater",
+    utilities: "Utilities",
+    nature: "Protected nature",
+    ground: "Ground conditions",
+    openMap: "Open map",
+    step1: "Find parcel",
+    step2: "Choose house",
+    step3: "Review layout",
+    continue: "Continue planning",
+    found: "Location found",
+    summary: "Current parcel",
+    exampleBadge: "Example project · not your parcel",
+    back: "Back to search",
+    close: "Close introduction",
+  },
+  pl: {
+    title: "Zacznij od swojej działki",
+    intro: "Znajdź granicę, wybierz dom i sprawdź swój układ.",
+    address: "Adres lub miejscowość",
+    id: "Identyfikator działki",
+    addressLabel: "Miejscowość, ulica i numer domu",
+    idLabel: "Pełny identyfikator ewidencyjny działki",
+    placeholder: "np. Marki, Andersa 1",
+    idPlaceholder: "np. 141201_1.0001.6509",
+    search: "Znajdź działkę",
+    pick: "Wybierz na mapie",
+    gps: "Użyj mojej lokalizacji",
+    example: "Poznaj przykładowy projekt",
+    examples: "Wypróbuj przykład",
+    privacy:
+      "Zapytanie trafia do GUGiK dopiero po wyszukaniu. Lokalizacja jest opcjonalna.",
+    finding: "Szukamy pasujących lokalizacji w GUGiK…",
+    boundary: "Pobieramy granicę działki z GUGiK…",
+    pickHint:
+      "Kliknij właściwą działkę na mapie. Potwierdzisz jej granicę przed zmianą projektu.",
+    addressHint:
+      "Pinezka wskazuje adres, a nie potwierdzoną działkę. Kliknij właściwą działkę na mapie.",
+    results: "Wybierz właściwą lokalizację",
+    empty:
+      "Nie znaleziono lokalizacji. Dopisz miejscowość i ulicę lub wybierz działkę na mapie.",
+    failed:
+      "Usługa publiczna nie zwróciła wyniku. Spróbuj ponownie lub wybierz na mapie. Twój projekt pozostał bez zmian.",
+    shortId:
+      "Lokalny numer działki nie jest unikalny. Wpisz pełny identyfikator lub wyszukaj miejscowość i wybierz działkę na mapie.",
+    confirm: "Czy to właściwa działka?",
+    use: "Użyj tej działki",
+    another: "Wybierz inną",
+    preserve:
+      "Projekt zmieni się dopiero po potwierdzeniu. Istniejące budynki zachowają lokalne pozycje; sprawdź je po zmianie działki.",
+    changed:
+      "Projekt zmienił się podczas wyszukiwania. Wyszukaj ponownie, aby zobaczyć aktualny podgląd.",
+    source: "Źródło granicy",
+    known: "Wybrano działkę",
+    chooseHouse: "Wybierz dom",
+    change: "Zmień działkę",
+    location: "Ustalamy Twoją lokalizację…",
+    gpsError:
+      "Lokalizacja jest niedostępna. Wpisz adres lub wybierz działkę na mapie.",
+    gpsHint:
+      "Znaleziono lokalizację. Kliknij działkę, aby ją potwierdzić. Dokładność GPS jest przybliżona.",
+    next: "Dalej: sprawdź swój układ",
+    review: "Układ i otoczenie działki",
+    overview: "Co warto sprawdzić",
+    overviewText:
+      "Sprawdź geometrię układu i otwórz odpowiednie mapy urzędowe. Samo wyświetlenie warstwy nie jest potwierdzonym ustaleniem.",
+    planning: "Zasady zabudowy",
+    water: "Powódź i podtopienia",
+    utilities: "Uzbrojenie terenu",
+    nature: "Ochrona przyrody",
+    ground: "Warunki gruntowe",
+    openMap: "Otwórz mapę",
+    step1: "Znajdź działkę",
+    step2: "Wybierz dom",
+    step3: "Sprawdź układ",
+    continue: "Kontynuuj planowanie",
+    found: "Znaleziono lokalizację",
+    summary: "Twoja działka",
+    exampleBadge: "Projekt przykładowy · to nie Twoja działka",
+    back: "Wróć do wyszukiwania",
+    close: "Zamknij wprowadzenie",
+  },
+};
+export function mountParcelJourney(o: Options) {
+  const app = document.querySelector<HTMLElement>(".app")!,
+    root = document.createElement("section");
+  root.className = "parcel-journey";
+  root.id = "parcel-journey";
+  let mode: "address" | "id" = "address",
+    revision = 0,
+    abort: AbortController | null = null,
+    candidate: Parcel | null = null,
+    baseline = "",
+    picking = false,
+    intro = o.fresh;
+  const w = () => words[o.language()];
+  const welcome = document.createElement("div");
+  welcome.className = "journey-welcome";
+  welcome.innerHTML =
+    '<div class="welcome-copy"><span>SETBACK PLANNER</span><h2></h2><p></p></div><div class="welcome-form"></div><ol class="welcome-explanation"></ol>';
+  o.stage.append(welcome);
+  o.container.prepend(root);
+  const steps = document.createElement("nav");
+  steps.className = "journey-steps";
+  steps.setAttribute("aria-label", "Planning steps");
+  steps.innerHTML =
+    '<button type="button" data-step="1"><b>1</b><span></span></button><i></i><button type="button" data-step="2"><b>2</b><span></span></button><i></i><button type="button" data-step="3"><b>3</b><span></span></button>';
+  document.querySelector(".project-identity")?.replaceChildren(steps);
+  const summary = document.createElement("section");
+  summary.className = "journey-parcel-summary";
+  o.container.prepend(summary);
+  const topics = document.createElement("section");
+  topics.className = "journey-topics";
+  o.container.append(topics);
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "journey-next";
+  document.querySelector("[data-panel=houses]")?.prepend(next);
+  next.onclick = () => review();
+  const inspectorNext = document.createElement("button");
+  inspectorNext.type = "button";
+  inspectorNext.className = "journey-inspector-next";
+  inspectorNext.onclick = review;
+  document.querySelector(".inspector-heading")?.after(inspectorNext);
+  function leaveIntro() {
+    intro = false;
+    o.onIntroEnd();
+    welcome.hidden = true;
+    app.classList.remove("journey-intro");
+    for (const id of ["b-link", "b-report"])
+      (document.getElementById(id) as HTMLButtonElement).disabled = false;
+    o.container.prepend(root);
+  }
+  function enterSearch() {
+    leaveIntro();
+    cancel();
+    root.hidden = false;
+    o.activate("parcel");
+    root.querySelector<HTMLInputElement>("input")?.focus();
+  }
+  function setStep(step: number) {
+    steps.querySelectorAll<HTMLButtonElement>("button").forEach((b, i) => {
+      b.setAttribute("aria-current", i + 1 === step ? "step" : "false");
+      b.classList.toggle("complete", i + 1 < step);
+    });
+  }
+  steps
+    .querySelector('[data-step="1"]')!
+    .addEventListener("click", enterSearch);
+  steps.querySelector('[data-step="2"]')!.addEventListener("click", () => {
+    if (intro) o.onExploreExample();
+    leaveIntro();
+    o.activate("houses");
+    setStep(2);
+  });
+  steps.querySelector('[data-step="3"]')!.addEventListener("click", review);
+  function review() {
+    leaveIntro();
+    cancel();
+    o.activate("project");
+    o.reviewLayout();
+    setStep(3);
+    document
+      .querySelector("#review-layout")
+      ?.scrollIntoView({ block: "start" });
+  }
+  function status(message: string, error = false) {
+    const e = root.querySelector<HTMLElement>(".journey-status")!;
+    e.textContent = message;
+    e.classList.toggle("error", error);
+    e.setAttribute("role", error ? "alert" : "status");
+  }
+  function setBusy(value: boolean) {
+    root.setAttribute("aria-busy", String(value));
+    root
+      .querySelectorAll<HTMLButtonElement>("[data-search], [data-gps]")
+      .forEach((e) => (e.disabled = value));
+  }
+  function cancel() {
+    revision++;
+    abort?.abort();
+    abort = null;
+    candidate = null;
+    picking = false;
+    o.stopPicking();
+    o.showPreview(null);
+    root.querySelector(".journey-preview")?.remove();
+    root.classList.remove("previewing");
+    setBusy(false);
+  }
+  function render() {
+    const l = w();
+    root.innerHTML = `<div class="journey-search-heading"><span>${l.step1}</span><h3>${l.title}</h3></div><div class="search-modes" role="group" aria-label="${l.search}"><button type="button" data-mode="address" aria-pressed="${mode === "address"}">${l.address}</button><button type="button" data-mode="id" aria-pressed="${mode === "id"}">${l.id}</button></div><form class="parcel-search-form"><label for="journey-query">${mode === "address" ? l.addressLabel : l.idLabel}</label><div class="search-field"><input id="journey-query" type="search" autocomplete="off" maxlength="180" placeholder="${mode === "address" ? l.placeholder : l.idPlaceholder}" required minlength="3"><button type="submit" data-search>${l.search} →</button></div></form><div class="journey-example">${l.examples}: <button type="button" data-example>Marki, Andersa 1</button></div><div class="journey-search-options"><button type="button" data-pick>⌖ ${l.pick}</button><button type="button" data-gps>◎ ${l.gps}</button></div><p class="journey-status" role="status" aria-live="polite"></p><div class="journey-results"></div><p class="journey-privacy">${l.privacy}</p><button type="button" class="journey-explore" data-explore>${l.example} ↗</button>`;
+    root.querySelectorAll<HTMLButtonElement>("[data-mode]").forEach(
+      (b) =>
+        (b.onclick = () => {
+          cancel();
+          mode = b.dataset.mode as typeof mode;
+          render();
+          root.querySelector("input")!.focus();
+        }),
+    );
+    root.querySelector("form")!.onsubmit = (e) => {
+      e.preventDefault();
+      void search();
+    };
+    root.querySelector<HTMLButtonElement>("[data-example]")!.onclick = () => {
+      root.querySelector<HTMLInputElement>("input")!.value = "Marki, Andersa 1";
+      void search();
+    };
+    root.querySelector<HTMLButtonElement>("[data-pick]")!.onclick = () =>
+      void chooseMap();
+    root.querySelector<HTMLButtonElement>("[data-gps]")!.onclick = () =>
+      void locate();
+    root.querySelector<HTMLButtonElement>("[data-explore]")!.onclick = () => {
+      o.onExploreExample();
+      try {
+        sessionStorage.setItem("setback-entry-dismissed", "1");
+      } catch {
+        /* Session storage can be disabled. */
+      }
+      leaveIntro();
+      cancel();
+      root.hidden = false;
+      o.activate("houses");
+      setStep(2);
+    };
+    welcome.querySelector("h2")!.textContent = l.title;
+    welcome.querySelector("p")!.textContent = l.intro;
+    welcome.querySelector("ol")!.replaceChildren(
+      ...[l.step1, l.step2, l.step3].map((text, i) => {
+        const li = document.createElement("li");
+        li.textContent = `0${i + 1}  ${text}`;
+        return li;
+      }),
+    );
+    steps
+      .querySelectorAll("button")
+      .forEach(
+        (b, i) =>
+          (b.querySelector("span")!.textContent = [l.step1, l.step2, l.step3][
+            i
+          ]),
+      );
+    next.textContent = l.next;
+    inspectorNext.textContent = l.next;
+    renderSummary();
+    renderTopics();
+  }
+  async function search() {
+    const query = root.querySelector<HTMLInputElement>("input")!.value.trim();
+    if (query.length < 3) return;
+    cancel();
+    const ticket = revision;
+    baseline = JSON.stringify(o.getScene());
+    setBusy(true);
+    status(mode === "id" ? w().boundary : w().finding);
+    try {
+      if (/^\d+(?:\/\d+)?$/.test(query)) {
+        status(w().shortId, true);
+        return;
+      }
+      if (mode === "id" || /^\d{6}_\d\./.test(query)) {
+        if (!/^\d{6}_\d\./.test(query)) {
+          status(w().shortId, true);
+          return;
+        }
+        const parcel = await o.lookupId(query);
+        if (ticket !== revision) return;
+        await preview(parcel, ticket);
+      } else {
+        abort = new AbortController();
+        const { searchLocations } = await import("./core/address-search.ts");
+        const locations = await searchLocations(query, fetch, abort.signal);
+        if (ticket !== revision) return;
+        const list = root.querySelector(".journey-results")!;
+        list.replaceChildren();
+        status(locations.length ? w().results : w().empty, !locations.length);
+        for (const location of locations) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "journey-location";
+          const name = document.createElement("span"),
+            provider = document.createElement("small");
+          name.textContent = location.label;
+          provider.textContent = "GUGiK · " + w().openMap;
+          b.append(name, provider);
+          b.onclick = () => void chooseMap(location);
+          list.append(b);
+        }
+      }
+    } catch {
+      if (ticket === revision) status(w().failed, true);
+    } finally {
+      if (ticket === revision) setBusy(false);
+    }
+  }
+  async function chooseMap(point?: {
+    longitude: number;
+    latitude: number;
+    label: string;
+  }) {
+    leaveIntro();
+    app.classList.add("journey-discovery");
+    cancel();
+    o.activate("parcel");
+    try {
+      await o.showMap(point);
+      picking = true;
+      o.pickMap();
+      status(point ? w().addressHint : w().pickHint);
+      setStep(1);
+    } catch {
+      status(w().failed, true);
+    }
+  }
+  async function locate() {
+    if (!navigator.geolocation) {
+      status(w().gpsError, true);
+      return;
+    }
+    cancel();
+    const ticket = revision;
+    status(w().location);
+    setBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (ticket !== revision) return;
+        setBusy(false);
+        const { longitude, latitude } = position.coords;
+        if (
+          longitude < 13 ||
+          longitude > 25 ||
+          latitude < 48 ||
+          latitude > 56
+        ) {
+          status(w().gpsError, true);
+          return;
+        }
+        void chooseMap({ longitude, latitude, label: w().found }).then(() =>
+          status(w().gpsHint),
+        );
+      },
+      () => {
+        if (ticket === revision) {
+          status(w().gpsError, true);
+          setBusy(false);
+        }
+      },
+      { timeout: 12000, maximumAge: 60000, enableHighAccuracy: true },
+    );
+  }
+  async function preview(parcel: Parcel, ticket: number) {
+    if (ticket !== revision) return;
+    if (JSON.stringify(o.getScene()) !== baseline) {
+      status(w().changed, true);
+      return;
+    }
+    leaveIntro();
+    o.activate("parcel");
+    await o.showMap();
+    if (ticket !== revision) return;
+    candidate = parcel;
+    picking = true;
+    o.pickMap();
+    app.classList.add("journey-discovery");
+    o.showPreview(parcel);
+    root.querySelector(".journey-results")!.replaceChildren();
+    root.querySelector(".journey-preview")?.remove();
+    const l = w(),
+      card = document.createElement("article");
+    card.className = "journey-preview";
+    const identifier = parcel.parcel.identifier ?? "",
+      area = parcelArea({ ...o.getScene(), ...parcel });
+    card.innerHTML = `<span class="journey-eyebrow">${l.confirm}</span><h3></h3><strong>${new Intl.NumberFormat(o.language(), { maximumFractionDigits: 0 }).format(area)} m²</strong><small>${l.source}: GUGiK ULDK</small><button type="button" data-confirm>${l.use} →</button><button type="button" data-another>${l.another}</button><p>${l.preserve}</p>`;
+    card.querySelector("h3")!.textContent = identifier;
+    root.append(card);
+    root.classList.add("previewing");
+    requestAnimationFrame(() => {
+      root.closest<HTMLElement>(".rail")?.scrollTo({ top: 0 });
+      card
+        .querySelector<HTMLButtonElement>("[data-confirm]")
+        ?.focus({ preventScroll: true });
+    });
+    status(l.confirm);
+    card.querySelector<HTMLButtonElement>("[data-confirm]")!.onclick = () => {
+      if (!candidate) return;
+      if (JSON.stringify(o.getScene()) !== baseline) {
+        status(w().changed, true);
+        return;
+      }
+      const accepted = candidate;
+      cancel();
+      o.applyParcel(accepted);
+      root.hidden = true;
+      renderSummary();
+      o.activate("houses");
+      setStep(2);
+    };
+    card.querySelector<HTMLButtonElement>("[data-another]")!.onclick = () => {
+      cancel();
+      status(w().pickHint);
+      picking = true;
+      o.pickMap();
+    };
+  }
+  async function previewAt(longitude: number, latitude: number) {
+    if (!picking) return;
+    const ticket = ++revision;
+    abort?.abort();
+    candidate = null;
+    root.classList.remove("previewing");
+    root.querySelector(".journey-preview")?.remove();
+    baseline = JSON.stringify(o.getScene());
+    status(w().boundary);
+    setBusy(true);
+    try {
+      const parcel = await o.lookupAt(longitude, latitude);
+      await preview(parcel, ticket);
+    } catch {
+      if (ticket === revision) status(w().failed, true);
+    } finally {
+      if (ticket === revision) setBusy(false);
+    }
+  }
+  function renderSummary() {
+    const scene = o.getScene(),
+      l = w();
+    summary.replaceChildren();
+    if (!scene.parcel) return;
+    const label = document.createElement("span"),
+      id = document.createElement("strong"),
+      area = document.createElement("p"),
+      change = document.createElement("button"),
+      house = document.createElement("button");
+    label.textContent = l.summary;
+    id.textContent = scene.parcel.identifier ?? scene.parcel.source.name;
+    area.textContent =
+      new Intl.NumberFormat(o.language(), { maximumFractionDigits: 0 }).format(
+        parcelArea(scene),
+      ) +
+      " m² · " +
+      scene.parcel.source.name;
+    change.type = house.type = "button";
+    change.textContent = l.change;
+    house.textContent = l.chooseHouse + " →";
+    change.onclick = enterSearch;
+    house.onclick = () => {
+      o.activate("houses");
+      setStep(2);
+    };
+    summary.append(label, id, area, house, change);
+  }
+  function renderTopics() {
+    const l = w();
+    topics.replaceChildren();
+    const heading = document.createElement("h3"),
+      hint = document.createElement("p");
+    heading.textContent = l.overview;
+    hint.textContent = l.overviewText;
+    topics.append(heading, hint);
+    for (const id of [
+      "planning",
+      "water",
+      "utilities",
+      "nature",
+      "ground",
+    ] as const) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = l[id] + " ↗";
+      b.onclick = () => {
+        leaveIntro();
+        void o.showTopic(id).catch(() => status(w().failed, true));
+      };
+      topics.append(b);
+    }
+  }
+  function tabChanged(tab: Tab) {
+    if (tab !== "parcel") app.classList.remove("journey-discovery");
+    else if (picking || candidate) app.classList.add("journey-discovery");
+    if (intro && tab !== "parcel") {
+      o.onExploreExample();
+      leaveIntro();
+    }
+    if (tab === "parcel") setStep(1);
+    else if (tab === "houses") setStep(2);
+    else if (tab === "project") setStep(3);
+  }
+  function refresh() {
+    renderSummary();
+    if (!o.getScene().parcel && !intro && !candidate) root.hidden = false;
+    next.hidden = !o.getScene().items.length;
+    inspectorNext.hidden = next.hidden;
+    if (candidate && JSON.stringify(o.getScene()) !== baseline) {
+      root
+        .querySelector<HTMLButtonElement>("[data-confirm]")
+        ?.setAttribute("disabled", "");
+      status(w().changed, true);
+    }
+  }
+  const langObserver = new MutationObserver(() => {
+    const query = root.querySelector<HTMLInputElement>("input")?.value ?? "";
+    cancel();
+    render();
+    root.querySelector<HTMLInputElement>("input")!.value = query;
+  });
+  langObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["lang"],
+  });
+  render();
+  for (const id of ["b-link", "b-report"])
+    (document.getElementById(id) as HTMLButtonElement).disabled = intro;
+  if (intro) {
+    app.classList.add("journey-intro");
+    welcome.hidden = false;
+    welcome.querySelector(".welcome-form")!.append(root);
+  } else {
+    welcome.hidden = true;
+    root.hidden = !!o.getScene().parcel;
+  }
+  setStep(o.getScene().parcel ? 2 : 1);
+  return {
+    previewAt,
+    beginMapPick: () => chooseMap(),
+    stopSelection: () => {
+      picking = false;
+      o.stopPicking();
+    },
+    isPicking: () => picking,
+    refresh,
+    tabChanged,
+    destroy() {
+      cancel();
+      langObserver.disconnect();
+      root.remove();
+      welcome.remove();
+      steps.remove();
+      topics.remove();
+      summary.remove();
+      next.remove();
+      inspectorNext.remove();
+    },
+  };
+}

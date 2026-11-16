@@ -106,7 +106,10 @@ const icons = {
 };
 const icon = (key: keyof typeof icons) =>
   `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[key]}</svg>`;
-export function mountWorkspace({ onTab }: { onTab?: (tab: Tab) => void } = {}) {
+export function mountWorkspace({
+  onTab,
+  initialTab = "houses",
+}: { onTab?: (tab: Tab) => void; initialTab?: Tab } = {}) {
   const app = document.querySelector<HTMLElement>(".app")!,
     rail = document.querySelector<HTMLElement>(".rail")!,
     brand = rail.querySelector<HTMLElement>(".brand")!,
@@ -342,7 +345,7 @@ export function mountWorkspace({ onTab }: { onTab?: (tab: Tab) => void } = {}) {
   document
     .getElementById("view-map")!
     .addEventListener("click", () => activate("parcel"));
-  activate("houses");
+  activate(initialTab);
   window.dispatchEvent(new Event("resize"));
   return {
     activate,

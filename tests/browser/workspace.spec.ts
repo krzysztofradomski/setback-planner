@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./editor-fixture";
 test("catalog photos, plan preview and sourced building placement work through the workspace", async ({
   page,
   context,
@@ -47,7 +47,7 @@ test("workspace navigation separates parcel sources and garden settings from sel
   await expect(page.locator("[data-panel=houses]")).toBeVisible();
   await expect(page.locator("[data-panel=parcel]")).not.toBeVisible();
   await page.locator("[data-workspace-tab=parcel]").click();
-  await expect(page.locator("#parcel-lookup")).toBeVisible();
+  await expect(page.locator("#journey-query")).toBeVisible();
   await page.locator("#source-directory>summary").click();
   await expect(page.locator("#source-directory")).toContainText(
     "Official registries",
@@ -137,7 +137,7 @@ test("using a catalog design replaces the selected house and adding another find
   await expect(page.locator(".obj")).toHaveCount(2);
   await expect(page.locator("#f-w")).toHaveValue("11.76");
   await page.locator("[data-workspace-tab=parcel]").click();
-  await page.locator("#rw").fill("60");
+  await page.locator(".parcel-advanced").evaluate((el:HTMLDetailsElement)=>el.open=true);await page.locator("#rw").fill("60");
   await page.locator("#rd").fill("60");
   await page.locator("#b-rect").click();
   await page.locator("[data-workspace-tab=houses]").click();

@@ -735,6 +735,41 @@
       "documentation": [
         "docs/ui-review-2026-11-16.md"
       ]
+    },
+    {
+      "id": "F028",
+      "description": "Parcel-first guided search, confirmation and layout review",
+      "dependencies": [
+        "F010",
+        "F011",
+        "F013",
+        "F027"
+      ],
+      "status": "completed",
+      "acceptanceCriteria": [
+        "Fresh visitors can find an address, enter a full parcel identifier, choose on a map or explicitly explore an example",
+        "Address ambiguity is resolved with candidates; boundary preview requires confirmation",
+        "Late responses and changed projects cannot be overwritten",
+        "House selection leads to a decision-focused layout review on desktop and phones",
+        "Existing saved projects and shared scenes open directly into the workspace"
+      ],
+      "tests": [
+        "tests/address-search.test.ts",
+        "tests/browser/parcel-journey.spec.ts",
+        "tests/browser/editor-fixture.ts",
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run test:e2e",
+        "npm run test:production"
+      ],
+      "knownLimitations": [
+        "Addresses identify map locations, not properties. Short local parcel numbers require map selection or a full identifier. Official service coverage and availability vary. Review computes geometry against user settings, not legal feasibility or verified risk findings."
+      ],
+      "documentation": [
+        "docs/gruntometr-flow-study.md",
+        "docs/address-search.md"
+      ]
     }
   ]
 }

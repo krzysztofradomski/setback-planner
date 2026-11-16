@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './editor-fixture';
 test('existing editor adds, resizes, rotates, duplicates, deletes and undoes', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -145,7 +145,7 @@ test('optional catalog can be disabled without deleting placed fallback building
 });
 test('projected GeoJSON imports arbitrary corners and preserves provenance through sharing and undo', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read','clipboard-write']);await page.goto('/');
-  await page.locator('[data-workspace-tab=parcel]').click();await page.locator('#parcel-import').evaluate((el:HTMLDetailsElement)=>el.open=true);
+  await page.locator('[data-workspace-tab=parcel]').click();await page.locator('.parcel-advanced').evaluate((el:HTMLDetailsElement)=>el.open=true);await page.locator('#parcel-import').evaluate((el:HTMLDetailsElement)=>el.open=true);
   await page.locator('#parcel-crs').selectOption('EPSG:2180');
   const data={type:'Polygon',coordinates:[[[500000,500000],[500020,500000],[500020,500010],[500010,500010],[500010,500030],[500000,500030],[500000,500000]]]};
   await page.locator('#parcel-file').setInputFiles({name:'six-corners.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(data))});
@@ -153,7 +153,7 @@ test('projected GeoJSON imports arbitrary corners and preserves provenance throu
   await expect(page.locator('#parcel-source')).toContainText('EPSG:2180');
   await page.locator('#b-link').click();await page.goto(await page.evaluate(()=>navigator.clipboard.readText()));
   await expect(page.locator('#p-corners tr')).toHaveCount(6);
-  await page.locator('[data-workspace-tab=parcel]').click();await page.locator('#b-rect').click();await expect(page.locator('#p-corners tr')).toHaveCount(4);
+  await page.locator('[data-workspace-tab=parcel]').click();await page.locator('.parcel-advanced').evaluate((el:HTMLDetailsElement)=>el.open=true);await page.locator('#b-rect').click();await expect(page.locator('#p-corners tr')).toHaveCount(4);
   await expect(page.locator('#parcel-source')).toBeEmpty();
   await page.locator('#t-undo').click();await expect(page.locator('#p-corners tr')).toHaveCount(6);
   await page.locator('#pc-x-0').fill('1');await page.locator('#rw').focus();
@@ -184,7 +184,7 @@ test('fence gate follows a path and restores through project sharing',async({pag
  await page.goto('/');await page.locator('[data-workspace-tab=garden]').click();await page.locator('#fence-type').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#fence-boundary').click();await page.locator('#fence-gate').selectOption('swing');await page.locator('#fence-add').click();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');await page.waitForTimeout(400);await page.reload();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');
 });
 test('a multipart parcel retains holes in area and the drawn boundary',async({page})=>{
- await page.goto('/');await page.locator('[data-workspace-tab=parcel]').click();await page.locator('#parcel-crs').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#parcel-crs').selectOption('EPSG:2180');
+ await page.goto('/');await page.locator('[data-workspace-tab=parcel]').click();await page.locator('.parcel-advanced').evaluate((el:HTMLDetailsElement)=>el.open=true);await page.locator('#parcel-crs').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#parcel-crs').selectOption('EPSG:2180');
  const ring=(x:number,y:number,w:number)=>[[x,y],[x+w,y],[x+w,y+w],[x,y+w],[x,y]];const value={type:'MultiPolygon',coordinates:[[ring(500000,500000,20),ring(500005,500005,5)],[ring(500040,500000,10)]]};
  await page.locator('#parcel-file').setInputFiles({name:'parts.geojson',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});await expect(page.locator('#p-area')).toHaveText('475 m²');expect((await page.locator('.plot-fill').getAttribute('d'))!.split('M')).toHaveLength(4);await expect(page.locator('.plot-fill')).toHaveAttribute('fill-rule','evenodd');
 });

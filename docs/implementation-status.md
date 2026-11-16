@@ -39,3 +39,7 @@ Passed: 61 unit/integration tests, 31 Playwright browser journeys, 3 built-produ
 ## Workspace correction
 
 See `docs/ui-review-2026-11-16.md` for the layout audit, independent review findings and fixes. The public manufacturer gallery contained dimensioned plans that the previous research missed; those dimensions now drive placement. Manufacturer photos and plans are served from the dedicated Vite static directory and included in production browser journeys. The new public geospatial services were verified with actual GetMap images and CORS headers, using primary providers rather than Gruntometr APIs.
+
+## Parcel-first flow (F028)
+
+A live Gruntometr usability study informed a guided entry: address/full identifier/map/GPS → confirm official boundary → choose a house → review geometric issues and surrounding sources. Fresh examples are not autosaved before a choice. Existing projects and shared links retain direct entry. Address candidates are explicitly distinguished from properties, and preview/confirmation guards protect edits. See `docs/gruntometr-flow-study.md` and `docs/address-search.md` for observations, source contracts, limits and review evidence.

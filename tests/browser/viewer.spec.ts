@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './editor-fixture';
 test('3D supports camera presets, live materials, screenshot and 2D return',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',msg=>{if((msg.type()==='error'||msg.type()==='warning')&&!/GL Driver Message.*GPU stall due to ReadPixels/.test(msg.text()))errors.push(msg.text());});
   await page.goto('/');
