@@ -17,7 +17,7 @@ test('projection matches the central meridian and round-trips Polish coordinate 
     assert.ok(Math.abs(result[0]-source[0])<1e-7);assert.ok(Math.abs(result[1]-source[1])<1e-7);
   }
 });
-test('rejects holes, separate parts, unclosed rings, ambiguous CRS and oversized parcels',()=>{
+test('rejects invalid holes, overlapping parts, unclosed rings and ambiguous CRS',()=>{
   assert.throws(()=>importParcel({...polygon,coordinates:[...polygon.coordinates,polygon.coordinates[0]]},'EPSG:2180','fixture','2026-11-16T12:00:00Z'));
   assert.throws(()=>importParcel({type:'MultiPolygon',coordinates:[polygon.coordinates,polygon.coordinates]},'EPSG:2180','fixture','2026-11-16T12:00:00Z'));
   assert.throws(()=>importParcel({type:'Polygon',coordinates:[[[0,0],[1,0],[1,1],[0,1]]]},'EPSG:4326','fixture','2026-11-16T12:00:00Z'));

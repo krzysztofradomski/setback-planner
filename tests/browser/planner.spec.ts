@@ -180,3 +180,8 @@ test('garden objects are editable, persisted and excluded from building coverage
 test('fence gate follows a path and restores through project sharing',async({page})=>{
  await page.goto('/');await page.locator('#fence-type').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#fence-boundary').click();await page.locator('#fence-gate').selectOption('swing');await page.locator('#fence-add').click();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');await page.waitForTimeout(400);await page.reload();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');
 });
+test('a multipart parcel retains holes in area and the drawn boundary',async({page})=>{
+ await page.goto('/');await page.locator('#parcel-crs').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#parcel-crs').selectOption('EPSG:2180');
+ const ring=(x:number,y:number,w:number)=>[[x,y],[x+w,y],[x+w,y+w],[x,y+w],[x,y]];const value={type:'MultiPolygon',coordinates:[[ring(500000,500000,20),ring(500005,500005,5)],[ring(500040,500000,10)]]};
+ await page.locator('#parcel-file').setInputFiles({name:'parts.geojson',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});await expect(page.locator('#p-area')).toHaveText('475 m²');expect((await page.locator('.plot-fill').getAttribute('d'))!.split('M')).toHaveLength(4);await expect(page.locator('.plot-fill')).toHaveAttribute('fill-rule','evenodd');
+});

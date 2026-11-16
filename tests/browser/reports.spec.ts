@@ -6,7 +6,7 @@ test('SVG export and printable report contain the active configuration and unkno
   const report=page.frameLocator('#report-frame');
   await expect(report.getByRole('heading',{name:'My concept house'})).toBeVisible();
   await expect(report.getByRole('heading',{name:'Unverified requirements'})).toBeVisible();
-  await expect(report.locator('svg polygon')).toHaveCount(3);
+  await expect(report.locator('svg polygon')).toHaveCount(2);
   await expect(report.locator('body')).toContainText('No verified manufacturer price');
   await page.locator('#report-close').click();await expect(page.locator('#report-dialog')).not.toBeVisible();
 });

@@ -594,14 +594,22 @@
       "dependencies": [
         "F009"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Preserve all components and holes in the scene",
         "Containment, dimensions, rendering and export honor excluded areas",
         "No silent geometry flattening"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build",
+        "npm run test:e2e"
+      ],
+      "knownLimitations": [
+        "Multipart polygons and holes persist, render and participate in containment and area calculations. Total topology is bounded to 512 vertices; intersecting or touching hole boundaries are rejected."
+      ],
       "documentation": [
         "docs/geospatial-sources.md"
       ]

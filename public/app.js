@@ -1,3 +1,4 @@
+import {parcelPolygons,parcelContains,parcelArea} from './core/topology.ts';
 import {fenceSchema,fenceSegments} from './core/fences.ts';
 import { objectLibrary, blocksPlacement } from './core/objects.ts';
 import { catalogRegistrations, loadCatalog, catalogAvailable } from './core/catalogs.ts';
@@ -5,7 +6,7 @@ import { materialPresets, resolveAppearance, resetAppearance } from './core/mate
 import { worldFootprint, boundingCorners } from './core/footprints.ts';
 import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
 import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
-import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicularClearance } from './core/geometry.ts';
+import { polygonRelation, validRing, polygonArea, perpendicularClearance } from './core/geometry.ts';
 
 (async () => {
   const $ = s => document.querySelector(s);
@@ -21,7 +22,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
       pickParcel:'Select parcel', pickHint:'Click a parcel to replace the current boundary. Coordinates are sent to GUGiK ULDK. Buildings keep their local positions.',
       mapView:'Map', mapLayer:'Map layer', ortho:'Orthophoto · GUGiK', cadastre:'Cadastre · GUGiK', mapHint:'Visual context only. Image dates and neighboring heights are unknown. Import a georeferenced parcel to see your project here. Map views contact the selected tile providers.', mapError:'Map or layer unavailable. Switch layers or continue planning in 2D.',
       findParcel:'Find Polish parcel (ULDK)', parcelId:'Full parcel identifier', uldkHint:'Lookup sends this identifier to GUGiK ULDK. Service availability varies. The imported boundary replaces the parcel; verify building positions. You can still draw or import a parcel when the service is unavailable.', uldkLoading:'Looking up parcel…', uldkError:'Could not import this parcel. Check its full identifier, service availability and supported geometry. Current plan retained.', uldkChanged:'Project changed during lookup. Request again to replace the parcel.',
-      importParcel:'Import parcel (GeoJSON)', sourceCrs:'Source coordinates', openParcel:'Open parcel file', parcelImportHint:'One polygon, up to 512 vertices. Holes and separate parts are rejected. Replaces the parcel; keeps buildings at their local positions. Confirm their placement after import.', parcelImportError:'Parcel import failed. Check CRS, closure and geometry; holes and separate parts are not supported.', parcelEdited:'Boundary edited locally; source geometry has changed.', north:'Grid north ↑',
+      importParcel:'Import parcel (GeoJSON)', sourceCrs:'Source coordinates', openParcel:'Open parcel file', parcelImportHint:'One polygon, up to 512 vertices. Holes and separate components are preserved. Replaces the parcel; keeps buildings at their local positions. Confirm their placement after import.', parcelImportError:'Parcel import failed. Check CRS, closure and geometry; rings must be valid and components disjoint.', parcelEdited:'Boundary edited locally; source geometry has changed.', north:'Grid north ↑',
       topView:'Top', axonView:'Axonometric', screenshot:'Screenshot', lowQuality:'Low power', viewerHint:'Conceptual massing. Calculated sunlight; no terrain or neighboring heights. Shadows are approximate. Concave pitched roofs use a flat schematic cap.', viewerFailure:'3D is unavailable on this device. Continue planning in 2D.', loading3d:'Loading 3D…',
       catalogs:'Optional catalogs', catalogHint:'Source metadata only. Authoritative dimensions and approved assets are unavailable; generic houses remain available.', catalogUnavailable:'Catalog unavailable or disabled. Saved user-defined fallback geometry is retained.', enableCatalog:'Enable catalog', catalogError:'Catalog could not be loaded. Generic planning remains available.', source:'Source', verifiedOn:'Checked', noDimensions:'Dimensions unverified · placement unavailable',
       materials:'Materials', facade:'Façade finish', grout:'Grout color', roofColor:'Roof color', frameColor:'Window / door color', gutterColor:'Gutter color', trimColor:'Trim color', tileWidth:'Tile width (m)', tileHeight:'Tile height (m)', layout:'Tile direction', horizontal:'Horizontal', vertical:'Vertical', wallFinish:'Individual wall', allWalls:'All walls', inherit:'Use façade finish', resetMaterials:'Reset all finishes', resetFacade:'Reset façade', original:'Compare original', materialHint:'Conceptual finishes, not manufacturer-approved options. No price calculation. Patterns are schematic.',
@@ -60,7 +61,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
       pickParcel:'Wybierz działkę', pickHint:'Kliknij działkę, aby zastąpić granicę. Współrzędne zostaną wysłane do GUGiK ULDK. Budynki zachowają pozycje lokalne.',
       mapView:'Mapa', mapLayer:'Warstwa mapy', ortho:'Ortofotomapa · GUGiK', cadastre:'Ewidencja · GUGiK', mapHint:'Kontekst wizualny. Daty zdjęć i wysokości sąsiadów są nieznane. Zaimportuj działkę z georeferencją, aby zobaczyć projekt. Mapa łączy się z wybranymi dostawcami kafelków.', mapError:'Mapa lub warstwa niedostępna. Zmień warstwę lub kontynuuj w 2D.',
       findParcel:'Znajdź działkę (ULDK)', parcelId:'Pełny identyfikator działki', uldkHint:'Zapytanie wysyła identyfikator do GUGiK ULDK. Dostępność usługi jest zmienna. Granica zastąpi działkę; sprawdź pozycje budynków. Przy awarii możesz nadal rysować lub importować działkę.', uldkLoading:'Wyszukiwanie działki…', uldkError:'Nie można zaimportować działki. Sprawdź identyfikator, usługę i obsługiwaną geometrię. Bieżący plan zachowano.', uldkChanged:'Projekt zmieniono podczas wyszukiwania. Ponów zapytanie, aby zastąpić działkę.',
-      importParcel:'Import działki (GeoJSON)', sourceCrs:'Współrzędne źródłowe', openParcel:'Otwórz plik działki', parcelImportHint:'Jeden wielokąt, do 512 wierzchołków. Otwory i odrębne części są odrzucane. Zastępuje działkę; budynki pozostają na pozycjach lokalnych. Sprawdź ich położenie po imporcie.', parcelImportError:'Import nieudany. Sprawdź układ, zamknięcie i geometrię; otwory i odrębne części nie są obsługiwane.', parcelEdited:'Granica edytowana lokalnie; geometria źródłowa została zmieniona.', north:'Północ siatki ↑',
+      importParcel:'Import działki (GeoJSON)', sourceCrs:'Współrzędne źródłowe', openParcel:'Otwórz plik działki', parcelImportHint:'Jeden wielokąt, do 512 wierzchołków. Otwory i odrębne części są zachowane. Zastępuje działkę; budynki pozostają na pozycjach lokalnych. Sprawdź ich położenie po imporcie.', parcelImportError:'Import nieudany. Sprawdź układ, zamknięcie i geometrię; pierścienie muszą być poprawne, a części rozłączne.', parcelEdited:'Granica edytowana lokalnie; geometria źródłowa została zmieniona.', north:'Północ siatki ↑',
       topView:'Z góry', axonView:'Aksonometria', screenshot:'Zrzut ekranu', lowQuality:'Oszczędzanie energii', viewerHint:'Bryły koncepcyjne. Obliczona pozycja słońca, brak terenu i wysokości sąsiadów. Cienie przybliżone. Dachy spadziste brył wklęsłych pokazano jako płaski schemat.', viewerFailure:'Widok 3D niedostępny na tym urządzeniu. Kontynuuj w 2D.', loading3d:'Wczytywanie 3D…',
       catalogs:'Katalogi opcjonalne', catalogHint:'Tylko metadane źródłowe. Brak potwierdzonych wymiarów i zatwierdzonych zasobów; domy ogólne są dostępne.', catalogUnavailable:'Katalog niedostępny lub wyłączony. Zachowano zapisany obrys użytkownika.', enableCatalog:'Włącz katalog', catalogError:'Nie można wczytać katalogu. Planowanie ogólne jest nadal dostępne.', source:'Źródło', verifiedOn:'Sprawdzono', noDimensions:'Wymiary niepotwierdzone · brak umieszczania',
       materials:'Materiały', facade:'Wykończenie elewacji', grout:'Kolor fugi', roofColor:'Kolor dachu', frameColor:'Kolor okien / drzwi', gutterColor:'Kolor rynien', trimColor:'Kolor detali', tileWidth:'Szerokość płytki (m)', tileHeight:'Wysokość płytki (m)', layout:'Kierunek płytek', horizontal:'Poziomo', vertical:'Pionowo', wallFinish:'Pojedyncza ściana', allWalls:'Wszystkie ściany', inherit:'Wykończenie elewacji', resetMaterials:'Resetuj wykończenia', resetFacade:'Resetuj elewację', original:'Porównaj oryginał', materialHint:'Wykończenia koncepcyjne, bez zatwierdzenia producenta i kalkulacji cen. Wzory są schematyczne.',
@@ -236,16 +237,15 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
       }
     return best;
   }
-  function polyArea(p){ let a = 0; for (let i = 0; i < p.length; i++){ const q = p[(i+1)%p.length]; a += p[i].x*q.y - q.x*p[i].y; } return Math.abs(a)/2; }
 
   function compute(){
     const plotValid = validRing(state.plot), res = new Map();
     for (const it of state.items){
-      const c = corners(it), inside = plotValid && containsPolygon(state.plot, c);
+      const c = corners(it), inside = plotValid && parcelContains(state,c);
       const sides = [];
       for (let i = 0; i < c.length; i++){
         const A = c[i], B = c[(i+1)%c.length], n = outwardNormal(A,B);
-        const r = perpendicularClearance(A, B, n, state.plot);
+        const hits=parcelPolygons(state).flat().map(ring=>perpendicularClearance(A,B,n,ring)).filter(Boolean);const r=hits.sort((a,b)=>a.t-b.t)[0]||null;
         sides.push({name: sideName(n), P: r && r.P, Q: r && r.Q, t: r ? r.t : null, warn: r ? r.t < it.setback - 1e-9 : false});
       }
       const ts = sides.filter(s => s.t != null).map(s => s.t);
@@ -279,7 +279,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
   const toWorld = p => ({x: (p.x - view.ox) / view.k, y: (p.y - view.oy) / view.k});
   function fit(){
     const W = svg.clientWidth, H = svg.clientHeight; if (!W || !H) return;
-    const pts = [...state.plot]; for (const it of state.items) pts.push(...corners(it));
+    const pts = [...parcelPolygons(state).flat(2)]; for (const it of state.items) pts.push(...corners(it));
     const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     const pad = W < 500 ? 36 : 64;
@@ -331,10 +331,10 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
       return d;
     };
     const major = k >= 4 ? 5 : k >= 1.5 ? 10 : 50;
-    const pp = state.plot.map(S), pd = 'M' + pp.map(p => f(p.x) + ' ' + f(p.y)).join('L') + 'Z';
-    out.push(`<clipPath id="plotclip"><path d="${pd}"/></clipPath>`);
+    const pp = state.plot.map(S), pd = parcelPolygons(state).flat().map(ring=>'M'+ring.map(S).map(p=>f(p.x)+' '+f(p.y)).join('L')+'Z').join(' ');
+    out.push(`<clipPath id="plotclip"><path clip-rule="evenodd" d="${pd}"/></clipPath>`);
     out.push(`<path class="gout" d="${grid(major)}"/>`);
-    out.push(`<path class="plot-fill" d="${pd}"/>`);
+    out.push(`<path class="plot-fill" fill-rule="evenodd" d="${pd}"/>`);
     out.push(`<g clip-path="url(#plotclip)">${k >= 4 ? `<path class="gmin" d="${grid(1)}"/>` : ''}<path class="gmaj" d="${grid(major)}"/></g>`);
     out.push(`<path class="plot-edge" d="${pd}"/>`);
 
@@ -536,8 +536,8 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
     }).join('');
 
     // plot
-    const area = polyArea(state.plot);
-    let per = 0; edges(state.plot).forEach(([a,b]) => per += len(sub(b,a)));
+    const area = parcelArea(state);
+    let per = 0; parcelPolygons(state).flat().forEach(ring=>edges(ring).forEach(([a,b])=>per+=len(sub(b,a))));
     const built = state.items.reduce((s, i) => s + (i.type==='landscape'?0:polygonArea(corners(i))), 0);
     $('#parcel-source').textContent=state.parcel ? `${state.parcel.source.name}${state.parcel.identifier?' · '+state.parcel.identifier:''} · ${state.parcel.source.retrievedAt} · ${state.parcel.source.crs}${state.parcel.edited?' · '+t('parcelEdited'):''}` : '';
     $('#p-area').textContent = group(area) + ' m²';
@@ -767,6 +767,9 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
   $('#view-capture').onclick=()=>{try{const a=document.createElement('a');a.download='setback-3d.png';a.href=viewer.screenshot();a.click();}catch{toast(t('viewerFailure'));}};
   window.addEventListener('pagehide',()=>{viewer?.dispose();viewer=null;parcelMap?.dispose();parcelMap=null;});
   // ---------- wiring ----------
+  const topologyPanel=document.createElement('details');topologyPanel.innerHTML='<summary>Parcel holes / parts · Otwory i części działki</summary><p class="hint">Local metric coordinates / Lokalne współrzędne w metrach. {holes: [[[x,y],…]], parts: [[outerRing, holeRing,…],…]}</p><textarea id="topology-json" aria-label="Additional parcel rings"></textarea><button id="topology-read">Read boundaries / Odczytaj</button><button id="topology-apply">Apply / Zastosuj</button><p id="topology-message" role="status"></p>';$('#sel').before(topologyPanel);
+  $('#topology-read').onclick=()=>{$('#topology-json').value=JSON.stringify({holes:state.plotHoles.map(r=>r.map(p=>[p.x,p.y])),parts:state.plotParts.map(part=>part.map(r=>r.map(p=>[p.x,p.y])))},null,2);};
+  $('#topology-apply').onclick=()=>{try{if($('#topology-json').value.length>MAX_PROJECT_BYTES)throw new Error('large');const value=JSON.parse($('#topology-json').value),point=([x,y])=>({x,y});const next=parseScene({...state,plotHoles:value.holes.map(r=>r.map(point)),plotParts:value.parts.map(part=>part.map(r=>r.map(point)))});if(next.parcel)next.parcel.edited=true;applyPlan(next,t('planLoaded'));$('#topology-message').textContent='';}catch{$('#topology-message').textContent=t('parcelImportError');}};
   const fencesPanel=document.createElement('details');fencesPanel.innerHTML=`<summary>Fences / Gates / Hedges · Ogrodzenia</summary><label>Design / Typ<select id="fence-type">${['metal-panel','palisade-horizontal','palisade-vertical','wood','gabion','masonry','mixed','hedge-evergreen','hedge-deciduous'].map(v=>`<option>${v}</option>`).join('')}</select></label><div class="grid2"><label>Height / Wysokość (m)<input id="fence-height" type="number" min="0.2" max="5" value="1.8" step=".1"></label><label>Post spacing / Rozstaw (m)<input id="fence-spacing" type="number" min=".5" max="10" value="2" step=".1"></label><label>Width / Szerokość (m)<input id="fence-width" type="number" min=".05" max="3" value=".15" step=".05"></label><label>Color / Kolor<input id="fence-color" type="color" value="#59645b"></label></div><label>Local path [[x,y],…] / Trasa lokalna<textarea id="fence-path" aria-label="Fence path"></textarea></label><button id="fence-boundary">Use parcel boundary / Granica działki</button><label>Gate on first edge / Brama na 1. boku<select id="fence-gate"><option value="">None / Brak</option><option>sliding</option><option>swing</option><option>wicket</option></select></label><label>Gate opening width / Światło bramy (m)<input id="fence-gate-width" type="number" min=".5" max="10" step=".1" value="3.5"></label><label class="check"><input id="fence-open" type="checkbox">Open / Otwarta</label><button id="fence-add">Add path / Dodaj trasę</button><div id="fence-list"></div><p id="fence-message" class="hint" role="status"></p>`;$('#sel').before(fencesPanel);
   $('#fence-boundary').onclick=()=>{$('#fence-path').value=JSON.stringify([...state.plot,state.plot[0]].map(p=>[p.x,p.y]));};
   function syncFences(){if(!$('#fence-list'))return;$('#fence-list').innerHTML=state.fences.map(f=>`<button data-remove-fence="${esc(f.id)}">× ${esc(f.name)} · ${f.height} m${f.gate?' · gate '+f.gate.width+' m':''}</button>`).join('');}
@@ -791,7 +794,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
   $('#b-rect').onclick = () => {
     const w = parseFloat($('#rw').value), d = parseFloat($('#rd').value);
     if (!(w > 0 && d > 0)){ toast(t('badRect')); return; }
-    snapshot(); state.plot = [{x:0,y:0},{x:w,y:0},{x:w,y:d},{x:0,y:d}]; delete state.parcel; delete state.coordinates.projected; buildCorners(); fit(); render();
+    snapshot(); state.plotHoles=[];state.plotParts=[]; state.plot = [{x:0,y:0},{x:w,y:0},{x:w,y:d},{x:0,y:d}]; delete state.parcel; delete state.coordinates.projected; buildCorners(); fit(); render();
   };
   const snapSel = $('#o-snap'); snapSel.value = String(state.snap);
   if (snapSel.value === '') snapSel.value = '0.5';

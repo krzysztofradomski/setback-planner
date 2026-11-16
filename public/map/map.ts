@@ -27,7 +27,7 @@ export function createParcelMap(container:HTMLElement,onError:()=>void){
   }
   function fitProject(){
     if(!loaded||!current)return;
-    const ring=projectOverlay(current).features.find(f=>f.properties?.kind==='parcel')?.geometry.coordinates[0];
+    const ring=projectOverlay(current).features.filter(f=>f.properties?.kind==='parcel').flatMap(f=>f.geometry.coordinates[0]);
     if(!ring?.length)return;
     const xs=ring.map(p=>p[0]),ys=ring.map(p=>p[1]);map.fitBounds([[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]],{padding:70,duration:0,maxZoom:19});
   }

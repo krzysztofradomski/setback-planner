@@ -15,7 +15,7 @@ export type Variant=z.infer<typeof variantSchema>;
 const variantsSchema=z.array(variantSchema).max(20).refine(v=>new Set(v.map(i=>i.id)).size===v.length);
 export function readVariants(json:string):Variant[] {
   if(json.length>6e6) throw new Error('Variant collection is too large');
-  return variantsSchema.parse(JSON.parse(json));
+  return variantsSchema.parse(JSON.parse(json)).map(v=>({...v,scene:parseScene(v.scene)}));
 }
 export function saveVariant(variants:Variant[],entry:Variant):Variant[] {
   const valid=variantSchema.parse({...entry,scene:parseScene(entry.scene)});

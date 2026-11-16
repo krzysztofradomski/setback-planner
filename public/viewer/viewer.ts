@@ -1,3 +1,4 @@
+import {parcelPolygons} from '../core/topology.ts';
 import {buildFence} from './fences.ts';
 import {sunPosition,seasonalGround} from '../core/environment.ts';
 import {geographicPoint} from '../core/geospatial.ts';
@@ -41,11 +42,12 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     camera.position.copy(center).add(offset);camera.lookAt(center);controls.update();render();
   }
   function update(project:Scene,original=false){
-    const next=JSON.stringify([project.plot,project.items,project.fences,project.environment,project.coordinates,original]);if(next===signature){render();return;}signature=next;
+    const next=JSON.stringify([project.plot,project.plotHoles,project.plotParts,project.items,project.fences,project.environment,project.coordinates,original]);if(next===signature){render();return;}signature=next;
     disposeObject(content);
-    if(validRing(project.plot)){
-      const ground=new THREE.Mesh(new THREE.ShapeGeometry(groundShape(project.plot)),new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
-      const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(project.plot.map(p=>new THREE.Vector3(p.x,0.03,p.y))),new THREE.LineBasicMaterial({color:'#405442'}));content.add(boundary);
+    if(validRing(project.plot))for(const [outer,...holes] of parcelPolygons(project)){
+      const shape=groundShape(outer);shape.holes=holes.map(h=>new THREE.Path(h.map(p=>new THREE.Vector2(p.x,-p.y))));
+      const ground=new THREE.Mesh(new THREE.ShapeGeometry(shape),new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
+      const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(outer.map(p=>new THREE.Vector3(p.x,0.03,p.y))),new THREE.LineBasicMaterial({color:'#405442'}));content.add(boundary);
     }
     for(const item of project.items)content.add(buildBuilding(item,original,makeTexture,project.environment.season));
     for(const fence of project.fences)content.add(buildFence(fence,project.environment.season));

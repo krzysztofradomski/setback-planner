@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { catalogReferenceSchema } from './catalogs.ts';
 import { appearanceSchema } from './materials.ts';
+import { validateTopology } from './topology.ts';
 import { fenceSchema } from './fences.ts';
 import { objectLibrary } from './objects.ts';
 import { validRing } from './geometry.ts';
@@ -24,6 +25,8 @@ export const sceneSchema=z.object({
   coordinates:z.object({crs:z.literal('LOCAL'),axis:z.literal('x-east-y-south'),projected:z.object({crs:z.literal('EPSG:2180'),origin:z.object({x:finite.min(0).max(1.2e6),y:finite.min(0).max(1.2e6)}).strict()}).strict().optional()}).strict(),
   parcel:z.object({identifier:z.string().max(80).optional(),source:z.object({name:z.string().min(1).max(120),retrievedAt:z.iso.datetime({offset:true}),crs:z.enum(['EPSG:4326','EPSG:2180']),url:z.url().refine(s=>s.startsWith('https://')).optional()}).strict(),edited:z.boolean()}).strict().optional(),
   plot:z.array(pointSchema).min(3).max(512).refine(validRing,'Invalid parcel boundary'),
+  plotHoles:z.array(z.array(pointSchema).min(3).max(512).refine(validRing)).max(16).default([]),
+  plotParts:z.array(z.array(z.array(pointSchema).min(3).max(512).refine(validRing)).min(1).max(17)).max(16).default([]),
   items:z.array(itemSchema).max(100).refine(items=>new Set(items.map(i=>i.id)).size===items.length,'Duplicate object IDs'),
   fences:z.array(fenceSchema).max(12).default([]),
   environment:z.object({season:z.enum(['spring','summer','autumn','winter']),date:z.iso.datetime(),latitude:finite.min(-90).max(90),longitude:finite.min(-180).max(180),weather:z.enum(['clear','clouds','rain','snow'])}).strict().default({season:'summer',date:'2026-06-21T10:00:00Z',latitude:52,longitude:19,weather:'clear'}),
@@ -36,7 +39,7 @@ export function parseScene(input:unknown):Scene {
   if(!input||typeof input!=='object'||Array.isArray(input)) throw new Error('Invalid project');
   const raw=input as Record<string,unknown>;
   if(raw.schemaVersion!==undefined && raw.schemaVersion!==2) throw new Error('Unsupported scene version');
-  if(raw.schemaVersion===2) return sceneSchema.parse(raw);
+  if(raw.schemaVersion===2){const scene=sceneSchema.parse(raw);validateTopology(scene);return scene;}
   // Legacy imports are migrated atomically. Do not silently discard unknown objects.
   const legacy=z.object({plot:z.unknown(),items:z.array(z.record(z.string(),z.unknown())).max(100).default([]),snap:z.unknown().optional(),dimScope:z.unknown().optional(),showPairs:z.unknown().optional()}).strict().parse(raw);
   return sceneSchema.parse({...legacy,schemaVersion:2,units:'m',coordinates:{crs:'LOCAL',axis:'x-east-y-south'},items:legacy.items.map((i,n)=>({...i,id:String(i.id||`o${n+1}`),name:String(i.name||i.type||'Building').slice(0,60),setback:i.setback??(i.type==='garage'?3:4)}))});

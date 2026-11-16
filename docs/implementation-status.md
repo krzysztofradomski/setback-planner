@@ -61,3 +61,5 @@ F014 completed: Parametric concept library with editable dimensions and maturity
 F016 completed: Solar position is calculated with SunCalc 2.1.4 (degrees clockwise from north, converted to scene axes); source: https://github.com/mourner/suncalc . Four seasons and atmospheric presets are conceptual; shadows omit unknown neighboring heights and terrain.
 
 F015 completed: Fence and hedge paths support editable dimensions, spacing, color and gate opening geometry. Designs are procedural concepts, not engineering/manufacturer specifications.
+
+F025 completed: Multipart polygons and holes persist, render and participate in containment and area calculations. Total topology is bounded to 512 vertices; intersecting or touching hole boundaries are rejected.
