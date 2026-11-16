@@ -30,12 +30,12 @@ test("catalog photos, plan preview and sourced building placement work through t
   );
   await page.getByRole("button", { name: "Close plan" }).click();
   await page.locator('[data-model="de-105"]').click();
-  await expect(page.locator(".obj")).toHaveCount(3);
+  await expect(page.locator(".obj")).toHaveCount(2);
   await expect(page.locator("#f-w")).toHaveValue("13.1");
   await expect(page.locator("#f-d")).toHaveValue("9.98");
   await page.locator("#b-link").click();
   await page.goto(await page.evaluate(() => navigator.clipboard.readText()));
-  await page.locator("#objs .obj").last().click();
+  await page.locator("#objs .obj").first().click();
   await expect(page.locator("#f-w")).toHaveValue("13.1");
   await expect(page.locator("#f-name")).toHaveValue("Udana Budowa DE 105");
   expect(errors).toEqual([]);
@@ -127,4 +127,23 @@ test("tablet dismissal expands the map canvas and plan previews provide zoom and
   await expect(
     page.getByRole("link", { name: "Open full-size ↗", exact: true }),
   ).toHaveAttribute("href", /de-75-plan/);
+});
+
+test("using a catalog design replaces the selected house and adding another finds a free position", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator("[data-model=de-75]").click();
+  await expect(page.locator(".obj")).toHaveCount(2);
+  await expect(page.locator("#f-w")).toHaveValue("11.76");
+  await page.locator("[data-workspace-tab=parcel]").click();
+  await page.locator("#rw").fill("60");
+  await page.locator("#rd").fill("60");
+  await page.locator("#b-rect").click();
+  await page.locator("[data-workspace-tab=houses]").click();
+  await page
+    .getByRole("button", { name: "Add another DE 75", exact: true })
+    .click();
+  await expect(page.locator(".obj")).toHaveCount(3);
+  await expect(page.locator(".bld.sel")).not.toHaveClass(/bad/);
 });

@@ -256,7 +256,7 @@ export function mountWorkspace({ onTab }: { onTab?: (tab: Tab) => void } = {}) {
     if (
       matchMedia("(max-width:1000px)").matches &&
       (e.target as Element)?.closest?.(
-        ".bld,.obj,.catalog-place,#garden-add,#add-house,#add-garage",
+        ".bld,.obj,.catalog-place,.catalog-add,#garden-add,#add-house,#add-garage",
       )
     ) {
       setInspector(true);

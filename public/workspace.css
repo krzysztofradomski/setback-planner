@@ -1288,3 +1288,18 @@ html body {
     font-size: 11px;
   }
 }
+.workspace .catalog-add {
+  border: 0;
+  background: transparent;
+  padding: 4px;
+  min-width: 24px;
+  justify-content: center;
+  color: #527248;
+  font-size: 16px;
+}
+.workspace .catalog-actions {
+  gap: 2px;
+}
+.workspace .catalog-plan {
+  padding-inline: 3px;
+}
