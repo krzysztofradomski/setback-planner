@@ -12,6 +12,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   // ---------- i18n ----------
   const I18N = {
     en: {
+      mapView:'Map', mapLayer:'Map layer', ortho:'Orthophoto · GUGiK', cadastre:'Cadastre · GUGiK', mapHint:'Visual context only. Image dates and neighboring heights are unknown. Import a georeferenced parcel to see your project here. Map views contact the selected tile providers.', mapError:'Map or layer unavailable. Switch layers or continue planning in 2D.',
       findParcel:'Find Polish parcel (ULDK)', parcelId:'Full parcel identifier', uldkHint:'Lookup sends this identifier to GUGiK ULDK. Service availability varies. The imported boundary replaces the parcel; verify building positions. You can still draw or import a parcel when the service is unavailable.', uldkLoading:'Looking up parcel…', uldkError:'Could not import this parcel. Check its full identifier, service availability and supported geometry. Current plan retained.', uldkChanged:'Project changed during lookup. Request again to replace the parcel.',
       importParcel:'Import parcel (GeoJSON)', sourceCrs:'Source coordinates', openParcel:'Open parcel file', parcelImportHint:'One polygon, up to 512 vertices. Holes and separate parts are rejected. Replaces the parcel; keeps buildings at their local positions. Confirm their placement after import.', parcelImportError:'Parcel import failed. Check CRS, closure and geometry; holes and separate parts are not supported.', parcelEdited:'Boundary edited locally; source geometry has changed.', north:'Grid north ↑',
       topView:'Top', axonView:'Axonometric', screenshot:'Screenshot', lowQuality:'Low power', viewerHint:'Conceptual massing. Artistic lighting; no terrain or neighboring heights. Shadows are approximate. Concave pitched roofs use a flat schematic cap.', viewerFailure:'3D is unavailable on this device. Continue planning in 2D.', loading3d:'Loading 3D…',
@@ -45,6 +46,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      mapView:'Mapa', mapLayer:'Warstwa mapy', ortho:'Ortofotomapa · GUGiK', cadastre:'Ewidencja · GUGiK', mapHint:'Kontekst wizualny. Daty zdjęć i wysokości sąsiadów są nieznane. Zaimportuj działkę z georeferencją, aby zobaczyć projekt. Mapa łączy się z wybranymi dostawcami kafelków.', mapError:'Mapa lub warstwa niedostępna. Zmień warstwę lub kontynuuj w 2D.',
       findParcel:'Znajdź działkę (ULDK)', parcelId:'Pełny identyfikator działki', uldkHint:'Zapytanie wysyła identyfikator do GUGiK ULDK. Dostępność usługi jest zmienna. Granica zastąpi działkę; sprawdź pozycje budynków. Przy awarii możesz nadal rysować lub importować działkę.', uldkLoading:'Wyszukiwanie działki…', uldkError:'Nie można zaimportować działki. Sprawdź identyfikator, usługę i obsługiwaną geometrię. Bieżący plan zachowano.', uldkChanged:'Projekt zmieniono podczas wyszukiwania. Ponów zapytanie, aby zastąpić działkę.',
       importParcel:'Import działki (GeoJSON)', sourceCrs:'Współrzędne źródłowe', openParcel:'Otwórz plik działki', parcelImportHint:'Jeden wielokąt, do 512 wierzchołków. Otwory i odrębne części są odrzucane. Zastępuje działkę; budynki pozostają na pozycjach lokalnych. Sprawdź ich położenie po imporcie.', parcelImportError:'Import nieudany. Sprawdź układ, zamknięcie i geometrię; otwory i odrębne części nie są obsługiwane.', parcelEdited:'Granica edytowana lokalnie; geometria źródłowa została zmieniona.', north:'Północ siatki ↑',
       topView:'Z góry', axonView:'Aksonometria', screenshot:'Zrzut ekranu', lowQuality:'Oszczędzanie energii', viewerHint:'Bryły koncepcyjne. Oświetlenie artystyczne, brak terenu i wysokości sąsiadów. Cienie przybliżone. Dachy spadziste brył wklęsłych pokazano jako płaski schemat.', viewerFailure:'Widok 3D niedostępny na tym urządzeniu. Kontynuuj w 2D.', loading3d:'Wczytywanie 3D…',
@@ -306,10 +308,10 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   }
 
   // ---------- rendering ----------
-  let viewer = null, view3d = false;
+  let viewer = null, view3d = false, parcelMap = null, mapActive = false;
   let originalAppearance = false;
   let C = compute();
-  function render(){ C = compute(); renderSheet(); syncPanel(); if(viewer && view3d)viewer.update(state,originalAppearance); save(); }
+  function render(){ C = compute(); renderSheet(); syncPanel(); if(viewer && view3d)viewer.update(state,originalAppearance); if(parcelMap && mapActive)parcelMap.update(state); save(); }
 
   function dim(a, b, cls, text){
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
@@ -715,13 +717,28 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     else if (e.key === 'Escape'){ selected = null; buildPanel(); render(); }
   });
 
-  function setViewerMode(enabled){
-    view3d=enabled; $('#viewer').hidden=!enabled; $('#sheet').hidden=enabled;$('#viewer-controls').hidden=!enabled;
-    $('.tools').hidden=enabled;$('.legend').hidden=enabled;$('#chipbar').hidden=enabled;$('#viewer-note').hidden=!enabled;
-    $('#view-2d').setAttribute('aria-pressed',String(!enabled));$('#view-3d').setAttribute('aria-pressed',String(enabled));
-    if(viewer){viewer.setActive(enabled);if(enabled)viewer.update(state,originalAppearance);}
-    if(!enabled)renderSheet();
+  function setStageMode(mode){
+    view3d=mode==='3d';mapActive=mode==='map';
+    $('#viewer').hidden=!view3d;$('#sheet').hidden=mode!=='2d';$('#viewer-controls').hidden=!view3d;
+    $('#parcel-map').hidden=!mapActive;$('#map-controls').hidden=!mapActive;$('#map-status').hidden=!mapActive;
+    $('.tools').hidden=mode!=='2d';$('.legend').hidden=mode!=='2d';$('#chipbar').hidden=mode!=='2d';$('#viewer-note').hidden=!view3d;
+    $('#view-2d').setAttribute('aria-pressed',String(mode==='2d'));$('#view-3d').setAttribute('aria-pressed',String(view3d));$('#view-map').setAttribute('aria-pressed',String(mapActive));
+    if(viewer){viewer.setActive(view3d);if(view3d)viewer.update(state,originalAppearance);}
+    if(parcelMap){parcelMap.setActive(mapActive);if(mapActive)parcelMap.update(state);}
+    if(mode==='2d')renderSheet();
   }
+  const setViewerMode=enabled=>setStageMode(enabled?'3d':'2d');
+  $('#view-map').onclick=async()=>{
+    $('#view-map').disabled=true;
+    try{
+      if(!parcelMap){const {createParcelMap}=await import('./map/map.ts');parcelMap=createParcelMap($('#parcel-map'),()=>{$('#map-status').textContent=t('mapError');});}
+      $('#map-status').textContent=t('mapHint');setStageMode('map');
+    }catch{parcelMap?.dispose();parcelMap=null;setStageMode('2d');toast(t('mapError'));}
+    finally{$('#view-map').disabled=false;}
+  };
+  $('#map-base').onchange=e=>parcelMap?.setBase(e.target.value);
+  $('#map-cadastre').onchange=e=>parcelMap?.setCadastre(e.target.checked);
+  $('#map-fit').onclick=()=>parcelMap?.fitProject();
   $('#view-2d').onclick=()=>setViewerMode(false);
   $('#view-3d').onclick=async()=>{
     $('#view-3d').disabled=true;
@@ -737,7 +754,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   $('#view-top').onclick=()=>viewer?.view('top');$('#view-axon').onclick=()=>viewer?.view('axonometric');
   $('#view-low').onchange=e=>viewer?.quality(e.target.checked);
   $('#view-capture').onclick=()=>{try{const a=document.createElement('a');a.download='setback-3d.png';a.href=viewer.screenshot();a.click();}catch{toast(t('viewerFailure'));}};
-  window.addEventListener('pagehide',()=>{viewer?.dispose();viewer=null;});
+  window.addEventListener('pagehide',()=>{viewer?.dispose();viewer=null;parcelMap?.dispose();parcelMap=null;});
   // ---------- wiring ----------
   $('#add-house').onclick = () => addItem('house');
   $('#add-garage').onclick = () => addItem('garage');

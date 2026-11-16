@@ -284,14 +284,25 @@
       "dependencies": [
         "F010"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "MapLibre orthophoto, cadastre and base maps where available",
         "Visible attribution and provenance",
         "North and nearby geometry"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/map.test.ts (2 tests)",
+        "tests/browser/map.spec.ts (2 passing, including layer failures)",
+        "Official ORTO/KIEG GetCapabilities checked",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "Roads and neighboring buildings are visual raster context; no structured height data imported.",
+        "Provider image capture dates are unknown and disclosed.",
+        "MapLibre and its worker are lazy-loaded; map payload is larger than the 2D editor."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]
