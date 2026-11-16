@@ -3,12 +3,16 @@ import * as THREE from 'three';
 import { localFootprint, worldFootprint } from '../core/footprints.ts';
 import { materialPresets, resolveAppearance } from '../core/materials.ts';
 import type { SceneItem } from '../core/scene.ts';
+import type { CatalogExterior } from '../core/catalogs.ts';
+import { buildExterior, buildOpening } from './exterior.ts';
 export type TextureFactory=(materialId:keyof typeof materialPresets,appearance:ReturnType<typeof resolveAppearance>)=>THREE.Texture|null;
 export function groundShape(points:{x:number;y:number}[]){return new THREE.Shape(points.map(p=>new THREE.Vector2(p.x,-p.y)));}
-export function buildBuilding(item:SceneItem,original=false,textureFactory?:TextureFactory,season='summer'):THREE.Group {
+/** Catalogue finishes act as the base layer under the user's overrides, so resets return to the catalogue look. */
+export function exteriorDefaults(spec?:CatalogExterior){return spec?{facade:spec.wall,frameColor:spec.frameColor,doorColor:spec.doorColor,roofColor:spec.roofColor,roofCovering:spec.roofCovering,gutterColor:spec.gutterColor,...(spec.band?{trimColor:spec.band.color}:{})}:{};}
+export function buildBuilding(item:SceneItem,original=false,textureFactory?:TextureFactory,season='summer',exterior?:CatalogExterior):THREE.Group {
   if(item.type==='landscape'&&item.kind)return outdoorModel(item,season);
   const root=new THREE.Group(),points=localFootprint(item),height=item.architecture.height;
-  const appearance=resolveAppearance(original?{}:item.appearance);
+  const appearance=resolveAppearance({...exteriorDefaults(exterior),...(original?{}:item.appearance)});
   root.name=item.id;root.position.set(item.x,0,item.y);root.rotation.y=-item.rot*Math.PI/180;
   root.userData.footprint=worldFootprint(item);
   points.forEach((a,i)=>{
@@ -25,9 +29,10 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
   });
   item.openings.forEach(opening=>{
     const a=points[opening.edge],b=points[(opening.edge+1)%points.length];if(!a||!b)return;const length=Math.hypot(b.x-a.x,b.y-a.y);if(opening.offset+opening.width>length||opening.sill+opening.height>height)return;
-    const u=(opening.offset+opening.width/2)/length,mesh=new THREE.Mesh(new THREE.BoxGeometry(opening.width,opening.height,.06),new THREE.MeshStandardMaterial({color:opening.type==='door'?appearance.doorColor:appearance.frameColor,roughness:.3}));mesh.position.set(a.x+(b.x-a.x)*u,opening.sill+opening.height/2,a.y+(b.y-a.y)*u);mesh.rotation.y=-Math.atan2(b.y-a.y,b.x-a.x);mesh.name=opening.type;root.add(mesh);
-    if(opening.type==='window'){const glass=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.05,opening.width-.12),Math.max(.05,opening.height-.12),.065),new THREE.MeshStandardMaterial({color:'#8da6b0',roughness:.18,metalness:.25}));glass.position.copy(mesh.position);glass.rotation.copy(mesh.rotation);root.add(glass);}
+    const u=new THREE.Vector3((b.x-a.x)/length,0,(b.y-a.y)/length),n=new THREE.Vector3(u.z,0,-u.x);
+    const mesh=buildOpening(new THREE.Vector3(a.x,0,a.y),u,n,opening,appearance);mesh.name=`opening-${opening.type}`;root.add(mesh);
   });
+  if(exterior&&item.shape==='rectangle'&&item.architecture.roof==='gable'&&item.architecture.roofAxis==='width'){root.add(buildExterior(item,exterior,appearance,textureFactory,season));return root;}
   let roofGeometry:THREE.BufferGeometry;
   if(item.shape==='rectangle'&&item.architecture.roof==='hip'){
     const hw=item.w/2,hd=item.d/2,rise=Math.min(hw,hd)*Math.tan(item.architecture.pitch*Math.PI/180),longZ=hd>=hw,ridge=Math.abs(hd-hw);

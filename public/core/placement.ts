@@ -32,8 +32,12 @@ export function fitItemsToParcel(scene:Scene):SceneItem[]{
  const cx=ring.reduce((n,p)=>n+p.x,0)/ring.length,cy=ring.reduce((n,p)=>n+p.y,0)/ring.length;
  const placed=new Map<string,SceneItem>(scene.items.filter(i=>i.locked).map(i=>[i.id,i]));
  for(const item of scene.items.filter(i=>!i.locked).sort((a,b)=>b.w*b.d-a.w*a.d||a.id.localeCompare(b.id))){
+  if(placed.has(item.id))continue;// moved with its group leader
+  const members=item.group?scene.items.filter(i=>i.group===item.group&&!i.locked):[item];
   const start={...item,x:cx,y:cy,rot:angle},best=suggestPlacements({...scene,items:[...placed.values(),start]},start).suggestions[0];
-  placed.set(item.id,best?{...start,x:best.x,y:best.y,rot:best.rot}:start);// ponytail: no free spot -> centre; the layout review flags it
+  const pose=best?{x:best.x,y:best.y,rot:best.rot}:start;// ponytail: no free spot -> centre; the layout review flags it
+  const turn=(pose.rot-item.rot)*Math.PI/180,c=Math.cos(turn),s=Math.sin(turn);
+  for(const m of members){const dx=m.x-item.x,dy=m.y-item.y;placed.set(m.id,{...m,x:pose.x+dx*c-dy*s,y:pose.y+dx*s+dy*c,rot:m.rot+pose.rot-item.rot});}
  }
  return scene.items.map(i=>placed.get(i.id)!);
 }

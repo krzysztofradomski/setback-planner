@@ -2,6 +2,8 @@ import { z } from 'zod';
 const preset=(en:string,pl:string,color:string,pattern:'plain'|'brick'|'boards',tileWidth=0.25,tileHeight=0.065,roughness=0.8)=>Object.freeze({en,pl,color,pattern,tileWidth,tileHeight,roughness,confirmation:'conceptual' as const});
 export const materialPresets=Object.freeze({
   plaster:preset('Painted plaster','Tynk malowany','#e8e2d5','plain'),
+  'plaster-grey':preset('Light grey plaster','Tynk jasnoszary','#c9cbcb','plain'),
+  'plaster-white':preset('White plaster','Tynk biały','#efefec','plain'),
   'brick-red':preset('Dark red brick slips','Płytki ceglane ciemnoczerwone','#873d32','brick'),
   'brick-terracotta':preset('Terracotta brick slips','Płytki ceglane terakota','#b96640','brick'),
   'brick-grey':preset('Grey brick slips','Płytki ceglane szare','#858583','brick'),
@@ -12,7 +14,7 @@ export const materialPresets=Object.freeze({
   concrete:preset('Architectural concrete','Beton architektoniczny','#afb1ad','plain',1.2,0.6),
   composite:preset('Composite panels','Panele kompozytowe','#666d6c','boards',0.2,2),
 });
-export const materialIdSchema=z.enum(['plaster','brick-red','brick-terracotta','brick-grey','brick-brown','wood','clinker','stone','concrete','composite']);
+export const materialIdSchema=z.enum(['plaster','plaster-grey','plaster-white','brick-red','brick-terracotta','brick-grey','brick-brown','wood','clinker','stone','concrete','composite']);
 const color=z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const appearanceSchema=z.object({
   facade:materialIdSchema.optional(),walls:z.record(z.string().regex(/^(?:[0-9]|[12][0-9]|3[01])$/),materialIdSchema).optional(),

@@ -714,7 +714,7 @@ body {
   right: auto;
   max-width: min(560px, calc(100% - 32px));
   bottom: 16px;
-  max-height: 72px;
+  max-height: 110px;
   padding: 8px 12px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.88);
@@ -772,6 +772,76 @@ body {
   border: 1px solid #ebd29b;
   border-radius: var(--r-md);
   box-shadow: var(--float);
+}
+
+/* ---------- describe your house (AI) ---------- */
+.workspace #house-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  margin-bottom: 14px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--spruce-soft), var(--surface));
+}
+.workspace #house-brief h3 {
+  margin: 0;
+  font: 650 15px var(--f-ui);
+}
+.workspace #house-brief textarea {
+  font: 14px/1.45 var(--f-ui);
+  min-height: 70px;
+}
+.workspace #brief-run {
+  justify-content: center;
+  background: var(--spruce);
+  border-color: var(--spruce);
+  color: #fff;
+  font-weight: 600;
+}
+.workspace #brief-run:hover:not(:disabled) {
+  background: var(--spruce-hover);
+}
+.workspace #brief-status:empty {
+  display: none;
+}
+.workspace .brief-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.workspace .brief-card p {
+  margin: 0;
+  font-size: 13.5px;
+}
+.workspace .brief-card ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.workspace .brief-card li {
+  font: 600 12.5px var(--f-ui);
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: var(--surface);
+}
+.workspace .brief-card .brief-add {
+  justify-content: center;
+  background: var(--spruce);
+  border-color: var(--spruce);
+  color: #fff;
+  font-weight: 600;
+}
+.workspace .brief-card small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* ---------- catalog ---------- */

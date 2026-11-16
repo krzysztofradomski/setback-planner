@@ -19,3 +19,15 @@ test('reports exclude landscaping from building coverage and hide invisible SVG 
  assert.ok(projectReport(project).includes('40.80 m²'));
  assert.ok(!projectSvg(project).includes('Garden marker'));
 });
+test('report verdict, buildable zone and neighbour distances are deterministic geometry',async()=>{
+  const {polygonDistance}=await import('../public/core/reports.ts');
+  const ok=parseScene({plot:[{x:0,y:0},{x:30,y:0},{x:30,y:40},{x:0,y:40}],items:[{id:'a',type:'house',name:'H',x:15,y:20,w:10,d:8,setback:4}]});
+  const neighbour={ring:[{x:35,y:16},{x:45,y:16},{x:45,y:24},{x:35,y:24}],height:6.5,heightSource:'default' as const,kind:'building',onParcel:false};
+  const report=projectReport(ok,'en','2026-11-16T12:30:00Z',{neighbours:[neighbour]});
+  assert.ok(report.includes('The layout meets the setbacks you selected'));
+  assert.ok(report.includes('Nearest neighbouring building')&&report.includes('15.0 m'),'house edge x=20 to neighbour x=35');
+  assert.ok(report.includes('Check in official sources')&&report.includes('isok.gov.pl'));
+  assert.equal(polygonDistance([{x:0,y:0},{x:1,y:0},{x:1,y:1}],[{x:3,y:0},{x:4,y:0},{x:4,y:1}]),2);
+  const bad=parseScene({...ok,items:[{...ok.items[0],x:3}]});
+  assert.ok(projectReport(bad,'pl').includes('1 budynek wymaga uwagi'));
+});

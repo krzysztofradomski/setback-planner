@@ -1,5 +1,6 @@
-import {createCatalogItem} from './catalogs/placement.ts';
+import {createCatalogItem, catalogCarport} from './catalogs/placement.ts';
 import {fitItemsToParcel, parcelAxis} from './core/placement.ts';
+import {planFromBrief} from './core/brief.ts';
 import {sourceDirectory,mapOverlayIds} from './map/sources.ts';
 import {mountWorkspace} from './workspace.ts';
 import {mountParcelJourney} from './parcel-journey.ts';
@@ -120,9 +121,12 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     document.querySelectorAll('#o-snap option:not([value="0"])').forEach(o => { o.textContent = dec(o.value) + ' m'; });
     document.querySelectorAll('.lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
     document.querySelectorAll('[data-bi]').forEach(el => { const [en, pl] = el.dataset.bi.split('|'); el.textContent = lang === 'pl' ? pl : en; });
+    document.querySelectorAll('[data-bi-placeholder]').forEach(el => { const [en, pl] = el.dataset.biPlaceholder.split('|'); el.placeholder = lang === 'pl' ? pl : en; });
   }
   const bi = (en, pl) => lang === 'pl' ? pl : en;
   const CATALOG_LS='setback-planner-catalogs';
+  // Catalogue exterior for an item, only while its catalogue is enabled and loaded; otherwise the generic model renders.
+  const exteriorFor=i=>i.catalog&&catalogAvailable(i.catalog,enabledCatalogs)?loadedCatalogModels.get(i.catalog.catalogId+':'+i.catalog.modelId)?.exterior:undefined;
   let enabledCatalogs;
   try { const saved=JSON.parse(localStorage.getItem(CATALOG_LS)||'null');enabledCatalogs=Array.isArray(saved)?saved.filter(id=>catalogRegistrations.some(r=>r.id===id)):catalogRegistrations.map(r=>r.id); }
   catch { enabledCatalogs=catalogRegistrations.map(r=>r.id); }
@@ -142,7 +146,9 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       try{
         const catalog=await loadCatalog(button.dataset.placeCatalog||button.dataset.addCatalog),x=replace?current.x:state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,y=replace?current.y:state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length,item=createCatalogItem(catalog,button.dataset.model||button.dataset.addModel,{id:replace?current.id:'o'+uid++,x,y,rot:replace?current.rot:parcelAxis(state.plot)});
         if(replace){item.setback=current.setback;item.group=current.group;}else{const {suggestPlacements}=await import('./core/placement.ts'),candidate=suggestPlacements(state,item).suggestions[0];if(!candidate){toast(lang==='pl'?'Brak wolnego miejsca. Przesuń istniejące obiekty lub wybierz większą działkę.':'No free placement found. Move existing objects or use a larger parcel.');return;}Object.assign(item,{x:candidate.x,y:candidate.y,rot:candidate.rot});}
-        snapshot();if(replace)state.items=state.items.map(i=>i.id===current.id?item:i);else state.items.push(item);selected=item.id;buildPanel();render();toast(replace?(lang==='pl'?'Zmieniono projekt wybranego domu.':'Selected house design updated.'):(lang==='pl'?'Dodano dom w wolnym miejscu. Możesz go przesunąć.':'House added in a free position. Drag it to adjust.'));
+        const exterior=catalog.models.find(m=>m.id===(button.dataset.model||button.dataset.addModel))?.exterior;let carport=null;
+        if(!replace&&exterior?.carport){item.group=crypto.randomUUID();carport=catalogCarport(exterior,item,'o'+uid++,lang==='pl'?'Wiata (wg rzutu)':'Carport (from plan)');}
+        snapshot();if(replace)state.items=state.items.map(i=>i.id===current.id?item:i);else{state.items.push(item);if(carport)state.items.push(carport);}selected=item.id;buildPanel();render();toast(replace?(lang==='pl'?'Zmieniono projekt wybranego domu.':'Selected house design updated.'):(lang==='pl'?'Dodano dom w wolnym miejscu. Możesz go przesunąć.':'House added in a free position. Drag it to adjust.'));
       }catch{toast(t('catalogError'));}finally{button.disabled=false;}
     });
     $('#catalog-models').querySelectorAll('[data-plan-src]').forEach(button=>button.onclick=()=>showCatalogPlan(button.dataset.planSrc,button.dataset.planName));
@@ -333,7 +339,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   let viewer = null, view3d = false, parcelMap = null, mapActive = false;
   let originalAppearance = false;
   let C = compute();
-  function render(){ syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d)viewer.update(state,originalAppearance); if(parcelMap && mapActive)parcelMap.update(state); save(); journey?.refresh(); }
+  function render(){ syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d){viewer.update(state,originalAppearance,exteriorFor);void refreshContext();} if(parcelMap && mapActive)parcelMap.update(state); save(); journey?.refresh(); }
 
   function dim(a, b, cls, text){
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
@@ -767,7 +773,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     $('#parcel-map').hidden=!mapActive;$('#map-controls').hidden=!mapActive;$('#map-status').hidden=!mapActive;
     $('.tools').hidden=mode!=='2d';document.querySelector('.canvas-hint')?.toggleAttribute('hidden',mode!=='2d');$('.legend').hidden=mode!=='2d';$('#chipbar').hidden=mode!=='2d';$('#viewer-note').hidden=!view3d;
     $('#view-2d').setAttribute('aria-pressed',String(mode==='2d'));$('#view-3d').setAttribute('aria-pressed',String(view3d));$('#view-map').setAttribute('aria-pressed',String(mapActive));
-    if(viewer){viewer.setActive(view3d);if(view3d)viewer.update(state,originalAppearance);}
+    if(viewer){viewer.setActive(view3d);if(view3d)viewer.update(state,originalAppearance,exteriorFor);}
     if(parcelMap){parcelMap.setActive(mapActive);if(mapActive)parcelMap.update(state);}
     if(mode==='2d')renderSheet();
   }
@@ -806,9 +812,65 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
         const {createViewer}=await import('./viewer/viewer.ts');
         viewer=createViewer($('#viewer'),()=>{viewer?.dispose();viewer=null;setViewerMode(false);toast(t('viewerFailure'));});
       }
-      $('#viewer-note').textContent=t('viewerHint');setViewerMode(true);
+      $('#viewer-note').textContent=t('viewerHint');setViewerMode(true);void refreshContext();
     } catch {viewer?.dispose();viewer=null;setViewerMode(false);toast(t('viewerFailure'));}
     finally {$('#view-3d').disabled=false;}
+  };
+  // Surroundings (orthophoto + neighbouring buildings) for georeferenced parcels; derived data, never saved.
+  let contextKey='',lastContext=null;
+  const contextToggle=document.createElement('label');contextToggle.className='check';contextToggle.innerHTML='<input type="checkbox" id="view-context" checked><span data-bi="Surroundings|Otoczenie">'+bi('Surroundings','Otoczenie')+'</span>';$('#viewer-controls').append(contextToggle);
+  $('#view-context').onchange=e=>{viewer?.setContext(e.target.checked?lastContext:null);};
+  async function refreshContext(){
+    if(!viewer)return;
+    const origin=state.coordinates.projected?.origin,key=origin?JSON.stringify([origin,state.plot]):'';
+    if(key===contextKey)return;contextKey=key;lastContext=null;viewer.setContext(null);
+    if(!key)return;
+    try{
+      const {loadContext,contextFrame}=await import('./core/context.ts');if(contextKey!==key||!viewer)return;lastContext=contextFrame(state);if($('#view-context').checked)viewer.setContext(lastContext);
+      const context=await loadContext(state);
+      if(contextKey!==key||!viewer)return;lastContext=context;
+      if($('#view-context').checked)viewer.setContext(context);
+      $('#viewer-note').textContent=t('viewerHint')+' '+bi(`Surroundings: GUGiK orthophoto and ${context.buildings.length} building footprints © OpenStreetMap contributors. Neighbour heights are estimated (2 storeys), not measured.`,`Otoczenie: ortofotomapa GUGiK i ${context.buildings.length} obrysów budynków © OpenStreetMap. Wysokości sąsiadów są szacowane (2 kondygnacje), nie mierzone.`);
+    }catch{if(contextKey===key){contextKey='';toast(bi('Surroundings could not be loaded. The plan is unchanged.','Nie udało się wczytać otoczenia. Plan bez zmian.'));}}
+  }
+  const focusButton=document.createElement('button');focusButton.dataset.bi='Zoom to house|Zbliż na dom';focusButton.textContent=bi('Zoom to house','Zbliż na dom');focusButton.onclick=()=>{const it=get(selected)?.type==='house'?get(selected):state.items.find(i=>i.type==='house');if(it)viewer?.focus(it);};$('#viewer-controls').append(focusButton);
+  // Describe-your-house: Workers AI reads the words, geometry is computed locally and shown before anything is added.
+  const brief=document.createElement('div');brief.id='house-brief';
+  brief.innerHTML='<h3><span data-bi="Describe your house|Opisz swój dom">Describe your house</span></h3><textarea id="brief-text" rows="3" maxlength="400" data-bi-placeholder="e.g. single-storey, about 110 m², gable roof, garage for 2 cars|np. parterowy ok. 110 m², dach dwuspadowy, garaż na 2 auta"></textarea><button id="brief-run" type="button"><span data-bi="Fill in from description (AI)|Uzupełnij z opisu (AI)">Fill in from description (AI)</span></button><p id="brief-status" class="hint" role="status"></p><div id="brief-result"></div>';
+  $('#add-house').closest('section').prepend(brief);
+  const fmtM=n=>new Intl.NumberFormat(lang==='pl'?'pl-PL':'en-GB',{maximumFractionDigits:1}).format(n);
+  async function addBriefHouse(plan){
+    if(state.items.length>=98){toast(t('objectLimit'));return;}
+    const {suggestPlacements}=await import('./core/placement.ts'),group=plan.garage?crypto.randomUUID():'';
+    const cx=state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,cy=state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length;
+    const house=parseScene({plot:state.plot,items:[{id:'o'+uid++,type:'house',name:bi('House (from description)','Dom (z opisu)'),x:cx,y:cy,w:plan.w,d:plan.d,rot:parcelAxis(state.plot),setback:4,group,architecture:{storeys:plan.storeys,height:plan.height,roof:plan.roof,pitch:plan.pitch,roofAxis:'width'}}]}).items[0];
+    const spot=suggestPlacements(state,house).suggestions[0];if(spot)Object.assign(house,{x:spot.x,y:spot.y,rot:spot.rot});
+    snapshot();state.items.push(house);
+    if(plan.garage){const g=plan.garage,lx=-((house.w+g.w)/2+.02),ly=house.d/2-g.d/2,r=house.rot*Math.PI/180;state.items.push(parseScene({plot:state.plot,items:[{id:'o'+uid++,type:g.kind==='attached'?'garage':'landscape',...(g.kind==='carport'?{kind:'pergola'}:{}),name:g.kind==='attached'?t('garage'):bi('Carport','Wiata'),x:house.x+lx*Math.cos(r)-ly*Math.sin(r),y:house.y+lx*Math.sin(r)+ly*Math.cos(r),w:g.w,d:g.d,rot:house.rot,setback:3,group,architecture:{storeys:1,height:2.8,roof:'flat',pitch:0}}]}).items[0]);}
+    selected=house.id;buildPanel();render();toast(spot?bi('House added in a free position. Check the values.','Dodano dom w wolnym miejscu. Sprawdź wartości.'):bi('Added in the centre: no free position found.','Dodano na środku: brak wolnego miejsca.'));
+  }
+  function showBrief(answer,plan){
+    const out=$('#brief-result');out.replaceChildren();
+    const card=document.createElement('div');card.className='brief-card';
+    const said=document.createElement('p');said.textContent=answer.summary;
+    const chips=document.createElement('ul'),est=k=>plan.estimated.includes(k)?' *':'';
+    for(const text of [`${fmtM(plan.w)} × ${fmtM(plan.d)} m${est('size')}`,`${plan.storeys} ${bi(plan.storeys===1?'storey':'storeys',plan.storeys===1?'kondygnacja':'kondygnacje')}${est('storeys')}`,`${{gable:bi('Gable roof','Dach dwuspadowy'),hip:bi('Hip roof','Dach kopertowy'),flat:bi('Flat roof','Dach płaski'),shed:bi('Mono-pitch roof','Dach jednospadowy')}[plan.roof]} ${Math.round(plan.pitch)}°${est('roof')}`,...(plan.garage?[plan.garage.kind==='attached'?`${t('garage')} ${fmtM(plan.garage.w)} × ${fmtM(plan.garage.d)} m`:bi('Carport','Wiata')]:[])]){const li=document.createElement('li');li.textContent=text;chips.append(li);}
+    const add=document.createElement('button');add.type='button';add.className='brief-add';add.textContent=bi('Add this house','Dodaj ten dom');add.onclick=()=>void addBriefHouse(plan);
+    card.append(said,chips,add);
+    const model=plan.match&&[...loadedCatalogModels.values()].find(m=>m.id===plan.match);
+    if(model){const alt=document.createElement('button');alt.type='button';alt.textContent=bi(`Similar catalogue design: ${model.name}`,`Podobny projekt z katalogu: ${model.name}`);alt.onclick=()=>{const b=[...document.querySelectorAll('[data-place-catalog]')].find(x=>x.dataset.model===model.id);b?.scrollIntoView({block:'center'});b?.focus();};card.append(alt);}
+    const note=document.createElement('small');note.textContent=bi('AI interpretation of your words. * estimated from floor area or defaults. Nothing changes until you add it.','Interpretacja AI Twojego opisu. * oszacowane z powierzchni lub domyślnie. Nic się nie zmieni, dopóki nie dodasz domu.');card.append(note);
+    out.append(card);
+  }
+  $('#brief-run').onclick=async()=>{
+    const text=$('#brief-text').value.trim();if(text.length<3){$('#brief-text').focus();return;}
+    $('#brief-run').disabled=true;$('#brief-result').replaceChildren();$('#brief-status').textContent=bi('Reading your description…','Analizuję opis…');
+    try{
+      const r=await window.fetch('/api/ai/house',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,lang})}),j=await r.json().catch(()=>({}));
+      if(!r.ok||!j.answer)throw new Error('unavailable');
+      showBrief(j.answer,planFromBrief(j.answer,[...loadedCatalogModels.values()].map(m=>({id:m.id,width:m.footprint.width,depth:m.footprint.depth}))));$('#brief-status').textContent='';
+    }catch{$('#brief-status').textContent=bi('The assistant is unavailable right now. Add a house below or pick one from the catalogue.','Asystent jest teraz niedostępny. Dodaj dom poniżej lub wybierz z katalogu.');}
+    finally{$('#brief-run').disabled=false;}
   };
   const walkButton=document.createElement('button');walkButton.dataset.bi='Walk|Spacer';walkButton.textContent=bi('Walk','Spacer');walkButton.onclick=()=>viewer?.view('walk');$('#viewer-controls').append(walkButton);
   $('#view-top').onclick=()=>viewer?.view('top');$('#view-axon').onclick=()=>viewer?.view('axonometric');
@@ -896,7 +958,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   }
   $('#b-svg').onclick=async()=>{try{const {projectSvg}=await import('./core/reports.ts');downloadFile(projectSvg(state,lang),'setback-plan.svg','image/svg+xml');}catch{toast(t('notAPlan'));}};
   $('#b-report').onclick=async()=>{
-    try{const {projectReport}=await import('./core/reports.ts');$('#report-frame').srcdoc=projectReport(state,lang,new Date().toISOString(),viewer&&view3d?viewer.screenshot():undefined);$('#report-dialog').showModal();}
+    try{const {projectReport}=await import('./core/reports.ts');const house=get(selected)?.type==='house'?get(selected):state.items.find(i=>i.type==='house'),shots=viewer&&view3d?viewer.snapshots(house).map(s=>({label:s.kind==='house'?bi('House close-up','Zbliżenie domu'):bi('Parcel and surroundings','Działka i otoczenie'),src:s.src})):[];$('#report-frame').srcdoc=projectReport(state,lang,new Date().toISOString(),{screenshots:shots,neighbours:lastContext?.buildings.length?lastContext.buildings:undefined,exteriorFor});$('#report-dialog').showModal();}
     catch{toast(t('notAPlan'));}
   };
   $('#report-print').onclick=()=>$('#report-frame').contentWindow.print();
@@ -987,6 +1049,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');business=mountBusiness({container:businessHost,getScene:()=>structuredClone(state),getAttribution:()=>showroom.getAttribution()});
 
   workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='project')renderLayoutReview();}});
+  document.querySelector('[data-panel=houses]')?.prepend($('#house-brief'));
   const parcelPanel=document.querySelector('[data-panel=parcel]'),parcelAdvanced=document.createElement('details');parcelAdvanced.className='parcel-advanced';parcelAdvanced.innerHTML=`<summary>${lang==='pl'?'Rysowanie, import i współrzędne':'Drawing, import & coordinates'}</summary>`;parcelAdvanced.append($('#p-area').closest('section'));parcelPanel.append(parcelAdvanced);
   const review=document.createElement('section');review.id='review-layout';document.querySelector('[data-panel=project]').prepend(review);
   function renderLayoutReview(){const data=compute();renderReview(review,{scene:state,language:lang,checks:state.items.map(i=>({id:i.id,...data.res.get(i.id)})),selectedId:selected,onShowPlan:id=>{if(id){selected=id;buildPanel();}setStageMode('2d');fit();render();workspace.activate('houses');if(matchMedia('(max-width:1000px)').matches)document.querySelector('.library-close').click();},onReport:()=>$('#b-report').click(),onSources:()=>{workspace.activate('parcel');document.querySelector('.journey-topics').scrollIntoView({block:'start'});}});}

@@ -1,10 +1,33 @@
 import { z } from 'zod';
+import { materialIdSchema } from './materials.ts';
 const safeId=z.string().min(1).max(80).regex(/^[\w-]+$/);
 const sourceUrl=z.url().refine(s=>s.startsWith('https://'));
 const localAsset=z.string().regex(/^\/assets\/[\w/.-]+$/);
 const area=z.number().finite().positive().nullable();
 export const catalogReferenceSchema=z.object({catalogId:safeId,catalogVersion:safeId,modelId:safeId,modelVersion:safeId}).strict();
 export type CatalogReference=z.infer<typeof catalogReferenceSchema>;
+const metres=(max:number)=>z.number().finite().min(0).max(max);
+const hex=z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const wall=z.enum(['front','back','left','right']);
+/** Manufacturer-independent exterior description. Walls are named as drawn on the plan (front = bottom edge).
+ *  Positions are metres from the plan's left edge (front/back) or top edge (left/right). Each part declares its source. */
+export const exteriorSchema=z.object({
+  eavesHeight:metres(12),pitch:metres(60),overhang:metres(1.5),gableOverhang:metres(1.5),heightSource:z.enum(['manufacturer','render-estimate']),
+  wall:materialIdSchema,band:z.object({height:metres(2),color:hex}).strict().nullable(),
+  frameColor:hex,doorColor:hex,roofColor:hex,roofCovering:z.enum(['metal','tile','shingle','membrane']),gutterColor:hex,
+  openings:z.array(z.object({wall,center:metres(60),width:metres(10),height:metres(4),head:metres(4),type:z.enum(['window','door'])}).strict()).max(48),
+  openingsSource:z.enum(['plan','render-estimate']),
+  claddings:z.array(z.object({wall,from:metres(60),to:metres(60),material:materialIdSchema}).strict()).max(12),
+  canopy:z.object({wall,center:metres(60),width:metres(8),depth:metres(3)}).strict().nullable(),
+  roof:z.object({
+    pv:z.object({side:z.enum(['front','back']),from:z.number().min(0).max(1),to:z.number().min(0).max(1)}).strict().nullable(),
+    windows:z.array(z.object({side:z.enum(['front','back']),at:z.number().min(0).max(1)}).strict()).max(8),
+    chimneys:z.array(z.number().min(0).max(1)).max(4),
+  }).strict(),
+  carport:z.object({side:z.enum(['left','right']),width:metres(12),depth:metres(15),fromFront:metres(30),source:z.enum(['plan','render-estimate'])}).strict().nullable(),
+  detailsSource:z.literal('render-estimate'),
+}).strict();
+export type CatalogExterior=z.infer<typeof exteriorSchema>;
 export const catalogModelSchema=z.object({
   id:safeId,version:safeId,name:z.string().max(60),source:sourceUrl,
   footprint:z.object({width:z.number().positive().max(1000),depth:z.number().positive().max(1000),kind:z.literal('bounding-envelope'),source:sourceUrl}).strict(),
@@ -12,7 +35,7 @@ export const catalogModelSchema=z.object({
   roof:z.object({type:z.literal('gable'),pitch:z.null(),source:sourceUrl}).strict(),
   thumbnail:localAsset,plan:localAsset,
   assets:z.object({photoOriginal:sourceUrl,planOriginal:sourceUrl,attribution:z.string().max(200)}).strict(),
-  geometryStatus:z.literal('verified-envelope'),notes:z.array(z.string().max(1000)).max(12),
+  geometryStatus:z.literal('verified-envelope'),exterior:exteriorSchema.optional(),notes:z.array(z.string().max(1000)).max(12),
 }).strict();
 export type CatalogModel=z.infer<typeof catalogModelSchema>;
 const catalogSchema=z.object({

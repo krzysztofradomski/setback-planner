@@ -14,3 +14,14 @@ test('switching parcels re-seats unlocked buildings inside the new setback area,
   assert.deepEqual([l.x,l.y],[-50,-50],'locked items stay put');
   assert.deepEqual(items,fitItemsToParcel(scene),'deterministic');
 });
+test('re-seating keeps grouped structures (house + carport) rigidly together',async()=>{
+  const {fitItemsToParcel}=await import('../public/core/placement.ts');
+  const scene=parseScene({plot:[{x:0,y:0},{x:40,y:0},{x:40,y:30},{x:0,y:30}],items:[
+    {id:'h',type:'house',name:'H',x:-100,y:-100,w:12,d:8,setback:4,group:'g1'},
+    {id:'c',type:'landscape',kind:'pergola',name:'C',x:-91,y:-99,w:4,d:6,setback:0,group:'g1'}]});
+  const [h,c]=fitItemsToParcel(scene);
+  const before=Math.hypot(-91+100,-99+100),after=Math.hypot(c.x-h.x,c.y-h.y);
+  assert.ok(Math.abs(before-after)<1e-9,'distance between members is preserved');
+  assert.ok(Math.abs((c.rot-h.rot)-0)<1e-9,'relative rotation is preserved');
+  assert.ok(parcelContains(scene,worldFootprint(h)));
+});

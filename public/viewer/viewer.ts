@@ -9,6 +9,9 @@ import { buildBuilding, groundShape, disposeObject, type TextureFactory } from '
 import { materialPresets } from '../core/materials.ts';
 import { validRing } from '../core/geometry.ts';
 import type { Scene } from '../core/scene.ts';
+import type { SceneContext } from '../core/context.ts';
+import type { CatalogExterior } from '../core/catalogs.ts';
+import { setbackArea } from '../core/placement.ts';
 const makeTexture:TextureFactory=(id,appearance)=>{
   const preset=materialPresets[id];if(preset.pattern==='plain')return null;
   const canvas=document.createElement('canvas');canvas.width=256;canvas.height=128;
@@ -32,6 +35,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   // Sky gradient and a neutral meadow around the parcel so the plot sits in a landscape, fading into the horizon fog.
   const sky=(top:string,horizon:string)=>{const c=document.createElement('canvas');c.width=2;c.height=256;const g=c.getContext('2d');if(g){const grad=g.createLinearGradient(0,0,0,256);grad.addColorStop(0,top);grad.addColorStop(1,horizon);g.fillStyle=grad;g.fillRect(0,0,2,256);}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;};
   const daySky=sky('#8fb8d6','#e6ecec'),nightSky=sky('#070d16','#1b2838');
+  const contextGroup=new THREE.Group();scene.add(contextGroup);let contextActive=false;
   const land=new THREE.Mesh(new THREE.CircleGeometry(1,72),new THREE.MeshStandardMaterial({color:'#9aae86',roughness:1}));land.rotation.x=-Math.PI/2;land.receiveShadow=true;scene.add(land);
   const camera=new THREE.PerspectiveCamera(42,1,0.1,10000),controls=new OrbitControls(camera,renderer.domElement);
   controls.maxPolarAngle=Math.PI*0.49;controls.enableDamping=false;controls.minDistance=2;controls.maxDistance=2000;
@@ -47,11 +51,11 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   function view(mode:'top'|'axonometric'|'orbit'|'walk'){
     walkMode=mode==='walk';camera.up.set(0,1,0);controls.target.copy(center);
     if(mode==='walk'){camera.position.set(center.x,1.65,center.z+extent*.4);controls.target.copy(camera.position).add(new THREE.Vector3(0,0,-5));controls.maxPolarAngle=Math.PI*.95;controls.update();render();return;}controls.maxPolarAngle=Math.PI*.49;
-    const offset=mode==='top'?new THREE.Vector3(0,extent*1.6,0.001):new THREE.Vector3(extent*0.95,extent*0.62,extent*1.25);
+    const offset=mode==='top'?new THREE.Vector3(0,extent*1.6,0.001):new THREE.Vector3(extent*0.8,extent*1.05,extent*1.15);
     camera.position.copy(center).add(offset);camera.lookAt(center);controls.update();render();
   }
-  function update(project:Scene,original=false){
-    const next=JSON.stringify([project.plot,project.plotHoles,project.plotParts,project.terrain,project.items,project.fences,project.environment,project.coordinates,original]);if(next===signature){render();return;}signature=next;
+  function update(project:Scene,original=false,exteriorFor:(item:Scene['items'][number])=>CatalogExterior|undefined=()=>undefined){
+    const next=JSON.stringify([project.plot,project.plotHoles,project.plotParts,project.terrain,project.items,project.fences,project.environment,project.coordinates,original,project.items.map(i=>!!exteriorFor(i))]);if(next===signature){render();return;}signature=next;
     disposeObject(content);
     if(validRing(project.plot))for(const [outer,...holes] of parcelPolygons(project)){
       const shape=groundShape(outer);shape.holes=holes.map(h=>new THREE.Path(h.map(p=>new THREE.Vector2(p.x,-p.y))));
@@ -59,12 +63,16 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
       if(project.terrain){const samples=project.terrain.samples,base=samples[0].z,position=geometry.getAttribute('position'),index=geometry.index,vertices:number[]=[];
         const subdivide=(a:number[],b:number[],c:number[],depth:number)=>{if(depth){const mid=(u:number[],v:number[])=>[(u[0]+v[0])/2,(u[1]+v[1])/2],ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);subdivide(a,ab,ca,depth-1);subdivide(ab,b,bc,depth-1);subdivide(ca,bc,c,depth-1);subdivide(ab,bc,ca,depth-1);}else for(const p of [a,b,c])vertices.push(p[0],p[1],terrainHeight(samples,p[0],-p[1])-base);};
         const count=index?index.count:position.count;for(let i=0;i<count;i+=3){const p=[0,1,2].map(j=>{const k=index?index.getX(i+j):i+j;return[position.getX(k),position.getY(k)];});subdivide(p[0],p[1],p[2],2);}geometry.dispose();geometry=new THREE.ShapeGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.setIndex(null);geometry.computeVertexNormals();}
-      const ground=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
+      const ground=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1,transparent:true,opacity:contextActive?.3:1,depthWrite:!contextActive}));ground.userData.parcelGround=true;ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
       const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(outer.map(p=>new THREE.Vector3(p.x,0.03,p.y))),new THREE.LineBasicMaterial({color:'#f4f1e6'}));content.add(boundary);
       // Survey stakes at the boundary corners.
       const stake=new THREE.CylinderGeometry(0.09,0.09,0.6,8),stakeMaterial=new THREE.MeshStandardMaterial({color:'#f2f0ea',roughness:.7});for(const p of outer){const m=new THREE.Mesh(stake,stakeMaterial);m.position.set(p.x,0.3,p.y);m.castShadow=true;content.add(m);}
     }
-    for(const item of project.items.filter(i=>i.visible)){const object=buildBuilding(item,original,makeTexture,project.environment.season);if(project.terrain)object.position.y=terrainHeight(project.terrain.samples,item.x,item.y)-project.terrain.samples[0].z;content.add(object);}
+    // Buildable zone: parcel eroded by the largest house setback (4 m default), drawn as a dashed line.
+    if(validRing(project.plot)){const houses=project.items.filter(i=>i.type==='house'),distance=houses.length?Math.max(...houses.map(i=>i.setback)):4;
+      try{const dash=new THREE.BoxGeometry(1,.03,.25),paint=new THREE.MeshStandardMaterial({color:'#f2c230',roughness:.6,emissive:'#3d2f00'});for(const [outer] of setbackArea(project,distance).parts)outer.forEach((a,i)=>{const b=outer[(i+1)%outer.length],length=Math.hypot(b.x-a.x,b.y-a.y),angle=Math.atan2(b.y-a.y,b.x-a.x);for(let t=0;t<length;t+=1.4){const l=Math.min(.9,length-t),m=new THREE.Mesh(dash,paint);m.scale.x=l;const c=t+l/2;m.position.set(a.x+(b.x-a.x)*c/length,.04,a.y+(b.y-a.y)*c/length);m.rotation.y=-angle;m.userData.buildableZone=true;content.add(m);}});}catch{/* invalid setback geometry: skip the guide */}
+    }
+    for(const item of project.items.filter(i=>i.visible)){const object=buildBuilding(item,original,makeTexture,project.environment.season,exteriorFor(item));if(project.terrain)object.position.y=terrainHeight(project.terrain.samples,item.x,item.y)-project.terrain.samples[0].z;content.add(object);}
     for(const fence of project.fences)content.add(buildFence(fence,project.environment.season));
     content.updateMatrixWorld(true);
     const bounds=new THREE.Box3().setFromObject(content),size=bounds.getSize(new THREE.Vector3());
@@ -72,17 +80,48 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     const range=extent,env=project.environment,origin=project.coordinates.projected?.origin;
     const [lon,lat]=origin?geographicPoint([origin.x,origin.y]):[env.longitude,env.latitude];
     const position=sunPosition(env.date,lat,lon);sun.target.position.copy(center);sun.position.copy(center).add(new THREE.Vector3(position.direction.x,position.direction.y,position.direction.z).multiplyScalar(range*2));sun.intensity=position.daylight?(env.weather==='clear'?3:1.2):0;ambient.intensity=position.daylight?1.15:.18;
-    renderer.setClearColor(position.daylight?'#dce4e7':'#15212f');scene.background=position.daylight?daySky:nightSky;scene.fog=env.weather==='clear'?new THREE.Fog(position.daylight?'#e6ecec':'#1b2838',range*3,range*9):new THREE.Fog('#b7c1c4',range*1.5,range*4);
-    land.scale.setScalar(range*10);land.position.set(center.x,-0.08,center.z);(land.material as THREE.MeshStandardMaterial).color.set(seasonalGround[env.season]).lerp(new THREE.Color('#9da393'),.55).multiplyScalar(.78);
+    renderer.setClearColor(position.daylight?'#dce4e7':'#15212f');scene.background=position.daylight?daySky:nightSky;scene.fog=env.weather==='clear'?new THREE.Fog(position.daylight?'#e6ecec':'#1b2838',range*7,range*16):new THREE.Fog('#b7c1c4',range*1.5,range*4);
+    land.scale.setScalar(range*18);land.position.set(center.x,-0.08,center.z);(land.material as THREE.MeshStandardMaterial).color.set(seasonalGround[env.season]).lerp(new THREE.Color('#9da393'),.55).multiplyScalar(.78);
     Object.assign(sun.shadow.camera,{left:-range,right:range,top:range,bottom:-range,near:0.1,far:range*5});sun.shadow.camera.updateProjectionMatrix();
     if(camera.position.length()===0)view('axonometric');render();
     return content.children.some(c=>c.userData.approximateRoof);
   }
-  return {update,view,
+  function setContext(ctx:SceneContext|null){
+    disposeObject(contextGroup);contextActive=!!ctx;
+    content.traverse(o=>{if(o.userData.parcelGround){const m=(o as THREE.Mesh).material as THREE.MeshStandardMaterial;m.opacity=ctx?.3:1;m.depthWrite=!ctx;}});
+    if(!ctx){render();return;}
+    const plane=new THREE.Mesh(new THREE.PlaneGeometry(ctx.half*2,ctx.half*2),new THREE.MeshStandardMaterial({color:'#ffffff',roughness:1}));
+    plane.rotation.x=-Math.PI/2;plane.position.set(ctx.center.x,-0.04,ctx.center.y);plane.receiveShadow=true;contextGroup.add(plane);
+    new THREE.TextureLoader().setCrossOrigin('anonymous').load(ctx.ortho,texture=>{if(disposed||!plane.parent){texture.dispose();return;}texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();const m=plane.material as THREE.MeshStandardMaterial;m.map=texture;m.needsUpdate=true;render();},undefined,()=>{(plane.material as THREE.MeshStandardMaterial).color.set('#b9c2ad');render();});
+    const wall=new THREE.MeshStandardMaterial({color:'#ece8df',roughness:.85}),existing=new THREE.MeshStandardMaterial({color:'#d8c3a8',roughness:.85,transparent:true,opacity:.75}),edge=new THREE.LineBasicMaterial({color:'#7d786d'});
+    // Existing buildings on the parcel are drawn as a ground outline, so the planned house stays visible.
+    for(const b of ctx.buildings.filter(b=>b.onParcel)){const line=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(b.ring.map(p=>new THREE.Vector3(p.x,.05,p.y))),new THREE.LineDashedMaterial({color:'#b8392a',dashSize:.6,gapSize:.4}));line.computeLineDistances();contextGroup.add(line);}
+    for(const b of ctx.buildings.filter(b=>!b.onParcel)){const geometry=new THREE.ExtrudeGeometry(groundShape(b.ring),{depth:b.height,bevelEnabled:false}),mesh=new THREE.Mesh(geometry,b.onParcel?existing:wall);mesh.rotation.x=-Math.PI/2;mesh.castShadow=mesh.receiveShadow=true;mesh.userData.contextBuilding=true;
+      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geometry,30),edge);mesh.add(edges);contextGroup.add(mesh);}
+    render();
+  }
+  /** Frame one building from its front-left, at eye-catching height. */
+  function focus(item:{x:number;y:number;w:number;d:number;rot:number}){
+    walkMode=false;const r=item.rot*Math.PI/180,size=Math.max(item.w,item.d),front=new THREE.Vector3(-Math.sin(r),0,Math.cos(r)),side=new THREE.Vector3(Math.cos(r),0,Math.sin(r));
+    const target=new THREE.Vector3(item.x,2.2,item.y);controls.maxPolarAngle=Math.PI*.49;controls.target.copy(target);
+    // Prefer the front corners; skip viewpoints whose line of sight is blocked by a neighbouring building.
+    const ray=new THREE.Raycaster(),candidates=[[1,-1],[1,1],[-1,-1],[-1,1]].map(([f,sd])=>target.clone().addScaledVector(front,f*size*1.9).addScaledVector(side,sd*size*.7).add(new THREE.Vector3(0,size*.55,0)));
+    const blockers=contextGroup.children.filter(c=>c.userData.contextBuilding);
+    const clear=candidates.find(p=>{const dir=p.clone().sub(target),far=dir.length();ray.set(target,dir.normalize());ray.far=far;return !ray.intersectObjects(blockers,false).length;})??candidates[0];
+    camera.position.copy(clear);camera.lookAt(target);controls.update();render();
+  }
+  /** Overview plus an optional close-up of one building, without disturbing the user's camera. */
+  function snapshots(item?:{x:number;y:number;w:number;d:number;rot:number}){
+    const position=camera.position.clone(),target=controls.target.clone(),walking=walkMode,shots:{kind:'overview'|'house';src:string}[]=[];
+    view('axonometric');shots.push({kind:'overview',src:renderer.domElement.toDataURL('image/png')});
+    if(item){focus(item);shots.push({kind:'house',src:renderer.domElement.toDataURL('image/png')});}
+    walkMode=walking;camera.position.copy(position);controls.target.copy(target);controls.update();render();return shots;
+  }
+  return {update,view,setContext,focus,snapshots,
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},
     screenshot(){render();return renderer.domElement.toDataURL('image/png');},
-    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
+    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);disposeObject(contextGroup);land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
     memory(){return {...renderer.info.memory};},
   };
 }
