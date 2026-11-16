@@ -18,7 +18,7 @@ test('map sources are attributed HTTPS services with explicit WMS axis order',()
 });
 
 test('official context overlays use verified provider layers and are valid selectable overlays',()=>{
-  const expected={flood:['NZ.Fluvial','NZ.RiskZone','NZ.ExposedElement_q10','NZ.ExposedElement_q1','NZ.ExposedElement_q0_2'],groundwater:['0'],relief:['Raster'],planning:['raster','wektor-str','wektor-pow','wektor-lzb','wektor-lin','wektor-pkt','granice']};
+  const expected={landslides:['0','1','2'],mining:['3','4','5'],wells:['0'],flood:['NZ.Fluvial','NZ.RiskZone','NZ.ExposedElement_q10','NZ.ExposedElement_q1','NZ.ExposedElement_q0_2'],groundwater:['0'],relief:['Raster'],planning:['raster','wektor-str','wektor-pow','wektor-lzb','wektor-lin','wektor-pkt','granice']};
   for(const [id,layers]of Object.entries(expected)){
     assert.ok(isMapOverlay(id));
     const url=new URL(mapSources[id as keyof typeof expected].tiles[0]);

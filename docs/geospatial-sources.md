@@ -53,3 +53,17 @@ Additional sources, exact layers and evidence:
 GetMap verification used WMS 1.1.1, EPSG:3857, BBOX `2280000,6800000,2300000,6820000`, width/height 256, PNG and a localhost Origin. No authentication was sent. These are availability observations, not coverage guarantees. Earlier Hydroportal application MapServer endpoints returned 401; the public INSPIRE endpoint above is independently accessible and avoids that endpoint entirely.
 
 All added overlays use WMS 1.1.1 and easting/northing Web Mercator BBOX order. Flood and groundwater opacity is 0.7; relief is 0.65. Layers load only when selected. Provider errors remain visible and users can disable a failed overlay while retaining the basemap and project editor. Blank images can mean no published features, coverage gaps, scale limits or a service failure; they must not be interpreted as a clear risk assessment. No automated risk scoring, utility distances, plan interpretation, roads access, prices/valuation, landslide/mining analysis, soil classification or broadband analysis is implemented by these visual overlays.
+
+## Additional geological context — checked 2026-11-16
+
+Three further direct PIG-PIB map integrations use providers named in Gruntometr's report. The [official CBDG service directory](https://baza.pgi.gov.pl/cbdg/geoportal/uslugi/gis) lists these services; [official SOPO open-data entry](https://dane.gov.pl/pl/dataset/1297%2Csystem-osony-przeciwosuwiskowej-sopo/resource/35123) also identifies the landslide service, and [MIDAS metadata](https://metadane.pgi.gov.pl/geonetwork/srv/api/records/29bb3786-3e34-11e4-9d9f-164230d1df67) identifies the mining service.
+
+| Overlay key | Official WMS path under `https://cbdgmapa.pgi.gov.pl/arcgis/services/` | Exact layers |
+| --- | --- | --- |
+| `landslides` | `geozagrozenia/sopo_obszary/MapServer/WMSServer` | `0,1,2`: threatened areas, landslide activity zones, landslide boundaries |
+| `mining` | `midas/MapServer/WMSServer` | `3,4,5`: current mining lands, mining areas, documented mineral deposits (not archived layers 0–2) |
+| `wells` | `hydrogeologia/cbdh_otwory/MapServer/WMSServer` | `0`: hydrogeological objects; this includes boreholes and is not restricted to domestic wells |
+
+Capabilities advertised EPSG:3857. Each actual WMS 1.1.1 GetMap returned 200 PNG and echoed the requesting localhost Origin in Access-Control-Allow-Origin. SOPO was additionally tested at BBOX `2220000,6420000,2225000,6425000` with 256×256 pixels and returned a nonempty 10,859-byte PNG. SOPO advertises a scale window approximately 1:4,630–1:94,589 for these layers: request native tiles at zoom 13–16 (`maxzoom:17`) and let MapLibre enlarge them at closer zooms, retaining the original raster resolution. This avoids blank tiles beyond the advertised minimum scale. Wells are requested from zoom 11 to respect their approximately 1:472,470 maximum scale. Mining and wells tests used the earlier shared 20 km BBOX.
+
+These maps display published objects and areas. They do not automatically intersect the parcel with hazards, produce a geology verdict, estimate groundwater depth, model subsidence, determine soil bearing capacity or replace site investigation. Mapping coverage and survey dates vary. Direct official BDOT10k WMS discovery was attempted but capabilities repeatedly timed out; no unverified road or forest layer was added. Existing OSM, ortho and nature-protection layers remain useful visual context, without routing or legal road-access conclusions.

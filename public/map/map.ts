@@ -18,7 +18,7 @@ export function createParcelMap(container:HTMLElement,onError:()=>void){
       const visible=id==='cadastre'?cadastre:overlays.has(id)||base===id;
       if(visible&&!map.getSource(id)){
         map.addSource(id,source as RasterSourceSpecification);
-        map.addLayer({id,type:'raster',source:id,paint:{'raster-opacity':id==='cadastre'?0.85:id==='relief'?0.65:id==='flood'||id==='groundwater'?0.7:1}},'project-fill');
+        map.addLayer({id,type:'raster',source:id,paint:{'raster-opacity':id==='cadastre'?0.85:id==='relief'?0.65:['flood','groundwater','landslides','mining'].includes(id)?0.7:1}},'project-fill');
       }
       if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visible?'visible':'none');
     }
