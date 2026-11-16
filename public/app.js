@@ -106,8 +106,9 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   };
   const LANG_LS = 'setback-planner-lang';
   let lang = (() => {
-    try { const s = localStorage.getItem(LANG_LS); if (I18N[s]) return s; } catch (e) {}
-    return /^pl\b/i.test(navigator.language || '') ? 'pl' : 'en'; // ponytail: only pl is translated, everything else gets en
+    // Polish-only interface. English strings remain only for the automated tests, which pin them via this key.
+    try { if (localStorage.getItem(LANG_LS) === 'en') return 'en'; } catch (e) {}
+    return 'pl';
   })();
   const t = (k, v = {}) => (I18N[lang][k] ?? I18N.en[k]).replace(/\{(\w+)\}/g, (_, x) => v[x]);
   const dec = v => lang === 'pl' ? String(v).replace('.', ',') : String(v);
@@ -818,7 +819,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     finally {$('#view-3d').disabled=false;}
   };
   // Surroundings (orthophoto + neighbouring buildings) for georeferenced parcels; derived data, never saved.
-  let contextKey='',lastContext=null;
+  let contextKey='',lastContext=null,contextJob=Promise.resolve();
   const contextToggle=document.createElement('label');contextToggle.className='check';contextToggle.innerHTML='<input type="checkbox" id="view-context" checked><span data-bi="Surroundings|Otoczenie">'+bi('Surroundings','Otoczenie')+'</span>';$('#viewer-controls').append(contextToggle);
   $('#view-context').onchange=e=>{viewer?.setContext(e.target.checked?lastContext:null);$('#context-hint').hidden=!!lastContext||!e.target.checked;};
   async function refreshContext(){
@@ -827,6 +828,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     $('#context-hint').hidden=!!key||!view3d||!$('#view-context').checked;
     if(key===contextKey)return;contextKey=key;lastContext=null;viewer.setContext(null);
     if(!key)return;
+    let finish;contextJob=new Promise(r=>finish=r);
     try{
       const {loadContext,contextFrame}=await import('./core/context.ts');if(contextKey!==key||!viewer)return;lastContext=contextFrame(state);if($('#view-context').checked)viewer.setContext(lastContext);
       const context=await loadContext(state);
@@ -834,6 +836,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       if($('#view-context').checked)viewer.setContext(context);
       $('#viewer-note').textContent=t('viewerHint')+' '+bi(`Surroundings: GUGiK orthophoto and ${context.buildings.length} building footprints © OpenStreetMap contributors. Neighbour heights are estimated (2 storeys), not measured.`,`Otoczenie: ortofotomapa GUGiK i ${context.buildings.length} obrysów budynków © OpenStreetMap. Wysokości sąsiadów są szacowane (2 kondygnacje), nie mierzone.`);
     }catch{if(contextKey===key){contextKey='';toast(bi('Surroundings could not be loaded. The plan is unchanged.','Nie udało się wczytać otoczenia. Plan bez zmian.'));}}
+    finally{finish();}
   }
   const focusButton=document.createElement('button');focusButton.id='view-house';focusButton.dataset.bi='House|Dom';focusButton.textContent=bi('House','Dom');focusButton.onclick=()=>{const it=get(selected)?.type==='house'?get(selected):state.items.find(i=>i.type==='house');if(it)viewer?.focus(it);};$('#viewer-controls').append(focusButton);
   // Describe-your-house: Workers AI reads the words, geometry is computed locally and shown before anything is added.
@@ -876,19 +879,54 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   };
   // One-click garden: deterministic layout around the main house; re-running replaces the previous auto-garden.
   const gardenCard=document.createElement('div');gardenCard.id='garden-designer';
-  gardenCard.innerHTML='<h3><span data-bi="Design my garden|Zaprojektuj ogród"></span></h3><p class="hint"><span data-bi="Terrace, paths, driveway, planting and a boundary hedge, fitted to your parcel. Everything stays editable.|Taras, ścieżki, podjazd, zieleń i żywopłot wzdłuż granicy, dopasowane do działki. Wszystko można potem edytować."></span></p><div class="garden-styles" role="radiogroup"><button type="button" role="radio" aria-checked="true" data-style="family"><span data-bi="Family|Rodzinny"></span></button><button type="button" role="radio" aria-checked="false" data-style="modern"><span data-bi="Modern|Nowoczesny"></span></button><button type="button" role="radio" aria-checked="false" data-style="natural"><span data-bi="Natural|Naturalny"></span></button></div><button type="button" id="garden-design"><span data-bi="Design garden|Zaprojektuj ogród"></span></button>';
+  gardenCard.innerHTML='<h3><span data-bi="Design my garden|Zaprojektuj ogród"></span></h3><div class="garden-chat" aria-live="polite"><p class="bubble ai"><span data-bi="Tell me what you would like: a pool, a vegetable patch, lots of trees, a place for kids… I will design it on your parcel.|Napisz, czego chcesz: basen, warzywnik, dużo drzew, miejsce dla dzieci… Zaprojektuję to na Twojej działce."></span></p></div><form class="garden-ask"><input id="garden-wish" type="text" maxlength="500" autocomplete="off" data-bi-placeholder="e.g. lush garden with a pergola and a vegetable patch|np. bujny ogród z pergolą i warzywnikiem"><button type="submit" aria-label="Send"><span data-bi="Design|Projektuj"></span></button></form><div class="garden-styles" role="radiogroup"><button type="button" role="radio" aria-checked="true" data-style="lush"><span data-bi="Lush|Bujny"></span></button><button type="button" role="radio" aria-checked="false" data-style="family"><span data-bi="Family|Rodzinny"></span></button><button type="button" role="radio" aria-checked="false" data-style="modern"><span data-bi="Modern|Nowoczesny"></span></button><button type="button" role="radio" aria-checked="false" data-style="natural"><span data-bi="Natural|Naturalny"></span></button></div><label class="gate-edge"><span data-bi="Gate on the side|Brama od strony"></span><select id="garden-gate"></select></label><button type="button" id="garden-design"><span data-bi="Design garden|Zaprojektuj ogród"></span></button>';
   gardenCard.querySelectorAll('[data-style]').forEach(b=>b.onclick=()=>gardenCard.querySelectorAll('[data-style]').forEach(x=>x.setAttribute('aria-checked',String(x===b))));
-  let autoGarden={items:[],fence:null};
-  gardenCard.querySelector('#garden-design').onclick=()=>{
-    const style=gardenCard.querySelector('[aria-checked=true]').dataset.style;
-    const base={...state,items:state.items.filter(i=>!autoGarden.items.includes(i.id)),fences:state.fences.filter(f=>f.id!==autoGarden.fence)};
-    let result;try{result=designGarden(base,style,()=>'o'+uid++,kind=>objectLibrary[kind][lang]);}catch{toast(bi('Add a house first.','Najpierw dodaj dom.'));return;}
-    if(base.items.length+result.items.length>100){toast(t('objectLimit'));return;}
-    snapshot();state.items=[...base.items,...result.items];state.fences=base.fences;
-    let fence=null;if(state.fences.length<12){fence=fenceSchema.parse({id:crypto.randomUUID(),name:bi('Boundary hedge','Żywopłot przy granicy'),type:'hedge-evergreen',path:result.hedge,height:1.6,spacing:.6,width:.8,color:'#3f6a4e',foundation:0,maturity:1,gate:null});state.fences.push(fence);}
-    autoGarden={items:result.items.map(i=>i.id),fence:fence?.id??null};
-    buildPanel();render();toast(bi(`Garden designed: ${result.items.length} elements${fence?' and a hedge':''}. Drag or delete anything.`,`Ogród gotowy: ${result.items.length} elementów${fence?' i żywopłot':''}. Możesz wszystko przesuwać i usuwać.`));
+  // Garden chat: Workers AI turns a wish into style + elements; the deterministic designer places them.
+  const chat=gardenCard.querySelector('.garden-chat'),chatHistory=[];
+  const bubble=(text,who)=>{const p=document.createElement('p');p.className='bubble '+who;p.textContent=text;chat.append(p);chat.scrollTop=chat.scrollHeight;return p;};
+  gardenCard.querySelector('.garden-ask').onsubmit=async e=>{
+    e.preventDefault();const input=$('#garden-wish'),text=input.value.trim();if(text.length<2)return;
+    input.value='';bubble(text,'me');const waiting=bubble(bi('Designing…','Projektuję…'),'ai');gardenCard.classList.add('busy');
+    try{
+      const r=await window.fetch('/api/ai/garden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,lang,history:chatHistory.slice(-6)})}),j=await r.json().catch(()=>({}));
+      if(!r.ok||!j.answer)throw new Error('unavailable');
+      const a=j.answer;pickStyle(a.style);chatHistory.push(text);
+      if(a.season||a.weather){if(a.season)state.environment.season=a.season;if(a.weather)state.environment.weather=a.weather;}
+      const count=runGarden({add:a.add,avoid:a.avoid});
+      waiting.textContent=count===false?bi('Add a house first, then ask again.','Najpierw dodaj dom, potem napisz ponownie.'):a.reply;
+    }catch{waiting.textContent=bi('The assistant is unavailable right now, so I used the selected style.','Asystent jest teraz niedostępny, więc użyłem wybranego stylu.');runGarden({});}
+    finally{gardenCard.classList.remove('busy');}
   };
+  let autoGarden={items:[],fences:[]},streetKey='',detectedStreet=null;
+  // Gate edge: every parcel edge is selectable; the edge facing a mapped road is pre-selected.
+  async function syncGateEdges(){
+    const select=$('#garden-gate');if(!select)return;
+    const key=JSON.stringify([state.plot,state.coordinates.projected?.origin??null]);
+    if(key!==streetKey){streetKey=key;detectedStreet=null;
+      if(state.coordinates.projected){try{const {loadStreets,streetEdge}=await import('./core/context.ts'),streets=await loadStreets(state);if(streetKey===key)detectedStreet=streetEdge(state.plot,streets);}catch{/* no map data: fall back to the side the house faces */}}
+      select.dataset.auto='1';}
+    const keep=select.dataset.auto==='1'?null:select.value;
+    select.innerHTML=`<option value="">${bi('Side the house faces','Strona, na którą patrzy dom')}</option>`+state.plot.map((a,i)=>{const b=state.plot[(i+1)%state.plot.length];return `<option value="${i}">${cornerName(i)}${cornerName((i+1)%state.plot.length)} · ${dec(Math.hypot(b.x-a.x,b.y-a.y).toFixed(1))} m${i===detectedStreet?bi(' · street',' · ulica'):''}</option>`;}).join('');
+    select.value=keep??(detectedStreet===null?'':String(detectedStreet));
+  }
+  gardenCard.addEventListener('change',e=>{if(e.target.id==='garden-gate')e.target.dataset.auto='0';});
+  const pickStyle=style=>gardenCard.querySelectorAll('[data-style]').forEach(x=>x.setAttribute('aria-checked',String(x.dataset.style===style)));
+  gardenCard.querySelector('#garden-design').onclick=()=>runGarden({});
+  function runGarden(options){
+    const style=gardenCard.querySelector('[aria-checked=true]').dataset.style;
+    const base={...state,items:state.items.filter(i=>!autoGarden.items.includes(i.id)),fences:state.fences.filter(f=>!autoGarden.fences.includes(f.id))},gateValue=$('#garden-gate').value;
+    let result;try{result=designGarden(base,style,()=>'o'+uid++,kind=>objectLibrary[kind][lang],gateValue===''?null:Number(gateValue),options);}catch{toast(bi('Add a house first.','Najpierw dodaj dom.'));return false;}
+    if(base.items.length+result.items.length>100){toast(t('objectLimit'));return false;}
+    snapshot();state.items=[...base.items,...result.items];state.fences=base.fences;
+    const fences=[];
+    if(state.fences.length<11){
+      fences.push(fenceSchema.parse({id:crypto.randomUUID(),name:bi('Boundary hedge','Żywopłot przy granicy'),type:'hedge-evergreen',path:result.hedge,height:1.6,spacing:.6,width:.8,color:'#3f6a4e',foundation:0,maturity:1,gate:null}));
+      fences.push(fenceSchema.parse({id:crypto.randomUUID(),name:bi('Street fence and gate','Ogrodzenie od ulicy z bramą'),type:'metal-panel',path:result.front.path,height:1.5,spacing:2.5,width:.08,color:'#3a3d41',foundation:.3,maturity:1,gate:{edge:0,offset:result.front.gate.offset,width:result.front.gate.width,type:'sliding',open:false,inward:true}}));
+      state.fences.push(...fences);}
+    const fence=fences.length;autoGarden={items:result.items.map(i=>i.id),fences:fences.map(f=>f.id)};
+    buildPanel();render();toast(bi(`Garden designed: ${result.items.length} elements${fence?', hedge and a street gate':''}. Drag or delete anything.`,`Ogród gotowy: ${result.items.length} elementów${fence?', żywopłot i brama od ulicy':''}. Możesz wszystko przesuwać i usuwać.`));
+    return result.items.length;
+  }
   const walkButton=document.createElement('button');walkButton.dataset.bi='Walk|Spacer';walkButton.textContent=bi('Walk','Spacer');walkButton.onclick=()=>viewer?.view('walk');$('#viewer-controls').append(walkButton);
   // Toolbar: one camera group, the surroundings toggle, and a "more" menu for screenshot and low power.
   const cameraGroup=document.createElement('div');cameraGroup.className='camera-group';cameraGroup.setAttribute('role','group');cameraGroup.setAttribute('aria-label',bi('Camera','Kamera'));
@@ -1001,9 +1039,24 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   $('#b-svg').onclick=async()=>{try{const {projectSvg}=await import('./core/reports.ts');downloadFile(projectSvg(state,lang),'setback-plan.svg','image/svg+xml');}catch{toast(t('notAPlan'));}};
+  // Full report in one click: 3D views with surroundings, terrain slope and all checks are gathered automatically.
   $('#b-report').onclick=async()=>{
-    try{const {projectReport}=await import('./core/reports.ts');const house=get(selected)?.type==='house'?get(selected):state.items.find(i=>i.type==='house'),shots=viewer&&view3d?viewer.snapshots(house).map(s=>({label:s.kind==='house'?bi('House close-up','Zbliżenie domu'):bi('Parcel and surroundings','Działka i otoczenie'),src:s.src})):[];$('#report-frame').srcdoc=projectReport(state,lang,new Date().toISOString(),{screenshots:shots,neighbours:lastContext?.buildings.length?lastContext.buildings:undefined,exteriorFor});$('#report-dialog').showModal();}
-    catch{toast(t('notAPlan'));}
+    const button=$('#b-report');if(button.disabled)return;button.disabled=true;toast(bi('Preparing the full report…','Przygotowuję pełny raport…'));
+    const wait=ms=>new Promise(r=>setTimeout(r,ms)),frames=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    try{
+      const {projectReport}=await import('./core/reports.ts'),previous=view3d?'3d':mapActive?'map':'2d';
+      let shots=[],scene=state;
+      if(!view3d)await $('#view-3d').onclick();
+      if(viewer&&view3d){
+        await Promise.race([contextJob,wait(15000)]);await Promise.race([viewer.ready(),wait(8000)]);await frames();
+        const house=get(selected)?.type==='house'?get(selected):state.items.find(i=>i.type==='house');
+        shots=viewer.snapshots(house).map(s=>({label:s.kind==='house'?bi('House close-up','Zbliżenie domu'):bi('Parcel and surroundings','Działka i otoczenie'),src:s.src}));
+      }
+      if(previous==='2d')setStageMode('2d');else if(previous==='map')await $('#view-map').onclick();
+      if(state.coordinates.projected&&!state.terrain){try{const {sampleTerrain}=await import('./core/terrain.ts');scene={...state,terrain:await sampleTerrain(state)};}catch{/* report without terrain */}}
+      $('#report-frame').srcdoc=projectReport(scene,lang,new Date().toISOString(),{screenshots:shots,neighbours:lastContext?.buildings.length?lastContext.buildings:undefined,exteriorFor});$('#report-dialog').showModal();
+    }catch{toast(t('notAPlan'));}
+    finally{button.disabled=false;}
   };
   $('#report-print').onclick=()=>$('#report-frame').contentWindow.print();
   $('#report-close').onclick=()=>$('#report-dialog').close();
@@ -1092,9 +1145,16 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   },onSessionReset:()=>{history=new ProjectHistory();selected=null;$('#io').value='';$('#report-frame').srcdoc='';$('#report-dialog').close();business?.clearPersonalData?.();}});
   const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');business=mountBusiness({container:businessHost,getScene:()=>structuredClone(state),getAttribution:()=>showroom.getAttribution()});
 
-  workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='project')renderLayoutReview();}});
+  workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
   document.querySelector('[data-panel=houses]')?.prepend($('#house-brief'));
   document.querySelector('[data-panel=garden]')?.prepend(gardenCard);
+  // Simple mode hides manual, expert setup; the header switch reveals it and remembers the choice.
+  const ADV_LS='setback-planner-advanced',advanced=document.createElement('label');advanced.className='advanced-switch';
+  advanced.innerHTML='<input type="checkbox" id="advanced-mode" role="switch"><span data-bi="Advanced|Zaawansowane">'+bi('Advanced','Zaawansowane')+'</span>';
+  document.querySelector('.header-actions')?.prepend(advanced);
+  const setAdvanced=on=>{document.querySelector('.app').classList.toggle('simple',!on);$('#advanced-mode').checked=on;try{localStorage.setItem(ADV_LS,on?'1':'0');}catch{/* private mode */}};
+  $('#advanced-mode').onchange=e=>setAdvanced(e.target.checked);
+  setAdvanced((()=>{try{return localStorage.getItem(ADV_LS)==='1';}catch{return false;}})());
   const parcelPanel=document.querySelector('[data-panel=parcel]'),parcelAdvanced=document.createElement('details');parcelAdvanced.className='parcel-advanced';parcelAdvanced.innerHTML=`<summary>${lang==='pl'?'Rysowanie, import i współrzędne':'Drawing, import & coordinates'}</summary>`;parcelAdvanced.append($('#p-area').closest('section'));parcelPanel.append(parcelAdvanced);
   const review=document.createElement('section');review.id='review-layout';document.querySelector('[data-panel=project]').prepend(review);
   function renderLayoutReview(){const data=compute();renderReview(review,{scene:state,language:lang,checks:state.items.map(i=>({id:i.id,...data.res.get(i.id)})),selectedId:selected,onShowPlan:id=>{if(id){selected=id;buildPanel();}setStageMode('2d');fit();render();workspace.activate('houses');if(matchMedia('(max-width:1000px)').matches)document.querySelector('.library-close').click();},onReport:()=>$('#b-report').click(),onSources:()=>{workspace.activate('parcel');document.querySelector('.journey-topics').scrollIntoView({block:'start'});}});}

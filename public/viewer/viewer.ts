@@ -53,7 +53,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     for(let i=0;i<a.length;i+=step){a[i+1]-=fall;if(rain)a[i+4]-=fall;else{a[i]+=Math.sin(now/900+i)*.004;}if(a[i+1]<0){const y=max.y;a[i+1]=y;if(rain)a[i+4]=y+.6;}if(a[i]<min.x||a[i]>max.x)a[i]=min.x+Math.random()*(max.x-min.x);}
     attr.needsUpdate=true;renderer.render(scene,camera);frame=requestAnimationFrame(tick);
   }
-  const contextGroup=new THREE.Group();scene.add(contextGroup);let contextActive=false;
+  const contextGroup=new THREE.Group();scene.add(contextGroup);let contextActive=false,contextReady:Promise<void>=Promise.resolve();
   const land=new THREE.Mesh(new THREE.CircleGeometry(1,72),new THREE.MeshStandardMaterial({color:'#9aae86',roughness:1}));land.rotation.x=-Math.PI/2;land.receiveShadow=true;scene.add(land);
   const camera=new THREE.PerspectiveCamera(42,1,0.1,10000),controls=new OrbitControls(camera,renderer.domElement);
   controls.maxPolarAngle=Math.PI*0.49;controls.enableDamping=false;controls.minDistance=2;controls.maxDistance=2000;
@@ -110,7 +110,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     if(!ctx){render();return;}
     const plane=new THREE.Mesh(new THREE.PlaneGeometry(ctx.half*2,ctx.half*2),new THREE.MeshStandardMaterial({color:'#ffffff',roughness:1}));
     plane.rotation.x=-Math.PI/2;plane.position.set(ctx.center.x,-0.04,ctx.center.y);plane.receiveShadow=true;contextGroup.add(plane);
-    new THREE.TextureLoader().setCrossOrigin('anonymous').load(ctx.ortho,texture=>{if(disposed||!plane.parent){texture.dispose();return;}texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();const m=plane.material as THREE.MeshStandardMaterial;m.map=texture;m.needsUpdate=true;render();},undefined,()=>{(plane.material as THREE.MeshStandardMaterial).color.set('#b9c2ad');render();});
+    contextReady=new Promise<void>(done=>new THREE.TextureLoader().setCrossOrigin('anonymous').load(ctx.ortho,texture=>{if(disposed||!plane.parent){texture.dispose();done();return;}texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();const m=plane.material as THREE.MeshStandardMaterial;m.map=texture;m.needsUpdate=true;render();done();},undefined,()=>{(plane.material as THREE.MeshStandardMaterial).color.set('#b9c2ad');render();done();}));
     const wall=new THREE.MeshStandardMaterial({color:'#ece8df',roughness:.85}),existing=new THREE.MeshStandardMaterial({color:'#d8c3a8',roughness:.85,transparent:true,opacity:.75}),edge=new THREE.LineBasicMaterial({color:'#7d786d'});
     // Existing buildings on the parcel are drawn as a ground outline, so the planned house stays visible.
     for(const b of ctx.buildings.filter(b=>b.onParcel)){const line=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(b.ring.map(p=>new THREE.Vector3(p.x,.05,p.y))),new THREE.LineDashedMaterial({color:'#b8392a',dashSize:.6,gapSize:.4}));line.computeLineDistances();contextGroup.add(line);}
@@ -135,7 +135,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     if(item){focus(item);shots.push({kind:'house',src:renderer.domElement.toDataURL('image/png')});}
     walkMode=walking;camera.position.copy(position);controls.target.copy(target);controls.update();render();return shots;
   }
-  return {update,view,setContext,focus,snapshots,
+  return {update,view,setContext,focus,snapshots,ready:()=>contextReady,
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},
     screenshot(){render();return renderer.domElement.toDataURL('image/png');},

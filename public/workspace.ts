@@ -125,7 +125,7 @@ export function mountWorkspace({
   header.prepend(brand);
   app.prepend(header);
   const actions = header.querySelector(".header-actions")!;
-  actions.append(brand.querySelector(".lang")!);
+  brand.querySelector(".lang")?.remove(); // Polish only
   for (const [id, key] of [
     ["b-link", "share"],
     ["b-report", "report"],

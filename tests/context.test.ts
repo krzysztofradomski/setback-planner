@@ -22,3 +22,11 @@ test('orthophoto request covers the context square in PL-1992 easting/northing o
   assert.equal(u.searchParams.get('SRS'),'EPSG:2180');
   assert.equal(u.searchParams.get('BBOX'),'650930.00,497095.00,651100.00,497265.00');
 });
+test('street-facing edge is the one nearest a road; footpaths do not count',async()=>{
+  const {streetsFromTile,streetEdge}=await import('../public/core/context.ts');
+  const streets=await streetsFromTile(tile,9153,5386,scene);assert.ok(streets.length>5,'roads decoded: '+streets.length);
+  const plot=[{x:0,y:0},{x:30,y:0},{x:30,y:40},{x:0,y:40}];
+  assert.equal(streetEdge(plot,[[{x:-5,y:46},{x:40,y:46}]]),2,'road 6 m south of edge C–D');
+  assert.equal(streetEdge(plot,[[{x:36,y:-5},{x:36,y:50}]]),1,'road east of edge B–C');
+  assert.equal(streetEdge(plot,[[{x:200,y:0},{x:200,y:40}]]),null,'no road nearby');
+});

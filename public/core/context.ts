@@ -73,6 +73,48 @@ export async function buildingsFromTile(buffer: Uint8Array, x: number, y: number
   return out;
 }
 
+const ROAD_KINDS = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service', 'track', 'busway']);
+/** Decode road centre lines (not footpaths or private driveways) from one tile into local coordinates. */
+export async function streetsFromTile(buffer: Uint8Array, x: number, y: number, scene: Scene): Promise<Point[][]> {
+  const origin = scene.coordinates.projected?.origin;
+  if (!origin) throw new Error('Parcel is not georeferenced');
+  const [{ VectorTile }, { PbfReader }] = await Promise.all([import('@mapbox/vector-tile'), import('pbf')]);
+  const layer = new VectorTile(new PbfReader(buffer)).layers.streets;
+  if (!layer) return [];
+  const out: Point[][] = [];
+  for (let i = 0; i < layer.length; i++) {
+    const f = layer.feature(i), kind = String(f.properties.kind ?? '');
+    if (f.type !== 2 || !ROAD_KINDS.has(kind) || f.properties.service === 'driveway' || f.properties.tunnel === true) continue;
+    for (const line of f.loadGeometry()) out.push(line.map(p => { const [e, n] = projectPoint(tileLonLat(x + p.x / layer.extent, y + p.y / layer.extent)); return { x: e - origin.x, y: origin.y - n }; }));
+  }
+  return out;
+}
+const segmentDistance = (p: Point, a: Point, b: Point) => { const dx = b.x - a.x, dy = b.y - a.y, t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy); };
+/** Parcel edge facing a road: the edge whose midpoint is closest to a road centre line (within 35 m), weighted by edge length. */
+export function streetEdge(plot: Point[], streets: Point[][]): number | null {
+  let best: number | null = null, bestScore = Infinity;
+  plot.forEach((a, i) => {
+    const b = plot[(i + 1) % plot.length], length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (length < 3) return;
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    let d = Infinity;
+    for (const line of streets) for (let j = 1; j < line.length; j++) d = Math.min(d, segmentDistance(mid, line[j - 1], line[j]));
+    const score = d - Math.min(length, 30) * .1; // prefer the long frontage when two edges are equally close
+    if (d <= 35 && score < bestScore) { best = i; bestScore = score; }
+  });
+  return best;
+}
+/** Streets around the parcel from the same tiles as the buildings. */
+export async function loadStreets(scene: Scene, fetcher: typeof fetch = fetch): Promise<Point[][]> {
+  const origin = scene.coordinates.projected?.origin;
+  if (!origin) return [];
+  const { center, half } = contextBounds(scene);
+  const [w, s] = geographicPoint([origin.x + center.x - half, origin.y - center.y - half]), [e, n] = geographicPoint([origin.x + center.x + half, origin.y - center.y + half]);
+  const a = tileOf(w, n), b = tileOf(e, s), parts: Promise<Point[][]>[] = [];
+  for (let x = a.x; x <= b.x; x++) for (let y = a.y; y <= b.y; y++) parts.push(fetcher(`${TILE_URL}/${TILE_ZOOM}/${x}/${y}`, { signal: AbortSignal.timeout(20000), credentials: 'omit' }).then(async r => r.ok ? streetsFromTile(new Uint8Array(await r.arrayBuffer()), x, y, scene) : []));
+  return (await Promise.all(parts.slice(0, 9))).flat();
+}
+
 /** Orthophoto frame only: available instantly, before building tiles arrive. */
 export function contextFrame(scene: Scene): SceneContext {
   const origin = scene.coordinates.projected?.origin;

@@ -69,3 +69,12 @@ A live Gruntometr usability study informed a guided entry: address/full identifi
 - One-click garden (`core/garden.ts`) in three styles. It places a terrace behind the house, a path from the front door, a driveway from the garage or carport, style objects in their zones, and a boundary hedge left open on the street side. Everything is checked against the parcel and existing objects. Re-running replaces the previous auto-garden.
 - 3D weather: rain streaks, drifting snow and an overcast sky. A toolbar chip sets season, weather and time of day.
 - Garden objects are now one-click tiles. The inspector shows a readable catalogue name.
+
+## Polish-only UI, simple mode, garden chat, gate edge, one-click report (2026-11-16)
+
+- **Polish only:** the language switch is gone and the app always starts in Polish. The English strings remain only because the browser tests pin them through `localStorage['setback-planner-lang']='en'` (`tests/browser/lang-en.json`).
+- **Simple mode by default:** a header switch ("Zaawansowane", remembered per browser) reveals the manual setup: garden library, fence editor, season form, custom house tools, parcel geometry, and the inspector's shape/openings/operations panels.
+- **Garden chat (`/api/ai/garden`):** Workers AI maps a wish to a style, elements to add or avoid, and an optional season/weather. `designGarden` places everything deterministically. The endpoint is rate-limited (30 requests per IP per day, 600 globally per day).
+- **New "lush" style:** a pergola and seating by the terrace, a grove, a greenhouse, borders, and lights.
+- **Gate edge:** the street-facing edge is detected from VersaTiles road lines within 35 m, and any edge can be chosen. The design adds a metal fence with a 4 m sliding gate on that edge, aligned with the driveway, and a hedge on the remaining edges. Paths and driveways head to that edge.
+- **Report button:** opens 3D in the background, waits for surroundings and the orthophoto, captures an overview and a close-up, samples terrain (GUGiK NMT) into the report only, then restores your view.

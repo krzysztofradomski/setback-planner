@@ -229,7 +229,7 @@ test("mobile introduction and example exit stay inside the screen in Polish", as
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await page.getByRole("button", { name: "PL", exact: true }).click();
+  await page.evaluate(() => localStorage.setItem("setback-planner-lang", "pl"));await page.reload();
   await expect(
     page.getByRole("heading", {
       name: "Zacznij od swojej działki",

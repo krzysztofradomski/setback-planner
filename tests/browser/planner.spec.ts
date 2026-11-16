@@ -30,7 +30,7 @@ test('legacy uncompressed shared URLs remain readable', async ({ page }) => {
 test('Polish translation and mobile plan are usable', async ({ page }) => {
   await page.setViewportSize({width:390,height:844});
   await page.goto('/');
-  await page.getByRole('button', {name:'PL',exact:true}).click();
+  await page.evaluate(()=>localStorage.setItem('setback-planner-lang','pl'));await page.reload();
   await expect(page.locator('html')).toHaveAttribute('lang','pl');
   await expect(page.locator('#add-house')).toHaveText('Dom');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -168,7 +168,7 @@ test('a building touching a parcel edge fails its positive setback',async({page}
   await expect(page.locator('#chipbar')).toContainText('1 to check');
 });
 test('Polish controls remain inside the plan at 320px',async({page})=>{
-  await page.setViewportSize({width:320,height:750});await page.goto('/');await page.getByRole('button',{name:'PL',exact:true}).click();
+  await page.setViewportSize({width:320,height:750});await page.goto('/');await page.evaluate(()=>localStorage.setItem('setback-planner-lang','pl'));await page.reload();
   const stage=await page.locator('.stage').boundingBox();
   for(const button of await page.locator('.tools button').all()){
     const rect=await button.boundingBox();expect(rect!.x).toBeGreaterThanOrEqual(stage!.x);expect(rect!.x+rect!.width).toBeLessThanOrEqual(stage!.x+stage!.width);
