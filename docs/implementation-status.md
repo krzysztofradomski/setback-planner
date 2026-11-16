@@ -15,3 +15,5 @@ Dependency review: transitive minimatch override uses patched 11.x; npm audit re
 F003 completed: strict v2 scene, atomic legacy migration, bounded decompression, full-state sharing, latest-edit clipboard sharing, and startup recovery without overwriting unsupported stored projects. Tests: 9 unit and 5 browser tests. Next: F004 project files, variants and full undo/redo.
 
 F004 completed: JSON files, 20 named local variants, full-scene undo/redo, detached duplication, and settings recovery. Review covered storage failures, invalid imports, undo after import, ID regeneration and redo invalidation. 11 unit/6 browser tests pass; build/lint/typecheck pass. Next: F005 generic footprints.
+
+F005 completed: generic rectangle/L/T/U footprints, wing proportion, storeys, height, roof and pitch settings. SVG, coverage and collision checks use shared transformed footprints; resizing retains four bounding handles. ID validation prevents markup injection via data attributes. Review verified concave wall iteration and independent duplicated architecture. 13 unit/7 browser tests pass. Next: F006 materials.

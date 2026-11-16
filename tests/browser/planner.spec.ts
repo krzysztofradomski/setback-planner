@@ -82,3 +82,25 @@ test('full drawing undo/redo, variants and project file restore', async ({ page 
   await expect(page.locator('.obj')).toHaveCount(2);
   await expect(page.locator('#o-dims')).toHaveValue('selected');
 });
+test('generic concave footprint and architecture survive sharing, duplication and undo', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read','clipboard-write']);
+  await page.goto('/');
+  await page.locator('#architecture-options').evaluate((el:HTMLDetailsElement)=>el.open=true);
+  await page.locator('#f-shape').selectOption('L');
+  await page.locator('#f-height').fill('6');
+  await page.locator('#f-storeys').fill('2');
+  await page.locator('#b-link').click();
+  const url=await page.evaluate(()=>navigator.clipboard.readText());
+  await page.goto(url);
+  await expect(page.locator('#f-shape')).toHaveValue('L');
+  await expect(page.locator('#f-height')).toHaveValue('6');
+  await expect(page.locator('#sheet .handle')).toHaveCount(4);
+  const path=await page.locator('#sheet .bld').first().getAttribute('d');
+  expect(path!.split('L').length).toBe(6);
+  await page.locator('#b-dup').click();
+  await expect(page.locator('.obj')).toHaveCount(3);
+  await page.locator('#architecture-options').evaluate((el:HTMLDetailsElement)=>el.open=true);
+  await page.locator('#f-shape').selectOption('U');
+  await page.locator('#objs .obj').first().click();
+  await expect(page.locator('#f-shape')).toHaveValue('L');
+});

@@ -5,8 +5,10 @@ const finite=z.number().finite();
 const coord=finite.min(-1e5).max(1e5);
 export const pointSchema=z.object({x:coord,y:coord}).strict();
 export const itemSchema=z.object({
-  id:z.string().min(1).max(80),type:z.enum(['house','garage']),name:z.string().max(60),
+  id:z.string().min(1).max(80).regex(/^[\w-]+$/),type:z.enum(['house','garage']),name:z.string().max(60),
   x:coord,y:coord,w:finite.min(0.5).max(1000),d:finite.min(0.5).max(1000),
+  shape:z.enum(['rectangle','L','T','U']).default('rectangle'),wingRatio:finite.min(0.15).max(0.45).default(0.3),
+  architecture:z.object({storeys:z.number().int().min(1).max(3),height:finite.min(0.5).max(30),roof:z.enum(['flat','gable']),pitch:finite.min(0).max(60)}).strict().default({storeys:1,height:3,roof:'gable',pitch:30}),
   rot:finite.min(-36000).max(36000).default(0),setback:finite.min(0).max(1000).default(4),
 }).strict();
 export const sceneSchema=z.object({

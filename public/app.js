@@ -1,6 +1,7 @@
+import { worldFootprint, boundingCorners } from './core/footprints.ts';
 import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
 import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
-import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts';
+import { containsPolygon, polygonRelation, validRing, polygonArea } from './core/geometry.ts';
 
 (async () => {
   const $ = s => document.querySelector(s);
@@ -9,6 +10,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
   // ---------- i18n ----------
   const I18N = {
     en: {
+      shape:'Footprint shape', rectangle:'Rectangular', wingRatio:'Wing proportion', height:'Wall height total (m)', storeys:'Storeys', roof:'Roof', flat:'Flat', gable:'Gable', pitch:'Roof pitch (°)', genericHint:'Generic conceptual house. Dimensions are user-defined; no manufacturer specifications or legal approval.',
       redo:'Redo', downloadProject:'Download JSON', openFile:'Open JSON file', variants:'Local variants', variantName:'Variant name', saveVariant:'Save as variant', openVariant:'Open variant', variantHint:'Stored only in this browser, up to 20 variants. Download JSON for a backup.', variantError:'Could not save or read variants. Check the name, storage space and 20-variant limit.',
       docTitle: 'Setback Planner', title: 'Setback Planner', tagline: 'Plot outline on a 1 m grid, buildings, and every clearance.',
       language: 'Language', controls: 'Controls', addBuilding: 'Add building', house: 'House', garage: 'Garage', buildings: 'Buildings',
@@ -36,6 +38,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      shape:'Kształt obrysu', rectangle:'Prostokątny', wingRatio:'Proporcja skrzydła', height:'Łączna wysokość ścian (m)', storeys:'Kondygnacje', roof:'Dach', flat:'Płaski', gable:'Dwuspadowy', pitch:'Kąt dachu (°)', genericHint:'Dom koncepcyjny. Wymiary określa użytkownik; bez specyfikacji producenta i potwierdzenia zgodności z prawem.',
       redo:'Ponów', downloadProject:'Pobierz JSON', openFile:'Otwórz plik JSON', variants:'Warianty lokalne', variantName:'Nazwa wariantu', saveVariant:'Zapisz jako wariant', openVariant:'Otwórz wariant', variantHint:'Tylko w tej przeglądarce, do 20 wariantów. Pobierz JSON jako kopię zapasową.', variantError:'Nie można zapisać lub odczytać wariantów. Sprawdź nazwę, pamięć i limit 20 wariantów.',
       docTitle: 'Planer odległości od granic', title: 'Planer odległości', tagline: 'Obrys działki na siatce 1 m, budynki i wszystkie odległości.',
       language: 'Język', controls: 'Sterowanie', addBuilding: 'Dodaj budynek', house: 'Dom', garage: 'Garaż', buildings: 'Budynki',
@@ -153,10 +156,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
   const len = a => Math.hypot(a.x, a.y);
   const edges = poly => poly.map((p,i) => [p, poly[(i+1) % poly.length]]);
 
-  function corners(it){
-    const r = it.rot * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), hw = it.w/2, hd = it.d/2;
-    return [[-hw,-hd],[hw,-hd],[hw,hd],[-hw,hd]].map(([u,v]) => ({x: it.x + u*c - v*s, y: it.y + u*s + v*c}));
-  }
+  const corners = worldFootprint;
   function rayHit(P, n, segs){
     let best = Infinity;
     for (const [Q,R] of segs){
@@ -198,8 +198,8 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     let best = null;
     for (const [X,Y] of [[ca,cb],[cb,ca]]){
       const segs = edges(Y);
-      for (let i = 0; i < 4; i++){
-        const A = X[i], B = X[(i+1)%4];
+      for (let i = 0; i < X.length; i++){
+        const A = X[i], B = X[(i+1)%X.length];
         const r = clearance(A, B, outwardNormal(A,B), segs, Y);
         if (r && (!best || r.t < best.t)) best = {...r, perp: true};
       }
@@ -219,8 +219,8 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     for (const it of state.items){
       const c = corners(it), inside = validRing(state.plot) && containsPolygon(state.plot, c);
       const sides = [];
-      for (let i = 0; i < 4; i++){
-        const A = c[i], B = c[(i+1)%4], n = outwardNormal(A,B);
+      for (let i = 0; i < c.length; i++){
+        const A = c[i], B = c[(i+1)%c.length], n = outwardNormal(A,B);
         const r = clearance(A, B, n, plotSegs, state.plot);
         sides.push({name: sideName(n), P: r && r.P, Q: r && r.Q, t: r ? r.t : null, warn: r ? r.t < it.setback - 1e-9 : false});
       }
@@ -364,7 +364,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     // resize handles
     const s = get(selected);
     if (s){
-      C.res.get(s.id).c.map(S).forEach((p, i) => {
+      boundingCorners(s).map(S).forEach((p, i) => {
         out.push(`<rect class="handle" data-kind="handle" data-id="${s.id}" data-ci="${i}" x="${f(p.x-5.5)}" y="${f(p.y-5.5)}" width="11" height="11" style="cursor:${i % 2 ? 'nesw' : 'nwse'}-resize"/>`);
       });
     }
@@ -408,6 +408,17 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
           <div class="field"><label for="f-rot">${t('rotation')}</label><input id="f-rot" type="number" step="1" inputmode="decimal"></div>
           <div class="field"><label for="f-sb">${t('minSetback')}</label><input id="f-sb" type="number" step="0.5" min="0" inputmode="decimal"></div>
         </div>
+        <details id="architecture-options"><summary>${t('shape')} · ${t('roof')}</summary>
+          <p class="hint">${t('genericHint')}</p>
+          <div class="grid2">
+            <div class="field"><label for="f-shape">${t('shape')}</label><select id="f-shape">${['rectangle','L','T','U'].map(s=>`<option value="${s}">${s==='rectangle'?t('rectangle'):s}</option>`).join('')}</select></div>
+            <div class="field"><label for="f-wing">${t('wingRatio')}</label><input id="f-wing" type="number" min="0.15" max="0.45" step="0.05"></div>
+            <div class="field"><label for="f-storeys">${t('storeys')}</label><input id="f-storeys" type="number" min="1" max="3" step="1"></div>
+            <div class="field"><label for="f-height">${t('height')}</label><input id="f-height" type="number" min="0.5" max="30" step="0.1"></div>
+            <div class="field"><label for="f-roof">${t('roof')}</label><select id="f-roof"><option value="flat">${t('flat')}</option><option value="gable">${t('gable')}</option></select></div>
+            <div class="field"><label for="f-pitch">${t('pitch')}</label><input id="f-pitch" type="number" min="0" max="60" step="1"></div>
+          </div>
+        </details>
         <div class="row"><button id="b-rot">${t('rotate90')}</button><button id="b-dup">${t('duplicate')}</button><button id="b-del" class="danger">${t('del')}</button></div>
         <h3 class="lbl sm">${t('clearance')}</h3><div class="readout" id="f-clear"></div>
         <h3 class="lbl sm">${t('gaps')}</h3><div class="readout" id="f-gaps"></div>`;
@@ -415,10 +426,16 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
       let pending = false;
       nameEl.addEventListener('focus', () => { pending = true; });
       nameEl.addEventListener('input', () => { if (pending){ snapshot(); pending = false; } it.name = nameEl.value.slice(0, 60); render(); });
-      bindNum('f-w', v => { it.w = Math.max(0.5, v); });
-      bindNum('f-d', v => { it.d = Math.max(0.5, v); });
+      bindNum('f-w', v => { it.w = Math.min(1000, Math.max(0.5, v)); });
+      bindNum('f-d', v => { it.d = Math.min(1000, Math.max(0.5, v)); });
       bindNum('f-rot', v => { it.rot = ((v % 360) + 360) % 360; });
-      bindNum('f-sb', v => { it.setback = Math.max(0, v); });
+      bindNum('f-sb', v => { it.setback = Math.min(1000, Math.max(0, v)); });
+      $('#f-shape').onchange=e=>{snapshot();it.shape=e.target.value;render();};
+      $('#f-roof').onchange=e=>{snapshot();it.architecture.roof=e.target.value;render();};
+      bindNum('f-wing',v=>it.wingRatio=Math.max(0.15,Math.min(0.45,v)));
+      bindNum('f-storeys',v=>it.architecture.storeys=Math.max(1,Math.min(3,Math.round(v))));
+      bindNum('f-height',v=>it.architecture.height=Math.max(0.5,Math.min(30,v)));
+      bindNum('f-pitch',v=>it.architecture.pitch=Math.max(0,Math.min(60,v)));
       $('#b-rot').onclick = () => rotate90();
       $('#b-dup').onclick = () => duplicate();
       $('#b-del').onclick = () => removeSelected();
@@ -430,6 +447,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     const it = get(selected);
     if (it){
       setVal('f-w', fmtN(it.w)); setVal('f-d', fmtN(it.d)); setVal('f-rot', fmtN(it.rot)); setVal('f-sb', fmtN(it.setback));
+      setVal('f-shape',it.shape); setVal('f-wing',it.wingRatio);setVal('f-height',it.architecture.height);setVal('f-storeys',it.architecture.storeys);setVal('f-roof',it.architecture.roof);setVal('f-pitch',it.architecture.pitch);
       if (force) setVal('f-name', it.name);
       const r = C.res.get(it.id);
       let h = '';
@@ -461,7 +479,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     // plot
     const area = polyArea(state.plot);
     let per = 0; edges(state.plot).forEach(([a,b]) => per += len(sub(b,a)));
-    const built = state.items.reduce((s, i) => s + i.w * i.d, 0);
+    const built = state.items.reduce((s, i) => s + polygonArea(corners(i)), 0);
     $('#p-area').textContent = group(area) + ' m²';
     $('#p-ares').textContent = dec((area / 100).toFixed(2)) + ' a';
     $('#p-per').textContent = dec(per.toFixed(1)) + ' m';
@@ -504,7 +522,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     snapshot();
     const ty = TYPES[type], n = state.items.filter(i => i.type === type).length;
     const cx = state.plot.reduce((s,p)=>s+p.x,0)/4, cy = state.plot.reduce((s,p)=>s+p.y,0)/4;
-    const it = {id: 'o' + (uid++), type, name: t(type) + (n ? ' ' + (n + 1) : ''), x: cx, y: cy, w: ty.w, d: ty.d, rot: 0, setback: ty.setback};
+    const it = {...parseScene({plot:state.plot,items:[{id:'new',type,name:t(type),x:cx,y:cy,w:ty.w,d:ty.d,rot:0,setback:ty.setback}]}).items[0], id: 'o' + (uid++), type, name: t(type) + (n ? ' ' + (n + 1) : ''), x: cx, y: cy, w: ty.w, d: ty.d, rot: 0, setback: ty.setback};
     snapItem(it);
     state.items.push(it); selected = it.id;
     buildPanel(); render();
@@ -590,7 +608,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
       it.x = drag.x0 + w.x - drag.wx; it.y = drag.y0 + w.y - drag.wy; snapItem(it);
     } else if (drag.mode === 'handle'){
       const it = get(drag.id); if (!it) return;
-      const st = drag.start, F = corners(st)[(drag.ci + 2) % 4];
+      const st = drag.start, F = boundingCorners(st)[(drag.ci + 2) % 4];
       const sx = [-1, 1, 1, -1][drag.ci], sy = [-1, -1, 1, 1][drag.ci];
       const r = st.rot * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
       const v = sub(w, F), u = v.x*c + v.y*s, vv = -v.x*s + v.y*c;

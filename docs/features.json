@@ -111,14 +111,24 @@
       "dependencies": [
         "F003"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Rectangle, L, T and U footprints with editable dimensions",
         "Same footprint drives SVG, collisions and coverage",
         "Architectural height and roof controls persist"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/footprints.test.ts (12 shape/proportion cases)",
+        "tests/browser/planner.spec.ts (7 passing)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "Wing proportions are generic user parameters; no manufacturer dimensions are implied.",
+        "Attached garages/carports and custom polygons are queued in F024.",
+        "Roof/height properties are stored now; 3D rendering is F008."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]
