@@ -29,3 +29,9 @@ Unit/integration tests run against deterministic fixtures and a real SQLite sche
 Production: https://setback-planner.paperplane.builders/ . Staging: https://setback-planner-staging.stronginarm.workers.dev/ . D1 schema migrations are applied independently. Secrets and first-owner credentials are outside Git in the owner's protected Codex private directory. Remove bootstrap secrets after owner creation. Cloudflare invocation/error logs and sampled traces are configured; use its dashboard for AI neurons and storage usage.
 
 Rollback: use Cloudflare Worker deployment rollback to the previous version; retain the additive D1 schema and database backups. Do not reset or delete production databases when rolling back static/editor code.
+
+## Release verification
+
+Application source `c367969` was fast-forwarded to `main`, pushed to origin and deployed to both environments on 2026-11-16. Production deployment initially returned version `54ec976f-1f2f-483c-9bde-4aa7ed7e24e2`; subsequent secret configuration creates newer Cloudflare versions without changing application source. Final staging application deployment: `93d9309c-5d1a-4b24-a832-8e5f1c4d8f52`.
+
+Passed: 61 unit/integration tests, 31 Playwright browser journeys, 3 built-production smoke journeys, TypeScript checks, ESLint and npm audit (zero vulnerabilities). Vite emits the documented optional chunk-size warning. Live production checks confirmed editor add, rendered 3D, showroom logout/enter/exit, authenticated owner/D1 management and no uncaught browser exceptions. Both hosts return health 200 and anonymous private API 401; bootstrap returns 403 after temporary secrets were removed. Staging live Workers AI extraction and summary returned independently verified source citations. No public recipients were enabled and no messages were sent.
