@@ -140,3 +140,19 @@ test('optional catalog can be disabled without deleting placed fallback building
   await expect(page.locator('#f-name')).toHaveValue('User-defined fallback');
   await expect(page.locator('#catalog-models')).toContainText('DE 75');
 });
+test('projected GeoJSON imports arbitrary corners and preserves provenance through sharing and undo', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read','clipboard-write']);await page.goto('/');
+  await page.locator('#parcel-import').evaluate((el:HTMLDetailsElement)=>el.open=true);
+  await page.locator('#parcel-crs').selectOption('EPSG:2180');
+  const data={type:'Polygon',coordinates:[[[500000,500000],[500020,500000],[500020,500010],[500010,500010],[500010,500030],[500000,500030],[500000,500000]]]};
+  await page.locator('#parcel-file').setInputFiles({name:'six-corners.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(data))});
+  await expect(page.locator('#p-corners tr')).toHaveCount(6);
+  await expect(page.locator('#parcel-source')).toContainText('EPSG:2180');
+  await page.locator('#b-link').click();await page.goto(await page.evaluate(()=>navigator.clipboard.readText()));
+  await expect(page.locator('#p-corners tr')).toHaveCount(6);
+  await page.locator('#b-rect').click();await expect(page.locator('#p-corners tr')).toHaveCount(4);
+  await expect(page.locator('#parcel-source')).toBeEmpty();
+  await page.locator('#t-undo').click();await expect(page.locator('#p-corners tr')).toHaveCount(6);
+  await page.locator('#pc-x-0').fill('1');await page.locator('#rw').focus();
+  await expect(page.locator('#parcel-source')).toContainText('edited locally');
+});

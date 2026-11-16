@@ -12,6 +12,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   // ---------- i18n ----------
   const I18N = {
     en: {
+      importParcel:'Import parcel (GeoJSON)', sourceCrs:'Source coordinates', openParcel:'Open parcel file', parcelImportHint:'One polygon, up to 512 vertices. Holes and separate parts are rejected. Replaces the parcel; keeps buildings at their local positions. Confirm their placement after import.', parcelImportError:'Parcel import failed. Check CRS, closure and geometry; holes and separate parts are not supported.', parcelEdited:'Boundary edited locally; source geometry has changed.', north:'Grid north ↑',
       topView:'Top', axonView:'Axonometric', screenshot:'Screenshot', lowQuality:'Low power', viewerHint:'Conceptual massing. Artistic lighting; no terrain or neighboring heights. Shadows are approximate. Concave pitched roofs use a flat schematic cap.', viewerFailure:'3D is unavailable on this device. Continue planning in 2D.', loading3d:'Loading 3D…',
       catalogs:'Optional catalogs', catalogHint:'Source metadata only. Authoritative dimensions and approved assets are unavailable; generic houses remain available.', catalogUnavailable:'Catalog unavailable or disabled. Saved user-defined fallback geometry is retained.', enableCatalog:'Enable catalog', catalogError:'Catalog could not be loaded. Generic planning remains available.', source:'Source', verifiedOn:'Checked', noDimensions:'Dimensions unverified · placement unavailable',
       materials:'Materials', facade:'Façade finish', grout:'Grout color', roofColor:'Roof color', frameColor:'Window / door color', gutterColor:'Gutter color', trimColor:'Trim color', tileWidth:'Tile width (m)', tileHeight:'Tile height (m)', layout:'Tile direction', horizontal:'Horizontal', vertical:'Vertical', wallFinish:'Individual wall', allWalls:'All walls', inherit:'Use façade finish', resetMaterials:'Reset all finishes', resetFacade:'Reset façade', original:'Compare original', materialHint:'Conceptual finishes, not manufacturer-approved options. No price calculation. Patterns are schematic.',
@@ -43,6 +44,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      importParcel:'Import działki (GeoJSON)', sourceCrs:'Współrzędne źródłowe', openParcel:'Otwórz plik działki', parcelImportHint:'Jeden wielokąt, do 512 wierzchołków. Otwory i odrębne części są odrzucane. Zastępuje działkę; budynki pozostają na pozycjach lokalnych. Sprawdź ich położenie po imporcie.', parcelImportError:'Import nieudany. Sprawdź układ, zamknięcie i geometrię; otwory i odrębne części nie są obsługiwane.', parcelEdited:'Granica edytowana lokalnie; geometria źródłowa została zmieniona.', north:'Północ siatki ↑',
       topView:'Z góry', axonView:'Aksonometria', screenshot:'Zrzut ekranu', lowQuality:'Oszczędzanie energii', viewerHint:'Bryły koncepcyjne. Oświetlenie artystyczne, brak terenu i wysokości sąsiadów. Cienie przybliżone. Dachy spadziste brył wklęsłych pokazano jako płaski schemat.', viewerFailure:'Widok 3D niedostępny na tym urządzeniu. Kontynuuj w 2D.', loading3d:'Wczytywanie 3D…',
       catalogs:'Katalogi opcjonalne', catalogHint:'Tylko metadane źródłowe. Brak potwierdzonych wymiarów i zatwierdzonych zasobów; domy ogólne są dostępne.', catalogUnavailable:'Katalog niedostępny lub wyłączony. Zachowano zapisany obrys użytkownika.', enableCatalog:'Włącz katalog', catalogError:'Nie można wczytać katalogu. Planowanie ogólne jest nadal dostępne.', source:'Źródło', verifiedOn:'Sprawdzono', noDimensions:'Wymiary niepotwierdzone · brak umieszczania',
       materials:'Materiały', facade:'Wykończenie elewacji', grout:'Kolor fugi', roofColor:'Kolor dachu', frameColor:'Kolor okien / drzwi', gutterColor:'Kolor rynien', trimColor:'Kolor detali', tileWidth:'Szerokość płytki (m)', tileHeight:'Wysokość płytki (m)', layout:'Kierunek płytek', horizontal:'Poziomo', vertical:'Pionowo', wallFinish:'Pojedyncza ściana', allWalls:'Wszystkie ściany', inherit:'Wykończenie elewacji', resetMaterials:'Resetuj wykończenia', resetFacade:'Resetuj elewację', original:'Porównaj oryginał', materialHint:'Wykończenia koncepcyjne, bez zatwierdzenia producenta i kalkulacji cen. Wzory są schematyczne.',
@@ -160,6 +162,8 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   let uid = state.items.reduce((m, i) => Math.max(m, parseInt(String(i.id).replace(/\D/g, '')) || 0), 0) + 1;
   let selected = state.items[0] ? state.items[0].id : null;
   const get = id => state.items.find(i => i.id === id);
+  const cornerName=i=>i<26?String.fromCharCode(65+i):String(i+1);
+  function markParcelEdited(){if(state.parcel)state.parcel.edited=true;}
 
   const history = new ProjectHistory();
   function snapshot(){ history.record(state); }
@@ -169,7 +173,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     if (!get(selected)) selected = null;
     uid = state.items.reduce((m,i) => Math.max(m, parseInt(String(i.id).replace(/\D/g,'')) || 0),0)+1;
     $('#o-snap').value=String(state.snap); $('#o-dims').value=state.dimScope; $('#o-pairs').checked=state.showPairs;
-    buildPanel(); render();
+    buildCorners(); buildPanel(); render();
   }
   function undo(){ restoreHistory(history.undo(state)); }
   function redo(){ restoreHistory(history.redo(state)); }
@@ -374,15 +378,15 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     out.push(...labels);
 
     // plot side lengths and corners
-    const cen = {x: pp.reduce((s,p)=>s+p.x,0)/4, y: pp.reduce((s,p)=>s+p.y,0)/4};
-    const names = ['A','B','C','D'];
-    for (let i = 0; i < 4; i++){
-      const a = pp[i], b = pp[(i+1)%4], m = {x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+    const cen = {x: pp.reduce((s,p)=>s+p.x,0)/pp.length, y: pp.reduce((s,p)=>s+p.y,0)/pp.length};
+    const names = state.plot.map((_,i)=>cornerName(i));
+    for (let i = 0; i < pp.length; i++){
+      const a = pp[i], b = pp[(i+1)%pp.length], m = {x:(a.x+b.x)/2, y:(a.y+b.y)/2};
       let n = outwardNormal(a, b); if (dot(n, sub(m, cen)) < 0) n = mul(n, -1);
-      const L = len(sub(state.plot[(i+1)%4], state.plot[i]));
+      const L = len(sub(state.plot[(i+1)%state.plot.length], state.plot[i]));
       let ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang <= -90) ang += 180;
       const lx = m.x + n.x * 13, ly = m.y + n.y * 13;
-      out.push(`<text class="edget" x="${f(lx)}" y="${f(ly)}" dy="4" text-anchor="middle" transform="rotate(${ang.toFixed(1)} ${f(lx)} ${f(ly)})">${names[i]}${names[(i+1)%4]} ${fmt(L)}</text>`);
+      out.push(`<text class="edget" x="${f(lx)}" y="${f(ly)}" dy="4" text-anchor="middle" transform="rotate(${ang.toFixed(1)} ${f(lx)} ${f(ly)})">${names[i]}${names[(i+1)%names.length]} ${fmt(L)}</text>`);
     }
     pp.forEach((p, i) => {
       const v = sub(p, cen), l = len(v) || 1, lx = p.x + v.x/l * 20, ly = p.y + v.y/l * 20;
@@ -536,32 +540,33 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     const area = polyArea(state.plot);
     let per = 0; edges(state.plot).forEach(([a,b]) => per += len(sub(b,a)));
     const built = state.items.reduce((s, i) => s + polygonArea(corners(i)), 0);
+    $('#parcel-source').textContent=state.parcel ? `${state.parcel.source.name} · ${state.parcel.source.retrievedAt} · ${state.parcel.source.crs}${state.parcel.edited?' · '+t('parcelEdited'):''}` : '';
     $('#p-area').textContent = group(area) + ' m²';
     $('#p-ares').textContent = dec((area / 100).toFixed(2)) + ' a';
     $('#p-per').textContent = dec(per.toFixed(1)) + ' m';
     $('#p-cov').textContent = t('built', {v: dec(area ? (built / area * 100).toFixed(1) : '0')});
-    const names = ['A','B','C','D'];
+    const names = state.plot.map((_,i)=>cornerName(i));
     state.plot.forEach((p, i) => {
       setVal('pc-x-' + i, fmtN(p.x)); setVal('pc-y-' + i, fmtN(p.y));
-      const q = state.plot[(i+1)%4];
-      document.getElementById('pc-l-' + i).textContent = names[i] + names[(i+1)%4] + ' ' + dec(len(sub(q,p)).toFixed(2));
+      const q = state.plot[(i+1)%state.plot.length];
+      document.getElementById('pc-l-' + i).textContent = names[i] + names[(i+1)%names.length] + ' ' + dec(len(sub(q,p)).toFixed(2));
     });
 
     const plotValid = validRing(state.plot);
     const warnCount = state.items.filter(i => C.res.get(i.id).warn).length;
     $('#chipbar').innerHTML = (!plotValid ? `<span style="color:var(--warn)">${lang === 'pl' ? 'Nieprawidłowa granica działki' : 'Invalid parcel boundary'}</span>` : '') + `<span>${group(area)} m² · ${dec((area/100).toFixed(2))} a</span>` +
-      (state.items.length ? `<span style="color:var(${warnCount ? '--warn' : '--ok'})">${warnCount ? t('toCheck', {n: warnCount}) : t('allMet')}</span>` : '');
+      (state.coordinates.projected?`<span>${t('north')}</span>`:'') + (state.items.length ? `<span style="color:var(${warnCount ? '--warn' : '--ok'})">${warnCount ? t('toCheck', {n: warnCount}) : t('allMet')}</span>` : '');
   }
 
   function buildCorners(){
-    const names = ['A','B','C','D'];
+    const names = state.plot.map((_,i)=>cornerName(i));
     $('#p-corners').innerHTML = names.map((n, i) => `<tr><td>${n}</td>
       <td><input id="pc-x-${i}" type="number" step="0.1" inputmode="decimal" aria-label="${t('cornerAxis', {c: n, axis: 'x'})}"></td>
       <td><input id="pc-y-${i}" type="number" step="0.1" inputmode="decimal" aria-label="${t('cornerAxis', {c: n, axis: 'y'})}"></td>
       <td class="len" id="pc-l-${i}"></td></tr>`).join('');
-    for (let i = 0; i < 4; i++){
-      bindNum('pc-x-' + i, v => { state.plot[i].x = v; });
-      bindNum('pc-y-' + i, v => { state.plot[i].y = v; });
+    for (let i = 0; i < state.plot.length; i++){
+      bindNum('pc-x-' + i, v => { state.plot[i].x = v; markParcelEdited(); });
+      bindNum('pc-y-' + i, v => { state.plot[i].y = v; markParcelEdited(); });
     }
   }
 
@@ -577,7 +582,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   function addItem(type){
     snapshot();
     const ty = TYPES[type], n = state.items.filter(i => i.type === type).length;
-    const cx = state.plot.reduce((s,p)=>s+p.x,0)/4, cy = state.plot.reduce((s,p)=>s+p.y,0)/4;
+    const cx = state.plot.reduce((s,p)=>s+p.x,0)/state.plot.length, cy = state.plot.reduce((s,p)=>s+p.y,0)/state.plot.length;
     const it = {...parseScene({plot:state.plot,items:[{id:'new',type,name:t(type),x:cx,y:cy,w:ty.w,d:ty.d,rot:0,setback:ty.setback}]}).items[0], id: 'o' + (uid++), type, name: t(type) + (n ? ' ' + (n + 1) : ''), x: cx, y: cy, w: ty.w, d: ty.d, rot: 0, setback: ty.setback};
     snapItem(it);
     state.items.push(it); selected = it.id;
@@ -658,6 +663,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     }
     const w = toWorld(pt);
     if (drag.mode === 'corner'){
+      markParcelEdited();
       state.plot[drag.i] = {x: snapV(drag.x0 + w.x - drag.wx), y: snapV(drag.y0 + w.y - drag.wy)};
     } else if (drag.mode === 'item'){
       const it = get(drag.id); if (!it) return;
@@ -740,7 +746,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   $('#b-rect').onclick = () => {
     const w = parseFloat($('#rw').value), d = parseFloat($('#rd').value);
     if (!(w > 0 && d > 0)){ toast(t('badRect')); return; }
-    snapshot(); state.plot = [{x:0,y:0},{x:w,y:0},{x:w,y:d},{x:0,y:d}]; fit(); render();
+    snapshot(); state.plot = [{x:0,y:0},{x:w,y:0},{x:w,y:d},{x:0,y:d}]; delete state.parcel; delete state.coordinates.projected; buildCorners(); fit(); render();
   };
   const snapSel = $('#o-snap'); snapSel.value = String(state.snap);
   if (snapSel.value === '') snapSel.value = '0.5';
@@ -774,7 +780,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     snapSel.value = String(state.snap); dimSel.value = state.dimScope; pairChk.checked = state.showPairs;
     uid = state.items.reduce((m, i) => Math.max(m, parseInt(String(i.id).replace(/\D/g, '')) || 0), 0) + 1;
     selected = state.items[0] ? state.items[0].id : null;
-    fit(); buildPanel(); render(); toast(msg);
+    fit(); buildCorners(); buildPanel(); render(); toast(msg);
   }
   $('#b-load').onclick = () => {
     let o; try { if (new TextEncoder().encode($('#io').value).length > MAX_PROJECT_BYTES) throw new Error('large'); o = clean(JSON.parse($('#io').value)); } catch (_) { o = null; }
@@ -791,6 +797,16 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     const file=e.target.files[0]; if(!file)return;
     try { if(file.size>MAX_PROJECT_BYTES)throw new Error('large'); applyPlan(parseScene(JSON.parse(await file.text())),t('planLoaded')); }
     catch { toast(t('notAPlan')); } finally { e.target.value=''; }
+  };
+  $('#parcel-file-button').onclick=()=>$('#parcel-file').click();
+  $('#parcel-file').onchange=async e=>{
+    const file=e.target.files[0];if(!file)return;
+    try{
+      if(file.size>MAX_PROJECT_BYTES)throw new Error('large');
+      const {importParcel}=await import('./core/geospatial.ts');
+      const parcel=importParcel(JSON.parse(await file.text()),$('#parcel-crs').value,file.name.slice(0,120),new Date().toISOString());
+      applyPlan(parseScene({...state,...parcel}),t('planLoaded'));
+    }catch{toast(t('parcelImportError'));}finally{e.target.value='';}
   };
   const VARIANT_LS='setback-planner-variants-v1';
   const loadVariants=()=>readVariants(localStorage.getItem(VARIANT_LS)||'[]');
@@ -821,7 +837,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     if (!resetArmed){ resetArmed = true; b.textContent = t('resetConfirm'); resetT = setTimeout(() => { resetArmed = false; b.textContent = t('resetExample'); }, 3000); return; }
     clearTimeout(resetT); resetArmed = false; b.textContent = t('resetExample');
     snapshot(); state = parseScene(DEFAULT()); persistencePaused = false; $('#project-warning').hidden = true;
-    uid = 3; selected = 'o1'; fit(); buildPanel(); render(); toast(t('exampleRestored'));
+    uid = 3; selected = 'o1'; fit(); buildCorners(); buildPanel(); render(); toast(t('exampleRestored'));
   };
   $('#t-undo').onclick = undo; $('#t-redo').onclick = redo;
   $('#t-in').onclick = () => zoomAt(svg.clientWidth/2, svg.clientHeight/2, 1.25);
@@ -832,8 +848,8 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     lang = b.dataset.lang;
     try { localStorage.setItem(LANG_LS, lang); } catch (e) {}
     applyLang(); renderCatalogs(); $('#viewer-note').textContent=t('viewerHint');
-    'ABCD'.split('').forEach((c, i) => ['x', 'y'].forEach(axis =>
-      document.getElementById(`pc-${axis}-${i}`).setAttribute('aria-label', t('cornerAxis', {c, axis}))));
+    state.plot.forEach((_, i) => ['x', 'y'].forEach(axis =>
+      document.getElementById(`pc-${axis}-${i}`).setAttribute('aria-label', t('cornerAxis', {c:cornerName(i), axis}))));
     buildPanel(); render();
   });
 

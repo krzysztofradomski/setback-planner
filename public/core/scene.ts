@@ -17,8 +17,9 @@ export const itemSchema=z.object({
 }).strict();
 export const sceneSchema=z.object({
   schemaVersion:z.literal(2),units:z.literal('m'),
-  coordinates:z.object({crs:z.literal('LOCAL'),axis:z.literal('x-east-y-south')}).strict(),
-  plot:z.array(pointSchema).length(4).refine(validRing,'Invalid parcel boundary'),
+  coordinates:z.object({crs:z.literal('LOCAL'),axis:z.literal('x-east-y-south'),projected:z.object({crs:z.literal('EPSG:2180'),origin:z.object({x:finite.min(0).max(1.2e6),y:finite.min(0).max(1.2e6)}).strict()}).strict().optional()}).strict(),
+  parcel:z.object({identifier:z.string().max(80).optional(),source:z.object({name:z.string().min(1).max(120),retrievedAt:z.iso.datetime({offset:true}),crs:z.enum(['EPSG:4326','EPSG:2180']),url:z.url().refine(s=>s.startsWith('https://')).optional()}).strict(),edited:z.boolean()}).strict().optional(),
+  plot:z.array(pointSchema).min(3).max(512).refine(validRing,'Invalid parcel boundary'),
   items:z.array(itemSchema).max(100).refine(items=>new Set(items.map(i=>i.id)).size===items.length,'Duplicate object IDs'),
   snap:z.union([z.literal(0),z.literal(0.1),z.literal(0.25),z.literal(0.5),z.literal(1)]).default(0.5),
   dimScope:z.enum(['all','selected']).default('all'),showPairs:z.boolean().default(true),

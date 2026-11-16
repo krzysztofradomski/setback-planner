@@ -212,6 +212,12 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
         <thead><tr><th></th><th>x (m)</th><th>y (m)</th><th style="text-align:right" data-t="side">Side</th></tr></thead>
         <tbody id="p-corners"></tbody>
       </table>
+      <details id="parcel-import"><summary data-t="importParcel">Import parcel (GeoJSON)</summary>
+        <div class="field"><label for="parcel-crs" data-t="sourceCrs">Source coordinates</label><select id="parcel-crs"><option value="EPSG:4326">WGS84 · longitude, latitude</option><option value="EPSG:2180">PL-1992 · easting, northing</option></select></div>
+        <button id="parcel-file-button" data-t="openParcel">Open parcel file</button><input id="parcel-file" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden>
+        <p class="hint" data-t="parcelImportHint">One polygon, up to 512 vertices. Holes and separate parts are rejected. Replaces the parcel; keeps buildings at their local positions. Confirm their placement after import.</p>
+      </details>
+      <p id="parcel-source" class="hint"></p>
       <p class="hint" data-t="cornersHint">Drag the corner points A–D on the plan, or type coordinates.</p>
       <div class="inline">
         <input id="rw" type="number" step="0.5" min="1" value="24" data-t-aria="rectW" aria-label="Rectangle width in metres">

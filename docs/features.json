@@ -221,21 +221,32 @@
     },
     {
       "id": "F009",
-      "description": "CRS-aware arbitrary parcel import",
+      "description": "CRS-aware single-ring parcel import and arbitrary vertex editing",
       "dependencies": [
         "F002",
         "F003"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
-        "Validated polygon and multipolygon fixtures",
-        "Metric projection and source metadata",
-        "Arbitrary vertex parcel editor"
+        "Validated Polygon and single-part MultiPolygon import, with explicit rejection of holes and separate parts",
+        "PL-1992 projection, reversible origin and source metadata",
+        "Arbitrary vertex parcel editor with undo/share support"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/geospatial.test.ts (3 tests)",
+        "tests/browser/planner.spec.ts (10 passing)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "Holes and separate parcel parts are explicitly rejected and tracked in F025.",
+        "PL-1992 projected distances are planning measurements, not certified survey distances.",
+        "Import preserves building local positions; UI asks the user to verify placement."
+      ],
       "documentation": [
-        "docs/repository-audit.md"
+        "docs/repository-audit.md",
+        "docs/geospatial-sources.md"
       ]
     },
     {
@@ -516,6 +527,24 @@
       "knownLimitations": [],
       "documentation": [
         "docs/repository-audit.md"
+      ]
+    },
+    {
+      "id": "F025",
+      "description": "Multipart parcel topology and holes",
+      "dependencies": [
+        "F009"
+      ],
+      "status": "queued",
+      "acceptanceCriteria": [
+        "Preserve all components and holes in the scene",
+        "Containment, dimensions, rendering and export honor excluded areas",
+        "No silent geometry flattening"
+      ],
+      "tests": [],
+      "knownLimitations": [],
+      "documentation": [
+        "docs/geospatial-sources.md"
       ]
     }
   ]
