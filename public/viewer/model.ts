@@ -5,8 +5,8 @@ import { materialPresets, resolveAppearance } from '../core/materials.ts';
 import type { SceneItem } from '../core/scene.ts';
 export type TextureFactory=(materialId:keyof typeof materialPresets,appearance:ReturnType<typeof resolveAppearance>)=>THREE.Texture|null;
 export function groundShape(points:{x:number;y:number}[]){return new THREE.Shape(points.map(p=>new THREE.Vector2(p.x,-p.y)));}
-export function buildBuilding(item:SceneItem,original=false,textureFactory?:TextureFactory):THREE.Group {
-  if(item.type==='landscape'&&item.kind)return outdoorModel(item);
+export function buildBuilding(item:SceneItem,original=false,textureFactory?:TextureFactory,season='summer'):THREE.Group {
+  if(item.type==='landscape'&&item.kind)return outdoorModel(item,season);
   const root=new THREE.Group(),points=localFootprint(item),height=item.architecture.height;
   const appearance=resolveAppearance(original?{}:item.appearance);
   root.name=item.id;root.position.set(item.x,0,item.y);root.rotation.y=-item.rot*Math.PI/180;
@@ -32,7 +32,7 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
     roofGeometry=new THREE.ShapeGeometry(groundShape(points));roofGeometry.rotateX(-Math.PI/2);roofGeometry.translate(0,height,0);
     if(item.architecture.roof==='gable')root.userData.approximateRoof=true;
   }
-  const roof=new THREE.Mesh(roofGeometry,new THREE.MeshStandardMaterial({color:appearance.roofColor,roughness:0.65,side:THREE.DoubleSide}));
+  const roof=new THREE.Mesh(roofGeometry,new THREE.MeshStandardMaterial({color:season==='winter'?'#e5e7e3':appearance.roofColor,roughness:0.65,side:THREE.DoubleSide}));
   roof.name='roof';roof.castShadow=true;roof.receiveShadow=true;root.add(roof);
   return root;
 }

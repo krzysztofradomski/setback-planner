@@ -57,3 +57,5 @@ No D1/R2/Workers AI bindings, personal-data forms, accounts, showroom, commissio
 Useful commands: `npm ci`, `npx playwright install chromium`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run test:e2e`, `npm run test:production`, `npm run dev`.
 
 F014 completed: Parametric concept library with editable dimensions and maturity. Species-specific horticultural growth models and photorealistic assets are not claimed.
+
+F016 completed: Solar position is calculated with SunCalc 2.1.4 (degrees clockwise from north, converted to scene axes); source: https://github.com/mourner/suncalc . Four seasons and atmospheric presets are conceptual; shadows omit unknown neighboring heights and terrain.

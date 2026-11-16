@@ -1,3 +1,5 @@
+import {sunPosition,seasonalGround} from '../core/environment.ts';
+import {geographicPoint} from '../core/geospatial.ts';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildBuilding, groundShape, disposeObject, type TextureFactory } from './model.ts';
@@ -24,7 +26,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   const scene=new THREE.Scene(),content=new THREE.Group();scene.add(content);
   const camera=new THREE.PerspectiveCamera(42,1,0.1,10000),controls=new OrbitControls(camera,renderer.domElement);
   controls.maxPolarAngle=Math.PI*0.49;controls.enableDamping=false;controls.minDistance=2;controls.maxDistance=2000;
-  scene.add(new THREE.HemisphereLight('#e6f2ff','#6e775f',2));
+  const ambient=new THREE.HemisphereLight('#e6f2ff','#6e775f',2);scene.add(ambient);
   const sun=new THREE.DirectionalLight('#fff2d8',3);sun.position.set(-30,60,-35);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.bias=-0.0005;scene.add(sun,sun.target);
   let active=true,signature='',extent=50,center=new THREE.Vector3(),disposed=false;
   const render=()=>{if(active&&!disposed)renderer.render(scene,camera);};
@@ -38,17 +40,20 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     camera.position.copy(center).add(offset);camera.lookAt(center);controls.update();render();
   }
   function update(project:Scene,original=false){
-    const next=JSON.stringify([project.plot,project.items,original]);if(next===signature){render();return;}signature=next;
+    const next=JSON.stringify([project.plot,project.items,project.environment,project.coordinates,original]);if(next===signature){render();return;}signature=next;
     disposeObject(content);
     if(validRing(project.plot)){
-      const ground=new THREE.Mesh(new THREE.ShapeGeometry(groundShape(project.plot)),new THREE.MeshStandardMaterial({color:'#94ad7c',side:THREE.DoubleSide,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
+      const ground=new THREE.Mesh(new THREE.ShapeGeometry(groundShape(project.plot)),new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
       const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(project.plot.map(p=>new THREE.Vector3(p.x,0.03,p.y))),new THREE.LineBasicMaterial({color:'#405442'}));content.add(boundary);
     }
-    for(const item of project.items)content.add(buildBuilding(item,original,makeTexture));
+    for(const item of project.items)content.add(buildBuilding(item,original,makeTexture,project.environment.season));
     content.updateMatrixWorld(true);
     const bounds=new THREE.Box3().setFromObject(content),size=bounds.getSize(new THREE.Vector3());
     center=bounds.getCenter(new THREE.Vector3());extent=Math.max(size.x,size.z,20);
-    const range=extent;sun.target.position.copy(center);sun.position.copy(center).add(new THREE.Vector3(-range,range*1.8,-range));
+    const range=extent,env=project.environment,origin=project.coordinates.projected?.origin;
+    const [lon,lat]=origin?geographicPoint([origin.x,origin.y]):[env.longitude,env.latitude];
+    const position=sunPosition(env.date,lat,lon);sun.target.position.copy(center);sun.position.copy(center).add(new THREE.Vector3(position.direction.x,position.direction.y,position.direction.z).multiplyScalar(range*2));sun.intensity=position.daylight?(env.weather==='clear'?3:1.2):0;ambient.intensity=position.daylight?1.8:.18;
+    renderer.setClearColor(position.daylight?'#dce4e7':'#15212f');scene.fog=env.weather==='clear'?null:new THREE.Fog('#b7c1c4',range*1.5,range*4);
     Object.assign(sun.shadow.camera,{left:-range,right:range,top:range,bottom:-range,near:0.1,far:range*5});sun.shadow.camera.updateProjectionMatrix();
     if(camera.position.length()===0)view('axonometric');render();
     return content.children.some(c=>c.userData.approximateRoof);
