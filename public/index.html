@@ -115,7 +115,7 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
 /* stage overlays */
 .tools{position:absolute;top:10px;right:10px;display:flex;gap:6px}
 .tools button{padding:6px 10px;box-shadow:0 1px 2px rgba(0,0,0,.08)}
-.chipbar{position:absolute;top:10px;left:10px;display:flex;flex-wrap:wrap;gap:6px;max-width:calc(100% - 220px);pointer-events:none}
+.chipbar{position:absolute;top:10px;left:10px;display:flex;flex-wrap:wrap;gap:6px;max-width:calc(100% - 290px);pointer-events:none}
 .chipbar span{white-space:nowrap;font:500 12px var(--f-num);background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:4px 8px;font-variant-numeric:tabular-nums}
 .legend{position:absolute;right:10px;bottom:10px;display:flex;flex-wrap:wrap;gap:4px 12px;background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:6px 10px;font-size:11.5px;color:var(--muted);pointer-events:none;max-width:calc(100% - 140px)}
 .legend i{display:inline-block;width:16px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
@@ -245,6 +245,14 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
         <button id="b-copy" data-t="copyJson">Copy plan JSON</button>
         <button id="b-reset" class="danger" data-t="resetExample">Reset example</button>
       </div>
+      <div class="row"><button id="b-download" data-t="downloadProject">Download JSON</button><button id="b-file" data-t="openFile">Open JSON file</button><input id="project-file" type="file" accept=".json,application/json" hidden></div>
+      <details><summary data-t="variants">Local variants</summary>
+        <div class="field"><label for="variant-name" data-t="variantName">Variant name</label><input id="variant-name" type="text" maxlength="60"></div>
+        <button id="variant-save" data-t="saveVariant">Save as variant</button>
+        <div class="field"><label for="variant-list" data-t="variants">Local variants</label><select id="variant-list"></select></div>
+        <div class="row"><button id="variant-open" data-t="openVariant">Open variant</button><button id="variant-delete" data-t="del">Delete</button></div>
+        <p class="hint" data-t="variantHint">Stored only in this browser, up to 20 variants. Download JSON for a backup.</p>
+      </details>
       <details id="io-box">
         <summary data-t="loadFromJson">Load plan from JSON</summary>
         <div class="field">
@@ -276,6 +284,7 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
     </svg>
     <div class="chipbar" id="chipbar"></div>
     <div class="tools">
+      <button id="t-redo" data-t="redo" title="Ctrl+Shift+Z">Redo</button>
       <button id="t-undo" data-t="undo" data-t-title="undoTitle" title="Undo (Ctrl+Z)">Undo</button>
       <button id="t-out" data-t-title="zoomOut" data-t-aria="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
       <button id="t-in" data-t-title="zoomIn" data-t-aria="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>

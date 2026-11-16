@@ -84,14 +84,23 @@
       "dependencies": [
         "F003"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Download and import JSON projects",
         "Named local variants restore full scene",
         "Undo and redo restore full scene"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/projects.test.ts (2 tests)",
+        "tests/browser/planner.spec.ts (6 passing)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "Variants are local to this browser; JSON downloads provide portable backups.",
+        "Undo history is limited to 150 changes and is not persisted across reloads."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]

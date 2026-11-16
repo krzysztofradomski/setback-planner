@@ -58,3 +58,27 @@ test('copy share link contains the latest edit and all drawing settings', async 
   await expect(page.locator('#o-dims')).toHaveValue('selected');
   await expect(page.locator('#o-pairs')).not.toBeChecked();
 });
+test('full drawing undo/redo, variants and project file restore', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#o-dims').selectOption('selected');
+  await page.locator('#t-undo').click();
+  await expect(page.locator('#o-dims')).toHaveValue('all');
+  await page.locator('#t-redo').click();
+  await expect(page.locator('#o-dims')).toHaveValue('selected');
+  await page.getByText('Local variants',{exact:true}).first().click();
+  await page.locator('#variant-name').fill('Garden alternative');
+  await page.locator('#variant-save').click();
+  await page.locator('#add-house').click();
+  await expect(page.locator('.obj')).toHaveCount(3);
+  await page.locator('#variant-open').click();
+  await expect(page.locator('.obj')).toHaveCount(2);
+  const downloadPromise=page.waitForEvent('download');
+  await page.locator('#b-download').click();
+  const download=await downloadPromise;
+  const path=await download.path();
+  expect(path).toBeTruthy();
+  await page.locator('#add-house').click();
+  await page.locator('#project-file').setInputFiles(path!);
+  await expect(page.locator('.obj')).toHaveCount(2);
+  await expect(page.locator('#o-dims')).toHaveValue('selected');
+});

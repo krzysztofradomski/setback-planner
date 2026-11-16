@@ -1,3 +1,4 @@
+import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
 import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
 import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts';
 
@@ -8,6 +9,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
   // ---------- i18n ----------
   const I18N = {
     en: {
+      redo:'Redo', downloadProject:'Download JSON', openFile:'Open JSON file', variants:'Local variants', variantName:'Variant name', saveVariant:'Save as variant', openVariant:'Open variant', variantHint:'Stored only in this browser, up to 20 variants. Download JSON for a backup.', variantError:'Could not save or read variants. Check the name, storage space and 20-variant limit.',
       docTitle: 'Setback Planner', title: 'Setback Planner', tagline: 'Plot outline on a 1 m grid, buildings, and every clearance.',
       language: 'Language', controls: 'Controls', addBuilding: 'Add building', house: 'House', garage: 'Garage', buildings: 'Buildings',
       plot: 'Plot', area: 'Area', perimeter: 'Perimeter', side: 'Side', cornersHint: 'Drag the corner points A–D on the plan, or type coordinates.',
@@ -34,6 +36,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      redo:'Ponów', downloadProject:'Pobierz JSON', openFile:'Otwórz plik JSON', variants:'Warianty lokalne', variantName:'Nazwa wariantu', saveVariant:'Zapisz jako wariant', openVariant:'Otwórz wariant', variantHint:'Tylko w tej przeglądarce, do 20 wariantów. Pobierz JSON jako kopię zapasową.', variantError:'Nie można zapisać lub odczytać wariantów. Sprawdź nazwę, pamięć i limit 20 wariantów.',
       docTitle: 'Planer odległości od granic', title: 'Planer odległości', tagline: 'Obrys działki na siatce 1 m, budynki i wszystkie odległości.',
       language: 'Język', controls: 'Sterowanie', addBuilding: 'Dodaj budynek', house: 'Dom', garage: 'Garaż', buildings: 'Budynki',
       plot: 'Działka', area: 'Powierzchnia', perimeter: 'Obwód', side: 'Bok', cornersHint: 'Przeciągnij narożniki A–D na planie lub wpisz współrzędne.',
@@ -128,14 +131,18 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
   let selected = state.items[0] ? state.items[0].id : null;
   const get = id => state.items.find(i => i.id === id);
 
-  const history = [];
-  function snapshot(){ history.push(JSON.stringify({plot: state.plot, items: state.items})); if (history.length > 150) history.shift(); }
-  function undo(){
-    const s = history.pop(); if (!s) { toast(t('nothingToUndo')); return; }
-    const o = JSON.parse(s); state.plot = o.plot; state.items = o.items;
+  const history = new ProjectHistory();
+  function snapshot(){ history.record(state); }
+  function restoreHistory(next){
+    if (!next){ toast(t('nothingToUndo')); return; }
+    state = next;
     if (!get(selected)) selected = null;
+    uid = state.items.reduce((m,i) => Math.max(m, parseInt(String(i.id).replace(/\D/g,'')) || 0),0)+1;
+    $('#o-snap').value=String(state.snap); $('#o-dims').value=state.dimScope; $('#o-pairs').checked=state.showPairs;
     buildPanel(); render();
   }
+  function undo(){ restoreHistory(history.undo(state)); }
+  function redo(){ restoreHistory(history.redo(state)); }
 
   // ---------- geometry ----------
   const sub = (a,b) => ({x:a.x-b.x, y:a.y-b.y});
@@ -505,7 +512,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
   function duplicate(){
     const it = get(selected); if (!it) return;
     snapshot();
-    const c = {...it, id: 'o' + (uid++), name: (it.name + t('copySuffix')).slice(0, 60), x: it.x + 2, y: it.y + 2};
+    const c = {...structuredClone(it), id: 'o' + (uid++), name: (it.name + t('copySuffix')).slice(0, 60), x: it.x + 2, y: it.y + 2};
     state.items.push(c); selected = c.id; buildPanel(); render();
   }
   function removeSelected(){
@@ -614,7 +621,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
   // ---------- keyboard ----------
   window.addEventListener('keydown', e => {
     const tag = (e.target.tagName || '').toLowerCase();
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && tag !== 'input' && tag !== 'textarea'){ e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && tag !== 'input' && tag !== 'textarea'){ e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
     const it = get(selected);
     if (!it) return;
@@ -640,11 +647,11 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
   };
   const snapSel = $('#o-snap'); snapSel.value = String(state.snap);
   if (snapSel.value === '') snapSel.value = '0.5';
-  snapSel.onchange = () => { state.snap = parseFloat(snapSel.value) || 0; render(); };
+  snapSel.onchange = () => { snapshot(); state.snap = parseFloat(snapSel.value) || 0; render(); };
   const dimSel = $('#o-dims'); dimSel.value = state.dimScope;
-  dimSel.onchange = () => { state.dimScope = dimSel.value; render(); };
+  dimSel.onchange = () => { snapshot(); state.dimScope = dimSel.value; render(); };
   const pairChk = $('#o-pairs'); pairChk.checked = state.showPairs;
-  pairChk.onchange = () => { state.showPairs = pairChk.checked; render(); };
+  pairChk.onchange = () => { snapshot(); state.showPairs = pairChk.checked; render(); };
 
   $('#b-copy').onclick = () => {
     let txt; try { txt = serializeScene(state); } catch { toast(t('notAPlan')); return; }
@@ -677,6 +684,38 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     if (!o){ toast(t('notAPlan')); return; }
     applyPlan(o, t('planLoaded'));
   };
+  function downloadFile(text, name, type){
+    const url = URL.createObjectURL(new Blob([text],{type}));
+    const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  $('#b-download').onclick=()=>{try{downloadFile(serializeScene(state),'setback-project.json','application/json');}catch{toast(t('notAPlan'));}};
+  $('#b-file').onclick=()=>$('#project-file').click();
+  $('#project-file').onchange=async e=>{
+    const file=e.target.files[0]; if(!file)return;
+    try { if(file.size>MAX_PROJECT_BYTES)throw new Error('large'); applyPlan(parseScene(JSON.parse(await file.text())),t('planLoaded')); }
+    catch { toast(t('notAPlan')); } finally { e.target.value=''; }
+  };
+  const VARIANT_LS='setback-planner-variants-v1';
+  const loadVariants=()=>readVariants(localStorage.getItem(VARIANT_LS)||'[]');
+  function updateVariants(){
+    try { $('#variant-list').innerHTML=loadVariants().map(v=>`<option value="${esc(v.id)}">${esc(v.name)}</option>`).join(''); }
+    catch { $('#variant-list').innerHTML=''; toast(t('variantError')); }
+  }
+  $('#variant-save').onclick=()=>{
+    try {
+      const variants=saveVariant(loadVariants(),{id:crypto.randomUUID(),name:$('#variant-name').value,scene:parseScene(state)});
+      localStorage.setItem(VARIANT_LS,JSON.stringify(variants));updateVariants();$('#variant-list').value=variants.at(-1).id;
+    } catch { toast(t('variantError')); }
+  };
+  $('#variant-open').onclick=()=>{
+    try { const variant=loadVariants().find(v=>v.id===$('#variant-list').value);if(variant)applyPlan(variant.scene,t('planLoaded')); }
+    catch { toast(t('variantError')); }
+  };
+  $('#variant-delete').onclick=()=>{
+    try { localStorage.setItem(VARIANT_LS,JSON.stringify(loadVariants().filter(v=>v.id!==$('#variant-list').value)));updateVariants(); }
+    catch { toast(t('variantError')); }
+  };
+  updateVariants();
   // A shared link pasted into an already-open tab only changes the hash.
   window.addEventListener('hashchange', async () => { const o = await fromHash(); if (o) applyPlan(o, t('planFromLink')); });
   let resetArmed = false, resetT;
@@ -687,7 +726,7 @@ import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts'
     snapshot(); state = parseScene(DEFAULT()); persistencePaused = false; $('#project-warning').hidden = true;
     uid = 3; selected = 'o1'; fit(); buildPanel(); render(); toast(t('exampleRestored'));
   };
-  $('#t-undo').onclick = undo;
+  $('#t-undo').onclick = undo; $('#t-redo').onclick = redo;
   $('#t-in').onclick = () => zoomAt(svg.clientWidth/2, svg.clientHeight/2, 1.25);
   $('#t-out').onclick = () => zoomAt(svg.clientWidth/2, svg.clientHeight/2, 0.8);
   $('#t-fit').onclick = () => { fit(); renderSheet(); };
