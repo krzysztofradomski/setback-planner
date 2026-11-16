@@ -1,3 +1,4 @@
+import { containsPolygon, polygonRelation, validRing } from './core/geometry.ts';
 
 (async () => {
   const $ = s => document.querySelector(s);
@@ -24,7 +25,7 @@
       Right: 'Right', Left: 'Left', Top: 'Top', Bottom: 'Bottom',
       overlap: 'Overlap', wallToWall: 'Wall to wall', corner: 'Corner', noOthers: 'No other buildings yet.',
       noBuildings: 'No buildings yet. Add a house or garage above; it lands in the middle of the plot.',
-      built: 'built {v} %', toCheck: '{n} to check', allMet: 'All setbacks met', cornerAxis: 'Corner {c} {axis} in metres', copySuffix: ' copy',
+      built: 'built {v} %', toCheck: '{n} to check', allMet: 'Geometric checks passed', cornerAxis: 'Corner {c} {axis} in metres', copySuffix: ' copy',
       nothingToUndo: 'Nothing to undo', removed: '{name} removed. Ctrl+Z brings it back.', badRect: 'Enter a width and depth above 0 m',
       jsonBlocked: 'Copy blocked here. The JSON is selected below.', jsonCopied: 'Plan copied as JSON',
       linkBlocked: 'Copy blocked here. Copy the address bar instead.', linkCopied: 'Link copied',
@@ -50,7 +51,7 @@
       Right: 'prawa', Left: 'lewa', Top: 'górna', Bottom: 'dolna',
       overlap: 'Kolizja', wallToWall: 'Ściana–ściana', corner: 'Narożnik', noOthers: 'Brak innych budynków.',
       noBuildings: 'Brak budynków. Dodaj dom lub garaż powyżej; pojawi się na środku działki.',
-      built: 'zabudowa {v} %', toCheck: 'Do sprawdzenia: {n}', allMet: 'Wszystkie odległości spełnione', cornerAxis: 'Narożnik {c}, {axis} w metrach', copySuffix: ' kopia',
+      built: 'zabudowa {v} %', toCheck: 'Do sprawdzenia: {n}', allMet: 'Testy geometryczne spełnione', cornerAxis: 'Narożnik {c}, {axis} w metrach', copySuffix: ' kopia',
       nothingToUndo: 'Nie ma czego cofnąć', removed: 'Usunięto: {name}. Ctrl+Z przywraca.', badRect: 'Podaj szerokość i głębokość większe od 0 m',
       jsonBlocked: 'Kopiowanie zablokowane. JSON jest zaznaczony poniżej.', jsonCopied: 'Skopiowano plan jako JSON',
       linkBlocked: 'Kopiowanie zablokowane. Skopiuj adres z paska przeglądarki.', linkCopied: 'Skopiowano link',
@@ -190,24 +191,7 @@
     }
     return best;
   }
-  function pip(p, poly){
-    let inside = false;
-    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++){
-      const a = poly[i], b = poly[j];
-      if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
-    }
-    return inside;
-  }
-  function segsCross(a,b,c,d){
-    const d1 = cross(sub(b,a), sub(c,a)), d2 = cross(sub(b,a), sub(d,a));
-    const d3 = cross(sub(d,c), sub(a,c)), d4 = cross(sub(d,c), sub(b,c));
-    return ((d1 > 1e-9 && d2 < -1e-9) || (d1 < -1e-9 && d2 > 1e-9)) && ((d3 > 1e-9 && d4 < -1e-9) || (d3 < -1e-9 && d4 > 1e-9));
-  }
-  function overlap(ca, cb){
-    for (const [a,b] of edges(ca)) for (const [c,d] of edges(cb)) if (segsCross(a,b,c,d)) return true;
-    const ctr = poly => ({x: poly.reduce((s,p)=>s+p.x,0)/poly.length, y: poly.reduce((s,p)=>s+p.y,0)/poly.length});
-    return pip(ctr(ca), cb) || pip(ctr(cb), ca);
-  }
+  const overlap = (a,b) => polygonRelation(a,b) !== 'disjoint';
   function closestOnSeg(V, Q, R){
     const e = sub(R,Q), L2 = dot(e,e);
     const s = L2 ? Math.max(0, Math.min(1, dot(sub(V,Q), e) / L2)) : 0;
@@ -245,7 +229,7 @@
   function compute(){
     const plotSegs = edges(state.plot), res = new Map();
     for (const it of state.items){
-      const c = corners(it), inside = c.every(p => pip(p, state.plot));
+      const c = corners(it), inside = validRing(state.plot) && containsPolygon(state.plot, c);
       const sides = [];
       for (let i = 0; i < 4; i++){
         const A = c[i], B = c[(i+1)%4], n = outwardNormal(A,B);
@@ -501,8 +485,9 @@
       document.getElementById('pc-l-' + i).textContent = names[i] + names[(i+1)%4] + ' ' + dec(len(sub(q,p)).toFixed(2));
     });
 
+    const plotValid = validRing(state.plot);
     const warnCount = state.items.filter(i => C.res.get(i.id).warn).length;
-    $('#chipbar').innerHTML = `<span>${group(area)} m² · ${dec((area/100).toFixed(2))} a</span>` +
+    $('#chipbar').innerHTML = (!plotValid ? `<span style="color:var(--warn)">${lang === 'pl' ? 'Nieprawidłowa granica działki' : 'Invalid parcel boundary'}</span>` : '') + `<span>${group(area)} m² · ${dec((area/100).toFixed(2))} a</span>` +
       (state.items.length ? `<span style="color:var(${warnCount ? '--warn' : '--ok'})">${warnCount ? t('toCheck', {n: warnCount}) : t('allMet')}</span>` : '');
   }
 

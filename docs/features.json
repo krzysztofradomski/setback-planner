@@ -30,14 +30,23 @@
       "dependencies": [
         "F001"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Reject invalid rings",
         "Correct touching/overlapping polygons and concave containment",
         "Metric transforms and measurements tested"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/geometry.test.ts (4 tests, including 52 area-invariance samples)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build",
+        "npm run test:e2e (3 passing)"
+      ],
+      "knownLimitations": [
+        "Simple polygon rings only; holes and multipolygons belong to F009.",
+        "Interactive invalid parcel edits are visibly flagged; import rejection belongs to F003."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]
