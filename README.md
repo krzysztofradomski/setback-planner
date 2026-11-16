@@ -12,9 +12,10 @@ A bilingual parcel and house concept planner. The existing SVG editor is retaine
 - Optional attributed street, orthophoto and cadastral map layers. Provider failures preserve the editor.
 - Versioned projects, legacy `#p` / `#z` link migration, full-state sharing, browser autosave, undo/redo, 20 local variants and JSON files.
 - SVG export and printable EN/PL reports with browser PDF saving and explicit unknown requirements.
-- Optional manufacturer catalog metadata. Current Udana Budowa model entries have no inferred dimensions, prices or reused renders.
+- Placeable Udana Budowa DE75/105/135/165 envelopes measured from dimensioned manufacturer plans, public photos, zoomable floor plans and source attribution. Heights/pitch remain illustrative; prices are not inferred.
+- Reviewed desktop library/canvas/inspector workspace, dismissible mobile sheets and English/Polish navigation.
 
-Setbacks are user-selected geometric inputs (defaults: 4 m for houses, 3 m for garages). This tool does not establish legal or technical building feasibility. Multipart parcels and holes are supported. Terrain, planning/utility/protected-area overlays, garden objects, fences, seasons, showroom, private lead management and source-based Workers AI are implemented. See the status document for explicit external blockers and practical limits.
+Setbacks are user-selected geometric inputs (defaults: 4 m for houses, 3 m for garages). This tool does not establish legal or technical building feasibility. Multipart parcels and holes are supported. Terrain, planning/utility/protected-area/flood/groundwater/geology overlays, garden objects, fences, seasons, showroom, private lead management and source-based Workers AI are implemented. See the status document for explicit external blockers and practical limits.
 
 ## Development
 

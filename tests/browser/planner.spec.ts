@@ -4,7 +4,7 @@ test('existing editor adds, resizes, rotates, duplicates, deletes and undoes', a
   page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
   await expect(page.locator('.obj')).toHaveCount(2);
-  await page.locator('#add-house').click();
+  await page.locator('[data-workspace-tab=houses]').click();await page.locator('#add-house').click();
   await expect(page.locator('.obj')).toHaveCount(3);
   await page.locator('#f-w').fill('14');
   await page.locator('#b-rot').click();
@@ -40,6 +40,7 @@ test('invalid and future projects do not replace stored data or the scene', asyn
   await expect(page.locator('#project-warning')).toBeVisible();
   await page.waitForTimeout(400);
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('setback-planner-v1')!).schemaVersion)).toBe(999);
+  await page.locator('[data-workspace-tab=project]').click();
   await page.locator('#io-box').evaluate((el:HTMLDetailsElement)=>el.open=true);
   await page.locator('#io').fill('{"schemaVersion":999}');
   await page.locator('#b-load').click();
@@ -49,38 +50,40 @@ test('copy share link contains the latest edit and all drawing settings', async 
   await context.grantPermissions(['clipboard-read','clipboard-write']);
   await page.goto('/');
   await page.locator('#f-name').fill('Latest edit');
-  await page.locator('#o-dims').selectOption('selected');
+  await page.locator('[data-workspace-tab=project]').click();
+  await page.locator('#o-dims').selectOption('all');
   await page.locator('#o-pairs').uncheck();
   await page.locator('#b-link').click();
   const url=await page.evaluate(()=>navigator.clipboard.readText());
   await page.goto(url);
   await expect(page.locator('#f-name')).toHaveValue('Latest edit');
-  await expect(page.locator('#o-dims')).toHaveValue('selected');
+  await expect(page.locator('#o-dims')).toHaveValue('all');
   await expect(page.locator('#o-pairs')).not.toBeChecked();
 });
 test('full drawing undo/redo, variants and project file restore', async ({ page }) => {
   await page.goto('/');
-  await page.locator('#o-dims').selectOption('selected');
+  await page.locator('[data-workspace-tab=project]').click();
+  await page.locator('#o-dims').selectOption('all');
   await page.locator('#t-undo').click();
-  await expect(page.locator('#o-dims')).toHaveValue('all');
-  await page.locator('#t-redo').click();
   await expect(page.locator('#o-dims')).toHaveValue('selected');
+  await page.locator('#t-redo').click();
+  await expect(page.locator('#o-dims')).toHaveValue('all');
   await page.getByText('Local variants',{exact:true}).first().click();
   await page.locator('#variant-name').fill('Garden alternative');
   await page.locator('#variant-save').click();
-  await page.locator('#add-house').click();
+  await page.locator('[data-workspace-tab=houses]').click();await page.locator('#add-house').click();
   await expect(page.locator('.obj')).toHaveCount(3);
-  await page.locator('#variant-open').click();
+  await page.locator('[data-workspace-tab=project]').click();await page.locator('#variant-open').click();
   await expect(page.locator('.obj')).toHaveCount(2);
   const downloadPromise=page.waitForEvent('download');
   await page.locator('#b-download').click();
   const download=await downloadPromise;
   const path=await download.path();
   expect(path).toBeTruthy();
-  await page.locator('#add-house').click();
+  await page.locator('[data-workspace-tab=houses]').click();await page.locator('#add-house').click();
   await page.locator('#project-file').setInputFiles(path!);
   await expect(page.locator('.obj')).toHaveCount(2);
-  await expect(page.locator('#o-dims')).toHaveValue('selected');
+  await expect(page.locator('#o-dims')).toHaveValue('all');
 });
 test('generic concave footprint and architecture survive sharing, duplication and undo', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read','clipboard-write']);
@@ -142,7 +145,7 @@ test('optional catalog can be disabled without deleting placed fallback building
 });
 test('projected GeoJSON imports arbitrary corners and preserves provenance through sharing and undo', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read','clipboard-write']);await page.goto('/');
-  await page.locator('#parcel-import').evaluate((el:HTMLDetailsElement)=>el.open=true);
+  await page.locator('[data-workspace-tab=parcel]').click();await page.locator('#parcel-import').evaluate((el:HTMLDetailsElement)=>el.open=true);
   await page.locator('#parcel-crs').selectOption('EPSG:2180');
   const data={type:'Polygon',coordinates:[[[500000,500000],[500020,500000],[500020,500010],[500010,500010],[500010,500030],[500000,500030],[500000,500000]]]};
   await page.locator('#parcel-file').setInputFiles({name:'six-corners.geojson',mimeType:'application/geo+json',buffer:Buffer.from(JSON.stringify(data))});
@@ -150,7 +153,7 @@ test('projected GeoJSON imports arbitrary corners and preserves provenance throu
   await expect(page.locator('#parcel-source')).toContainText('EPSG:2180');
   await page.locator('#b-link').click();await page.goto(await page.evaluate(()=>navigator.clipboard.readText()));
   await expect(page.locator('#p-corners tr')).toHaveCount(6);
-  await page.locator('#b-rect').click();await expect(page.locator('#p-corners tr')).toHaveCount(4);
+  await page.locator('[data-workspace-tab=parcel]').click();await page.locator('#b-rect').click();await expect(page.locator('#p-corners tr')).toHaveCount(4);
   await expect(page.locator('#parcel-source')).toBeEmpty();
   await page.locator('#t-undo').click();await expect(page.locator('#p-corners tr')).toHaveCount(6);
   await page.locator('#pc-x-0').fill('1');await page.locator('#rw').focus();
@@ -171,17 +174,17 @@ test('Polish controls remain inside the plan at 320px',async({page})=>{
 });
 test('garden objects are editable, persisted and excluded from building coverage',async({page})=>{
  await page.goto('/');const coverage=await page.locator('#p-cov').textContent();
- await page.locator('#garden-kind').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);
+ await page.locator('[data-workspace-tab=garden]').click();await page.locator('#garden-kind').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);
  await page.locator('#garden-kind').selectOption('tree');await page.locator('#garden-add').click();await expect(page.locator('.obj')).toHaveCount(3);
  await expect(page.locator('#p-cov')).toHaveText(coverage!);await expect(page.locator('#outdoor-maturity')).toBeVisible();
  await page.locator('#outdoor-maturity').fill('0.5');await page.locator('#f-name').fill('My tree');await page.waitForTimeout(400);await page.reload();
- await page.locator('#objs .obj').last().click();await expect(page.locator('#f-name')).toHaveValue('My tree');await expect(page.locator('#outdoor-maturity')).toHaveValue('0.5');
+ await page.locator('[data-workspace-tab=houses]').click();await page.locator('#objs .obj').last().click();await expect(page.locator('#f-name')).toHaveValue('My tree');await expect(page.locator('#outdoor-maturity')).toHaveValue('0.5');
 });
 test('fence gate follows a path and restores through project sharing',async({page})=>{
- await page.goto('/');await page.locator('#fence-type').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#fence-boundary').click();await page.locator('#fence-gate').selectOption('swing');await page.locator('#fence-add').click();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');await page.waitForTimeout(400);await page.reload();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');
+ await page.goto('/');await page.locator('[data-workspace-tab=garden]').click();await page.locator('#fence-type').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#fence-boundary').click();await page.locator('#fence-gate').selectOption('swing');await page.locator('#fence-add').click();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');await page.waitForTimeout(400);await page.reload();await expect(page.locator('#fence-list')).toContainText('gate 3.5 m');
 });
 test('a multipart parcel retains holes in area and the drawn boundary',async({page})=>{
- await page.goto('/');await page.locator('#parcel-crs').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#parcel-crs').selectOption('EPSG:2180');
+ await page.goto('/');await page.locator('[data-workspace-tab=parcel]').click();await page.locator('#parcel-crs').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);await page.locator('#parcel-crs').selectOption('EPSG:2180');
  const ring=(x:number,y:number,w:number)=>[[x,y],[x+w,y],[x+w,y+w],[x,y+w],[x,y]];const value={type:'MultiPolygon',coordinates:[[ring(500000,500000,20),ring(500005,500005,5)],[ring(500040,500000,10)]]};
  await page.locator('#parcel-file').setInputFiles({name:'parts.geojson',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});await expect(page.locator('#p-area')).toHaveText('475 m²');expect((await page.locator('.plot-fill').getAttribute('d'))!.split('M')).toHaveLength(4);await expect(page.locator('.plot-fill')).toHaveAttribute('fill-rule','evenodd');
 });
@@ -194,5 +197,5 @@ test('visibility, locking and attached structures survive scene operations',asyn
 test('showroom host keeps ordinary autosave and undo isolated from visitors',async({page})=>{
  await page.route('**/api/auth/logout',route=>route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
  await page.goto('/');await page.locator('#f-name').fill('Private ordinary project');await page.waitForTimeout(400);const stored=await page.evaluate(()=>localStorage.getItem('setback-planner-v1'));
- await page.getByText('Showroom / Tryb pokazowy',{exact:true}).click();await page.getByRole('button',{name:'Start presentation / Rozpocznij pokaz'}).click();await page.getByRole('button',{name:'Touch to begin / Dotknij, aby rozpocząć'}).click();await page.locator('#f-name').fill('Visitor project');await page.waitForTimeout(400);expect(await page.evaluate(()=>localStorage.getItem('setback-planner-v1'))).toBe(stored);await page.getByRole('button',{name:'Exit presentation'}).click();await expect(page.locator('#f-name')).toHaveValue('Private ordinary project');
+ await page.locator('[data-workspace-tab=presentation]').click();await page.getByText('Showroom / Tryb pokazowy',{exact:true}).click();await page.getByRole('button',{name:'Start presentation / Rozpocznij pokaz'}).click();await page.getByRole('button',{name:'Touch to begin / Dotknij, aby rozpocząć'}).click();await page.locator('#f-name').fill('Visitor project');await page.waitForTimeout(400);expect(await page.evaluate(()=>localStorage.getItem('setback-planner-v1'))).toBe(stored);await page.getByRole('button',{name:'Exit presentation'}).click();await expect(page.locator('#f-name')).toHaveValue('Private ordinary project');
 });

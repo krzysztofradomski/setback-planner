@@ -1,6 +1,6 @@
 # Implementation status — 2026-11-16
 
-The dependency-ordered backlog is implemented through F026, with F023 blocked on authoritative manufacturer drawings and asset reuse rights. `docs/features.json` records acceptance evidence and practical limits. The retained SVG editor, versioned scene, legacy links and local projects remain supported.
+The current workspace correction is tracked in F027. F023 now has verified main-building envelopes and public manufacturer photos/plans; detailed 3D geometry remains limited by unavailable height, pitch and elevation specifications. `docs/features.json` records acceptance evidence and practical limits. The retained SVG editor, versioned scene, legacy links and local projects remain supported.
 
 The planner includes generic/custom house footprints, attached structures, groups, locks, visibility, openings, architectural finishes and roof types; synchronized 3D/walk views; multipart parcels with holes; deterministic setbacks/suggestions; a parametric garden library; fences/gates/hedges; seasonal rendering and physical solar position; NMT terrain; attributed map overlays; variants, share links and printable reports.
 
@@ -16,8 +16,8 @@ Unit/integration tests run against deterministic fixtures and a real SQLite sche
 
 ## Practical limitations and external blockers
 
-- F023: published Udana Budowa model names are verified; precise dimensions, prices, heights, openings and licensed assets are unavailable. Catalog records preserve explicit unknowns. Generic examples are not manufacturer models.
-- Official flood service capabilities returned HTTP 401. The app provides an official Hydroportal link. Planning/protected-area/utility rasters are context, not verified legal building lines or a complete network survey.
+- F023: DE75/105/135/165 are placeable using exterior dimensions transcribed from public manufacturer plans. Photos and plans are bundled with attribution. Heights, pitch, overhangs and detailed elevations remain unknown; 3D uses illustrative defaults. Envelope dimensions exclude carports and terraces. Prices are not inferred.
+- The public ISOK INSPIRE flood service used by Gruntometr is integrated, together with groundwater, relief, SOPO landslides, MIDAS mining/deposits and CBDH hydrogeological layers. Planning and risk rasters are context, not legal conclusions or a complete survey. Coverage and scale limits are disclosed.
 - Nine terrain samples and interpolated slopes are approximate. Datum, source capture dates and nearby building heights can be unknown. Shadows and conceptual materials are not engineering simulations.
 - Concave pitched roofs use schematic flat caps. Openings and exterior details are conceptual. Walk mode has no collision simulation. Accent-area meshes, vehicle swept-path engineering and automatic vector building-line extraction are not supplied.
 - Placement suggestions use a bounded deterministic sample grid and uniform user-selected setbacks; they are not exhaustive or legal feasibility decisions.
@@ -35,3 +35,7 @@ Rollback: use Cloudflare Worker deployment rollback to the previous version; ret
 Application source `c367969` was fast-forwarded to `main`, pushed to origin and deployed to both environments on 2026-11-16. Production deployment initially returned version `54ec976f-1f2f-483c-9bde-4aa7ed7e24e2`; subsequent secret configuration creates newer Cloudflare versions without changing application source. Final staging application deployment: `93d9309c-5d1a-4b24-a832-8e5f1c4d8f52`.
 
 Passed: 61 unit/integration tests, 31 Playwright browser journeys, 3 built-production smoke journeys, TypeScript checks, ESLint and npm audit (zero vulnerabilities). Vite emits the documented optional chunk-size warning. Live production checks confirmed editor add, rendered 3D, showroom logout/enter/exit, authenticated owner/D1 management and no uncaught browser exceptions. Both hosts return health 200 and anonymous private API 401; bootstrap returns 403 after temporary secrets were removed. Staging live Workers AI extraction and summary returned independently verified source citations. No public recipients were enabled and no messages were sent.
+
+## Workspace correction
+
+See `docs/ui-review-2026-11-16.md` for the layout audit, independent review findings and fixes. The public manufacturer gallery contained dimensioned plans that the previous research missed; those dimensions now drive placement. Manufacturer photos and plans are served from the dedicated Vite static directory and included in production browser journeys. The new public geospatial services were verified with actual GetMap images and CORS headers, using primary providers rather than Gruntometr APIs.

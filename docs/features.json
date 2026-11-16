@@ -159,27 +159,24 @@
     },
     {
       "id": "F007",
-      "description": "Optional manufacturer catalog metadata",
+      "description": "Optional manufacturer catalogs with sourced plans and placeable envelopes",
       "dependencies": [
         "F003"
       ],
       "status": "completed",
       "acceptanceCriteria": [
-        "Explicitly registered lazy catalog with verified model names and dated sources",
-        "Enable/disable without deleting placed objects",
-        "Unknown dimensions never invented"
+        "Explicitly registered lazy catalog with model versions and dated sources",
+        "Place DE75/105/135/165 using dimensions from public manufacturer floor plans",
+        "Public manufacturer photos and readable plan previews",
+        "Disable catalog without deleting saved buildings"
       ],
       "tests": [
-        "tests/catalogs.test.ts (2 tests)",
-        "tests/browser/planner.spec.ts (9 passing)",
-        "npm run typecheck",
-        "npm run lint",
-        "npm run build"
+        "tests/catalogs.test.ts",
+        "tests/browser/workspace.spec.ts",
+        "tests/browser/planner.spec.ts"
       ],
       "knownLimitations": [
-        "Metadata-only catalog; exact placement awaits authoritative drawings and licensed assets (F023).",
-        "No price is exposed because published source references conflict.",
-        "Catalog model migration/deprecation requires future authoritative versions and is tracked in F023."
+        "Verified main-building bounding envelopes exclude terraces, carports and roof overhangs. Heights, roof pitch, detailed openings and prices remain unverified. Public photos and plans are attributed to Udana Budowa."
       ],
       "documentation": [
         "docs/repository-audit.md"
@@ -318,7 +315,7 @@
         "npm run test:production"
       ],
       "knownLimitations": [
-        "GUGiK nine-point NMT sampling, terrain mesh and approximate slope; verified MPZP, utility and GDOŚ WMS overlays. Flood WMS returns HTTP 401: official Hydroportal fallback provided. Raster plans do not become verified vector building lines. Coverage, datum and capture dates may be unknown."
+        "GUGiK nine-point elevation/slope, planning, utility, protected-area, flood, groundwater, relief, SOPO landslides, MIDAS mining/deposits and CBDH hydrogeological overlays use verified primary public services also used in Gruntometr. Coverage and freshness vary; rasters do not establish legal restrictions. Routing, property valuation and broadband analysis remain external references."
       ],
       "documentation": [
         "docs/implementation-status.md",
@@ -612,12 +609,17 @@
         "Approved asset rights and default appearance",
         "Version migrations and fallback geometry"
       ],
-      "tests": [],
+      "tests": [
+        "tests/catalogs.test.ts",
+        "tests/viewer.test.ts",
+        "tests/browser/workspace.spec.ts"
+      ],
       "knownLimitations": [
-        "Authoritative manufacturer drawings and asset reuse rights not established."
+        "Public dimensioned floor plans and manufacturer photos now support all four placeable model envelopes. Detailed ridge/eaves heights, roof pitch, full elevations/openings and an approved detailed 3D asset remain unavailable. The 3D envelope uses clearly labeled illustrative defaults. No manufacturer pricing is inferred."
       ],
       "documentation": [
-        "docs/repository-audit.md"
+        "static/assets/udana-budowa/README.md",
+        "docs/ui-review-2026-11-16.md"
       ]
     },
     {
@@ -700,6 +702,38 @@
       ],
       "documentation": [
         "docs/geospatial-sources.md"
+      ]
+    },
+    {
+      "id": "F027",
+      "description": "Reviewed responsive workspace and manufacturer placement UX",
+      "dependencies": [
+        "F007",
+        "F012",
+        "F024"
+      ],
+      "status": "completed",
+      "acceptanceCriteria": [
+        "Separate library, canvas and selected-object inspector",
+        "Responsive phone/tablet panels with explicit dismissal and correct focus/navigation state",
+        "Manufacturer photos, dimensioned plan zoom and persistent placement",
+        "Parcel layers and localized official source directory",
+        "Preserve legacy editing, sharing, projects and kiosk isolation"
+      ],
+      "tests": [
+        "tests/browser/workspace.spec.ts",
+        "tests/browser/map.spec.ts",
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run test:e2e",
+        "npm run test:production"
+      ],
+      "knownLimitations": [
+        "Manufacturer representations use verified main-building envelopes with illustrative height/roof pitch. Optional 3D/map bundles remain lazy and exceed the documented Vite warning threshold."
+      ],
+      "documentation": [
+        "docs/ui-review-2026-11-16.md"
       ]
     }
   ]

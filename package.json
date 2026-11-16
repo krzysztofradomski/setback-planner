@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit && tsc -p backend.config.json",
     "lint": "eslint public tests worker",
     "preview": "vite preview --host 127.0.0.1 --port 5173",
-    "test:production": "npm run build && PLAYWRIGHT_PREVIEW=1 playwright test --grep \"map loads attributed|3D supports camera|SVG export and printable\"",
+    "test:production": "npm run build && PLAYWRIGHT_PREVIEW=1 playwright test --grep \"map loads attributed|3D supports camera|SVG export and printable|catalog photos|workspace navigation|mobile library|window editor\"",
     "dev:worker": "wrangler dev --ip 127.0.0.1 --port 8787"
   },
   "devDependencies": {
