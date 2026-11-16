@@ -30,3 +30,11 @@ Street tiles: [OpenStreetMap tile policy](https://operations.osmfoundation.org/p
 [MapLibre official WMS example](https://maplibre.org/maplibre-gl-js/docs/examples/add-a-wms-source/) informed source integration. The module worker is explicitly bundled and served from the same origin. Maps are optional and retain the 2D editor when unavailable. Provider failures are visible; image dates and neighboring heights are unknown. Nearby structures shown on imagery/cadastral rasters are visual context, not imported planning geometry.
 
 Map selection uses an explicit one-click selection mode; navigation clicks do not request parcels. `GetParcelByXY` sends longitude,latitude,4326 and requests `id,geom_wkt` in PL-1992. The returned full identifier is validated before import. Live response `id|SRID=2180;POLYGON(...)` was checked using a point inside the official example parcel on 2026-11-16. The same timeout, byte limit, request spacing and stale-project protection apply to map lookup.
+
+## Terrain and additional overlays — checked 2026-11-16
+
+GUGiK NMT https://services.gugik.gov.pl/nmt/ supports GetHByPointList with northing/easting coordinate pairs (unlike ordinary x=easting CRS notation). Nine bounded samples provide approximate interpolated terrain and slope; vertical datum is recorded as unspecified. Changing the parcel clears old terrain. This is not a survey or terrain-aware foundation design.
+
+WMS capabilities were checked for GUGiK KrajowaIntegracjaMiejscowychPlanowZagospodarowaniaPrzestrzennego (plany/plany_granice), KrajowaIntegracjaUzbrojeniaTerenu (gesut), and https://sdi.gdos.gov.pl/wms protected areas. GDOŚ advertises EPSG:900913 (Web Mercator alias). Layers are optional raster context; imagery does not establish a legally applicable restriction or complete utility inventory. Provider capture dates and local coverage may be unknown.
+
+The official Hydroportal flood service discovered through https://wody.isok.gov.pl/imap_kzgw/ configuration returned HTTP 401 for capabilities and MapServer access. The app links to the official flood map rather than fabricating an accessible layer or bypassing authentication.

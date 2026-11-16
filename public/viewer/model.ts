@@ -20,12 +20,12 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
     const uv=appearance.layout==='vertical'?[0,0,0,u,v,u,v,0]:[0,0,u,0,u,v,0,v];
     geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geometry.setIndex([0,2,1,0,3,2]);geometry.computeVertexNormals();
     const texture=textureFactory?.(materialId,appearance)??null;
-    const material=new THREE.MeshStandardMaterial({color:texture?'#ffffff':preset.color,map:texture,roughness:preset.roughness,side:THREE.DoubleSide});
+    const material=new THREE.MeshStandardMaterial({color:texture?'#ffffff':preset.color,map:texture,normalMap:texture?.userData.normalMap??null,normalScale:new THREE.Vector2(.4,.4),roughness:preset.roughness,side:THREE.DoubleSide});
     const mesh=new THREE.Mesh(geometry,material);mesh.name=`wall-${i}`;mesh.userData.materialId=materialId;mesh.castShadow=true;mesh.receiveShadow=true;root.add(mesh);
   });
   item.openings.forEach(opening=>{
     const a=points[opening.edge],b=points[(opening.edge+1)%points.length];if(!a||!b)return;const length=Math.hypot(b.x-a.x,b.y-a.y);if(opening.offset+opening.width>length||opening.sill+opening.height>height)return;
-    const u=(opening.offset+opening.width/2)/length,mesh=new THREE.Mesh(new THREE.BoxGeometry(opening.width,opening.height,.06),new THREE.MeshStandardMaterial({color:appearance.frameColor,roughness:.3}));mesh.position.set(a.x+(b.x-a.x)*u,opening.sill+opening.height/2,a.y+(b.y-a.y)*u);mesh.rotation.y=-Math.atan2(b.y-a.y,b.x-a.x);mesh.name=opening.type;root.add(mesh);
+    const u=(opening.offset+opening.width/2)/length,mesh=new THREE.Mesh(new THREE.BoxGeometry(opening.width,opening.height,.06),new THREE.MeshStandardMaterial({color:opening.type==='door'?appearance.doorColor:appearance.frameColor,roughness:.3}));mesh.position.set(a.x+(b.x-a.x)*u,opening.sill+opening.height/2,a.y+(b.y-a.y)*u);mesh.rotation.y=-Math.atan2(b.y-a.y,b.x-a.x);mesh.name=opening.type;root.add(mesh);
   });
   let roofGeometry:THREE.BufferGeometry;
   if(item.shape==='rectangle'&&item.architecture.roof==='hip'){
@@ -42,13 +42,18 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
     roofGeometry=new THREE.ShapeGeometry(groundShape(points));roofGeometry.rotateX(-Math.PI/2);roofGeometry.translate(0,height,0);
     if(item.architecture.roof==='gable')root.userData.approximateRoof=true;
   }
-  const roof=new THREE.Mesh(roofGeometry,new THREE.MeshStandardMaterial({color:season==='winter'?'#e5e7e3':appearance.roofColor,roughness:0.65,side:THREE.DoubleSide}));
+  let roofMap:THREE.Texture|null=null;
+  if(season!=='winter'&&typeof document!=='undefined'&&appearance.roofCovering!=='membrane'){
+    const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;const ctx=canvas.getContext('2d');if(ctx){ctx.fillStyle=appearance.roofColor;ctx.fillRect(0,0,128,128);ctx.strokeStyle='#242a2b';ctx.lineWidth=appearance.roofCovering==='metal'?3:1;for(let y=0;y<128;y+=appearance.roofCovering==='metal'?128:32){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(128,y);ctx.stroke();}for(let x=0;x<128;x+=32){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,128);ctx.stroke();}roofMap=new THREE.CanvasTexture(canvas);roofMap.colorSpace=THREE.SRGBColorSpace;roofMap.wrapS=roofMap.wrapT=THREE.RepeatWrapping;const positions=roofGeometry.getAttribute('position'),uv:number[]=[];for(let i=0;i<positions.count;i++)uv.push(positions.getX(i)/.6,positions.getZ(i)/.6);roofGeometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));}
+  }
+  const roof=new THREE.Mesh(roofGeometry,new THREE.MeshStandardMaterial({color:season==='winter'?'#e5e7e3':roofMap?'#ffffff':appearance.roofColor,map:season==='winter'?null:roofMap,roughness:0.65,side:THREE.DoubleSide}));
   roof.name='roof';roof.castShadow=true;roof.receiveShadow=true;root.add(roof);
   return root;
 }
 export function disposeObject(root:THREE.Object3D){
   const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>(),textures=new Set<THREE.Texture>();
   root.traverse(object=>{
+    if(object instanceof THREE.InstancedMesh)object.dispose();
     if(object instanceof THREE.Mesh||object instanceof THREE.Line){
       geometries.add(object.geometry);
       for(const material of Array.isArray(object.material)?object.material:[object.material]){

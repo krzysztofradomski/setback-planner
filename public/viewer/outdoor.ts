@@ -24,6 +24,10 @@ export function outdoorModel(item:SceneItem,season='summer'){
   box(w,Math.min(.25,h),d,0,.1,0,'#725c43');
   for(let i=0;i<12;i++){const x=((i%4)+.5)*w/4-w/2,z=(Math.floor(i/4)+.5)*d/3-d/2;box(w/9,h,d/7,x,h/2,z,foliage);}
  }else if(spec.render==='light'){box(.09,h,.09,0,h/2,0,'#48514e');box(.35,.3,.35,0,h,0,'#ffe3a3');}
- else{const height=spec.render==='water'?.15:h;box(w,height,d,0,height/2,0,season==='winter'?'#e4e5df':spec.color);if(spec.render==='water'){for(const x of [-w/2,w/2])box(.15,.2,d,x,.1,0,'#c9c7b7');}}
+ else{const height=spec.render==='water'?.15:h;const surface=box(w,height,d,0,height/2,0,season==='winter'?'#e4e5df':spec.color);
+ if(spec.render==='surface'&&item.kind!=='lawn'&&typeof document!=='undefined'){
+ const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;const ctx=canvas.getContext('2d');if(ctx){const pattern=item.outdoor.paving;ctx.fillStyle=pattern==='timber'?'#a7835a':pattern==='grass-pavers'?'#719258':'#b9b5a8';ctx.fillRect(0,0,128,128);ctx.strokeStyle='#817d71';ctx.lineWidth=2;if(pattern==='gravel'){for(let i=0;i<300;i++){const x=(Math.sin(i*13.3)+1)*63,y=(Math.cos(i*9.7)+1)*63;ctx.fillStyle=i%2?'#8e8d83':'#d1caba';ctx.fillRect(x,y,3,2);}}else{for(let y=0;y<128;y+=pattern==='timber'?16:32){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(128,y);ctx.stroke();}if(pattern!=='timber')for(let x=0;x<128;x+=pattern==='granite'?16:32){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,128);ctx.stroke();}}const texture=new T.CanvasTexture(canvas);texture.colorSpace=T.SRGBColorSpace;texture.wrapS=texture.wrapT=T.RepeatWrapping;texture.repeat.set(w,d);surface.material.map=texture;surface.material.color.set('#ffffff');}
+ }
+if(spec.render==='water'){for(const x of [-w/2,w/2])box(.15,.2,d,x,.1,0,'#c9c7b7');}}
  g.position.set(item.x,0,item.y);g.rotation.y=-item.rot*Math.PI/180;g.name=item.id;g.userData.outdoor=true;return g;
 }

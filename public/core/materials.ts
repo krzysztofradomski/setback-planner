@@ -16,12 +16,12 @@ export const materialIdSchema=z.enum(['plaster','brick-red','brick-terracotta','
 const color=z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const appearanceSchema=z.object({
   facade:materialIdSchema.optional(),walls:z.record(z.string().regex(/^(?:[0-9]|[12][0-9]|3[01])$/),materialIdSchema).optional(),
-  grout:color.optional(),roofColor:color.optional(),frameColor:color.optional(),gutterColor:color.optional(),trimColor:color.optional(),
+  roofCovering:z.enum(['metal','tile','shingle','membrane']).optional(),doorColor:color.optional(),grout:color.optional(),roofColor:color.optional(),frameColor:color.optional(),gutterColor:color.optional(),trimColor:color.optional(),
   tileWidth:z.number().finite().min(0.02).max(3).optional(),tileHeight:z.number().finite().min(0.02).max(3).optional(),
   layout:z.enum(['horizontal','vertical']).optional(),
 }).strict();
 export type AppearanceOverrides=z.infer<typeof appearanceSchema>;
-const base=Object.freeze({facade:'plaster' as const,grout:'#c7bfb2',roofColor:'#43494c',frameColor:'#333a3b',gutterColor:'#444b4c',trimColor:'#ded6c5',layout:'horizontal' as const});
+const base=Object.freeze({roofCovering:'metal' as const,doorColor:'#554a3e',facade:'plaster' as const,grout:'#c7bfb2',roofColor:'#43494c',frameColor:'#333a3b',gutterColor:'#444b4c',trimColor:'#ded6c5',layout:'horizontal' as const});
 export function resolveAppearance(overrides:AppearanceOverrides={}){
   const merged={...base,...appearanceSchema.parse(overrides)},material=materialPresets[merged.facade];
   return {...merged,walls:{...overrides.walls},tileWidth:merged.tileWidth??material.tileWidth,tileHeight:merged.tileHeight??material.tileHeight};

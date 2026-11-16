@@ -1,3 +1,4 @@
+import {terrainHeight} from '../core/terrain.ts';
 import {parcelPolygons} from '../core/topology.ts';
 import {buildFence} from './fences.ts';
 import {sunPosition,seasonalGround} from '../core/environment.ts';
@@ -16,7 +17,9 @@ const makeTexture:TextureFactory=(id,appearance)=>{
   if(preset.pattern==='brick'){
     for(let row=0;row<2;row++)for(let col=-1;col<3;col++)ctx.fillRect(col*128+(row%2)*64+2,row*64+2,124,60);
   } else {ctx.fillRect(2,0,124,128);ctx.fillRect(130,0,124,128);}
-  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;return texture;
+  const normalCanvas=document.createElement('canvas');normalCanvas.width=256;normalCanvas.height=128;const normalCtx=normalCanvas.getContext('2d');let normalMap:THREE.CanvasTexture|null=null;
+  if(normalCtx){const pixels=normalCtx.createImageData(256,128),height=(x:number,y:number)=>{x=(x+256)%256;y=(y+128)%128;if(preset.pattern==='boards')return x%128<3?0:1;const row=Math.floor(y/64),column=(x-row*64+256)%128;return y%64<3||column<3?0:1;};for(let y=0;y<128;y++)for(let x=0;x<256;x++){const nx=height(x-1,y)-height(x+1,y),ny=height(x,y-1)-height(x,y+1),n=new THREE.Vector3(nx,ny,1).normalize(),i=(y*256+x)*4;pixels.data[i]=(n.x+1)*127.5;pixels.data[i+1]=(n.y+1)*127.5;pixels.data[i+2]=(n.z+1)*127.5;pixels.data[i+3]=255;}normalCtx.putImageData(pixels,0,0);normalMap=new THREE.CanvasTexture(normalCanvas);normalMap.wrapS=normalMap.wrapT=THREE.RepeatWrapping;}
+  const texture=new THREE.CanvasTexture(canvas);texture.userData.normalMap=normalMap;texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;return texture;
 };
 export function createViewer(container:HTMLElement,onFailure:()=>void){
   const canvas=document.createElement('canvas'),context=canvas.getContext('webgl2',{antialias:true});
@@ -44,14 +47,18 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     camera.position.copy(center).add(offset);camera.lookAt(center);controls.update();render();
   }
   function update(project:Scene,original=false){
-    const next=JSON.stringify([project.plot,project.plotHoles,project.plotParts,project.items,project.fences,project.environment,project.coordinates,original]);if(next===signature){render();return;}signature=next;
+    const next=JSON.stringify([project.plot,project.plotHoles,project.plotParts,project.terrain,project.items,project.fences,project.environment,project.coordinates,original]);if(next===signature){render();return;}signature=next;
     disposeObject(content);
     if(validRing(project.plot))for(const [outer,...holes] of parcelPolygons(project)){
       const shape=groundShape(outer);shape.holes=holes.map(h=>new THREE.Path(h.map(p=>new THREE.Vector2(p.x,-p.y))));
-      const ground=new THREE.Mesh(new THREE.ShapeGeometry(shape),new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
+      let geometry=new THREE.ShapeGeometry(shape);
+      if(project.terrain){const samples=project.terrain.samples,base=samples[0].z,position=geometry.getAttribute('position'),index=geometry.index,vertices:number[]=[];
+        const subdivide=(a:number[],b:number[],c:number[],depth:number)=>{if(depth){const mid=(u:number[],v:number[])=>[(u[0]+v[0])/2,(u[1]+v[1])/2],ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);subdivide(a,ab,ca,depth-1);subdivide(ab,b,bc,depth-1);subdivide(ca,bc,c,depth-1);subdivide(ab,bc,ca,depth-1);}else for(const p of [a,b,c])vertices.push(p[0],p[1],terrainHeight(samples,p[0],-p[1])-base);};
+        const count=index?index.count:position.count;for(let i=0;i<count;i+=3){const p=[0,1,2].map(j=>{const k=index?index.getX(i+j):i+j;return[position.getX(k),position.getY(k)];});subdivide(p[0],p[1],p[2],2);}geometry.dispose();geometry=new THREE.ShapeGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.setIndex(null);geometry.computeVertexNormals();}
+      const ground=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
       const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(outer.map(p=>new THREE.Vector3(p.x,0.03,p.y))),new THREE.LineBasicMaterial({color:'#405442'}));content.add(boundary);
     }
-    for(const item of project.items.filter(i=>i.visible))content.add(buildBuilding(item,original,makeTexture,project.environment.season));
+    for(const item of project.items.filter(i=>i.visible)){const object=buildBuilding(item,original,makeTexture,project.environment.season);if(project.terrain)object.position.y=terrainHeight(project.terrain.samples,item.x,item.y)-project.terrain.samples[0].z;content.add(object);}
     for(const fence of project.fences)content.add(buildFence(fence,project.environment.season));
     content.updateMatrixWorld(true);
     const bounds=new THREE.Box3().setFromObject(content),size=bounds.getSize(new THREE.Vector3());

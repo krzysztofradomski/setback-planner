@@ -32,6 +32,7 @@ export const sceneSchema=z.object({
   plotHoles:z.array(z.array(pointSchema).min(3).max(512).refine(validRing)).max(16).default([]),
   plotParts:z.array(z.array(z.array(pointSchema).min(3).max(512).refine(validRing)).min(1).max(17)).max(16).default([]),
   items:z.array(itemSchema).max(100).refine(items=>new Set(items.map(i=>i.id)).size===items.length,'Duplicate object IDs'),
+  terrain:z.object({samples:z.array(z.object({x:coord,y:coord,z:finite.min(-500).max(9000)})).min(3).max(100),slopePercent:finite.min(0),source:z.string().max(100),url:z.url(),retrievedAt:z.iso.datetime(),verticalDatum:z.literal('unspecified')}).optional(),
   fences:z.array(fenceSchema).max(12).default([]),
   environment:z.object({season:z.enum(['spring','summer','autumn','winter']),date:z.iso.datetime(),latitude:finite.min(-90).max(90),longitude:finite.min(-180).max(180),weather:z.enum(['clear','clouds','rain','snow'])}).strict().default({season:'summer',date:'2026-06-21T10:00:00Z',latitude:52,longitude:19,weather:'clear'}),
   snap:z.union([z.literal(0),z.literal(0.1),z.literal(0.25),z.literal(0.5),z.literal(1)]).default(0.5),

@@ -52,7 +52,7 @@ test('inactivity warns, allows continuation and resets to attract screen',async(
 test('keyboard can leave attract screen and hostile attribution is discarded',async({page})=>{
   await page.evaluate(()=>sessionStorage.clear());
   await page.goto('/__showroom_test?utm_source=person%40example.com&campaign=https%3A%2F%2Fevil.test&event=Trade%20Fair');
-  const attribution=await page.evaluate('window.showroom.getAttribution()');
+  const attribution=await page.evaluate<Record<string,string|undefined>>('window.showroom.getAttribution()');
   expect(attribution.utm_source).toBeUndefined();expect(attribution.campaign).toBeUndefined();expect(attribution.event).toBe('Trade Fair');
   await page.getByText('Showroom / Tryb pokazowy').click();
   await page.getByRole('button',{name:'Start presentation / Rozpocznij pokaz'}).click();

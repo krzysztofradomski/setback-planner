@@ -14,3 +14,8 @@ test('report uses actual footprint area, preserves sources and distinguishes unk
   assert.ok(report.includes('Unverified requirements'));assert.ok(report.includes('No verified manufacturer price'));assert.ok(report.includes('edited'));
   assert.ok(!report.includes('<img src=x'));assert.ok(report.includes('Dark red brick slips'));
 });
+test('reports exclude landscaping from building coverage and hide invisible SVG objects',()=>{
+ const project=scene();project.items.push({...structuredClone(project.items[0]),id:'garden',name:'Garden marker',type:'landscape',kind:'lawn',w:5,d:5,shape:'rectangle',visible:false});
+ assert.ok(projectReport(project).includes('40.80 m²'));
+ assert.ok(!projectSvg(project).includes('Garden marker'));
+});

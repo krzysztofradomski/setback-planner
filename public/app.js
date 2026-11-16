@@ -16,6 +16,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   // ---------- i18n ----------
   const I18N = {
     en: {
+      doorColor:'Door color',
       environment:'Season and sunlight', solarHint:'Sun location uses the imported parcel, otherwise the manual coordinates below. Date/time uses this device’s timezone. Shadows omit unmodeled terrain and neighbors.',
       landscape:'Landscape', garden:'Garden library', addOutdoor:'Add outdoor object', mature:'Maturity (0–1)',
       objectLimit:'This project supports up to 100 buildings.',
@@ -55,6 +56,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      doorColor:'Kolor drzwi',
       environment:'Pora roku i słońce', solarHint:'Pozycja słońca wynika z położenia działki lub poniższych współrzędnych. Data i czas w strefie urządzenia. Cienie pomijają nieznany teren i sąsiadów.',
       landscape:'Ogród', garden:'Biblioteka ogrodu', addOutdoor:'Dodaj obiekt ogrodowy', mature:'Dojrzałość (0–1)',
       objectLimit:'Projekt obsługuje do 100 budynków.',
@@ -164,17 +166,18 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     try { return await decodeShare(location.hash); }
     catch { projectWarning(lang === 'pl' ? 'Nieprawidłowy lub nieobsługiwany link projektu.' : 'Invalid or unsupported project link.'); return null; }
   }
+  let showroomActive=false;
   let state = (await fromHash()) || load() || parseScene(DEFAULT());
   let saveT, saveRevision = 0;
   function save(){
     clearTimeout(saveT); const revision = ++saveRevision;
-    if (persistencePaused) return;
+    if (persistencePaused || showroomActive) return;
     saveT = setTimeout(async () => {
       try {
         const json = serializeScene(state);
         localStorage.setItem(LS, json); $('#project-warning').hidden = true;
         const hash = await encodeShare(JSON.parse(json));
-        if (revision === saveRevision && !persistencePaused) window.history.replaceState(null, '', hash);
+        if (revision === saveRevision && !persistencePaused && !showroomActive) window.history.replaceState(null, '', hash);
       } catch { projectWarning(lang === 'pl' ? 'Nie można zapisać projektu. Sprawdź geometrię i pamięć przeglądarki.' : 'Project could not be saved. Check geometry and browser storage.', false); }
     }, 300);
   }
@@ -184,7 +187,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   const cornerName=i=>i<26?String.fromCharCode(65+i):String(i+1);
   function markParcelEdited(){if(state.parcel)state.parcel.edited=true;}
 
-  const history = new ProjectHistory();
+  let history = new ProjectHistory();
   function snapshot(){ history.record(state); }
   function restoreHistory(next){
     if (!next){ toast(t('nothingToUndo')); return; }
@@ -457,8 +460,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
         <details id="material-options"><summary>${t('materials')}</summary>
           <p class="hint">${t('materialHint')}</p>
           <div class="field"><label for="f-facade">${t('facade')}</label><select id="f-facade">${Object.entries(materialPresets).map(([id,m])=>`<option value="${id}">${m[lang]}</option>`).join('')}</select></div>
-          <div class="grid2">${['grout','roofColor','frameColor','gutterColor','trimColor'].map(key=>`<div class="field"><label for="f-${key}">${t(key)}</label><input id="f-${key}" type="color"></div>`).join('')}
-          <div class="field"><label for="f-layout">${t('layout')}</label><select id="f-layout"><option value="horizontal">${t('horizontal')}</option><option value="vertical">${t('vertical')}</option></select></div>
+          <div class="grid2">${['grout','roofColor','frameColor','doorColor','gutterColor','trimColor'].map(key=>`<div class="field"><label for="f-${key}">${t(key)}</label><input id="f-${key}" type="color"></div>`).join('')}
+          <div class="field"><label for="f-roofCovering">Roof covering / Pokrycie</label><select id="f-roofCovering"><option>metal</option><option>tile</option><option>shingle</option><option>membrane</option></select></div><div class="field"><label for="f-layout">${t('layout')}</label><select id="f-layout"><option value="horizontal">${t('horizontal')}</option><option value="vertical">${t('vertical')}</option></select></div>
           ${['tileWidth','tileHeight'].map(key=>`<div class="field"><label for="f-${key}">${t(key)}</label><input id="f-${key}" type="number" min="0.02" max="3" step="0.005"></div>`).join('')}</div>
           <div class="grid2"><div class="field"><label for="f-wall">${t('wallFinish')}</label><select id="f-wall">${corners(it).map((_,i)=>`<option value="${i}">${i+1}</option>`).join('')}</select></div>
           <div class="field"><label for="f-wall-material">${t('facade')}</label><select id="f-wall-material"><option value="">${t('inherit')}</option>${Object.entries(materialPresets).map(([id,m])=>`<option value="${id}">${m[lang]}</option>`).join('')}</select></div></div>
@@ -469,7 +472,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
         <h3 class="lbl sm">${t('clearance')}</h3><div class="readout" id="f-clear"></div>
         <h3 class="lbl sm">${t('gaps')}</h3><div class="readout" id="f-gaps"></div>`;
       if ($('#enable-missing-catalog')) $('#enable-missing-catalog').onclick=()=>toggleCatalog(it.catalog.catalogId,true);
-      if(it.type==='landscape'){const f=document.createElement('div');f.className='field';f.innerHTML=`<label for="outdoor-maturity">${t('mature')}</label><input id="outdoor-maturity" type="number" min="0" max="1" step="0.1" value="${it.outdoor.maturity}">`;box.append(f);bindNum('outdoor-maturity',v=>it.outdoor.maturity=Math.max(0,Math.min(1,v)));}
+      if(it.type==='landscape'){const f=document.createElement('div');f.className='field';f.innerHTML=`<label for="outdoor-maturity">${t('mature')}</label><input id="outdoor-maturity" type="number" min="0" max="1" step="0.1" value="${it.outdoor.maturity}">`;f.insertAdjacentHTML('beforeend',`<label for="outdoor-paving">Paving / Nawierzchnia</label><select id="outdoor-paving">${['granite','concrete','gravel','timber','grass-pavers'].map(v=>`<option ${v===it.outdoor.paving?'selected':''}>${v}</option>`).join('')}</select>`);box.append(f);$('#outdoor-paving').onchange=e=>{snapshot();it.outdoor.paving=e.target.value;render();};bindNum('outdoor-maturity',v=>it.outdoor.maturity=Math.max(0,Math.min(1,v)));}
       const ops=document.createElement('details');ops.id='scene-operations';ops.innerHTML=`<summary>Scene operations / Operacje</summary><label class="check"><input id="object-visible" type="checkbox" ${it.visible?'checked':''}>Visible / Widoczny</label><label class="check"><input id="object-locked" type="checkbox" ${it.locked?'checked':''}>Locked / Zablokowany</label><label>Group / Grupa<input id="object-group" type="text" maxlength="60" value="${esc(it.group)}"></label><label>Custom normalized footprint [[x,y],…], each −0.5…0.5<textarea id="object-custom">${esc(JSON.stringify(it.custom?.map(p=>[p.x,p.y])??[]))}</textarea></label><label>Openings JSON [{edge,offset,width,height,sill,type}]<textarea id="object-openings">${esc(JSON.stringify(it.openings))}</textarea></label><button id="object-apply">Apply geometry / Zastosuj</button><div class="row"><button id="attach-garage">+ Garage / Garaż</button><button id="attach-carport">+ Carport / Wiata</button></div><p id="object-error" role="status"></p>`;box.append(ops);
       $('#object-visible').onchange=e=>{snapshot();it.visible=e.target.checked;render();};$('#object-locked').onchange=e=>{snapshot();it.locked=e.target.checked;buildPanel();render();};$('#object-group').onchange=e=>{snapshot();it.group=e.target.value;render();};
       $('#object-apply').onclick=()=>{try{const openings=JSON.parse($('#object-openings').value),custom=JSON.parse($('#object-custom').value).map(([x,y])=>({x,y})),next=parseScene({...state,items:state.items.map(i=>i.id===it.id?{...i,openings,...(custom.length?{shape:'custom',custom}:{})}:i)});applyPlan(next,t('planLoaded'));}catch{$('#object-error').textContent='Invalid geometry / Nieprawidłowa geometria';}};
@@ -490,7 +493,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       bindNum('f-height',v=>it.architecture.height=Math.max(0.02,Math.min(30,v)));
       bindNum('f-pitch',v=>it.architecture.pitch=Math.max(0,Math.min(60,v)));
       const setAppearance=(key,value)=>{snapshot();it.appearance={...it.appearance,[key]:value};render();};
-      for(const key of ['facade','grout','roofColor','frameColor','gutterColor','trimColor','layout']) $('#f-'+(key==='facade'?'facade':key)).onchange=e=>setAppearance(key,e.target.value);
+      for(const key of ['facade','grout','roofColor','frameColor','doorColor','gutterColor','trimColor','layout','roofCovering']) $('#f-'+(key==='facade'?'facade':key)).onchange=e=>setAppearance(key,e.target.value);
       for(const key of ['tileWidth','tileHeight']) bindNum('f-'+key,v=>it.appearance={...it.appearance,[key]:Math.max(0.02,Math.min(3,v))});
       $('#f-wall').onchange=()=>{$('#f-wall-material').value=it.appearance.walls?.[$('#f-wall').value]||'';};
       $('#f-wall-material').onchange=e=>{snapshot();const walls={...it.appearance.walls};if(e.target.value)walls[$('#f-wall').value]=e.target.value;else delete walls[$('#f-wall').value];it.appearance={...it.appearance,walls};render();};
@@ -510,7 +513,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     if (it){
       setVal('f-w', fmtN(it.w)); setVal('f-d', fmtN(it.d)); setVal('f-rot', fmtN(it.rot)); setVal('f-sb', fmtN(it.setback));
       const appearance=resolveAppearance(it.appearance);
-      for(const key of ['facade','grout','roofColor','frameColor','gutterColor','trimColor','layout','tileWidth','tileHeight'])setVal('f-'+key,appearance[key]);
+      for(const key of ['facade','grout','roofColor','frameColor','doorColor','gutterColor','trimColor','layout','roofCovering','tileWidth','tileHeight'])setVal('f-'+key,appearance[key]);
       setVal('f-wall-material',it.appearance.walls?.[$('#f-wall')?.value]||'');
       setVal('f-shape',it.shape); setVal('f-wing',it.wingRatio);setVal('f-height',it.architecture.height);setVal('f-storeys',it.architecture.storeys);setVal('f-roof',it.architecture.roof);setVal('f-pitch',it.architecture.pitch);
       if (force) setVal('f-name', it.name);
@@ -743,6 +746,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   };
   $('#map-base').onchange=e=>parcelMap?.setBase(e.target.value);
   $('#map-cadastre').onchange=e=>parcelMap?.setCadastre(e.target.checked);
+  for(const [id,label]of [['planning','Planning / MPZP'],['utilities','Utilities / Uzbrojenie'],['environment','Protected areas / Ochrona przyrody']]){const labelEl=document.createElement('label');labelEl.className='check';const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.id='map-'+id;checkbox.onchange=()=>parcelMap?.setOverlay(id,checkbox.checked);labelEl.append(checkbox,document.createTextNode(label));$('#map-controls').append(labelEl);}
   $('#map-fit').onclick=()=>parcelMap?.fitProject();
   let mapPick=false;
   $('#map-pick').onclick=()=>{mapPick=!mapPick;$('#map-pick').setAttribute('aria-pressed',String(mapPick));$('#map-status').textContent=t(mapPick?'pickHint':'mapHint');};
@@ -753,7 +757,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     try{
       const {lookupParcelAt}=await import('./core/uldk.ts');const parcel=await lookupParcelAt(longitude,latitude);
       if(JSON.stringify(state)!==before){$('#map-status').textContent=t('uldkChanged');return;}
-      applyPlan(parseScene({...state,...parcel}),t('planLoaded'));$('#map-status').textContent=t('planLoaded');
+      applyPlan(parseScene({...state,...parcel,terrain:undefined}),t('planLoaded'));$('#map-status').textContent=t('planLoaded');
     }catch{$('#map-status').textContent=t('uldkError');}
     finally{$('#map-pick').disabled=false;}
   }
@@ -775,6 +779,9 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   $('#view-capture').onclick=()=>{try{const a=document.createElement('a');a.download='setback-3d.png';a.href=viewer.screenshot();a.click();}catch{toast(t('viewerFailure'));}};
   window.addEventListener('pagehide',()=>{viewer?.dispose();viewer=null;parcelMap?.dispose();parcelMap=null;});
   // ---------- wiring ----------
+  const terrainPanel=document.createElement('details');terrainPanel.innerHTML='<summary>Terrain / Planning / Risks · Teren i źródła</summary><p class="hint">GUGiK NMT: nine elevation samples, approximate interpolated terrain and slope. Survey datum and acquisition date unspecified. Remote failures leave the project unchanged. / Przybliżony model z 9 próbek, nie zastępuje pomiarów.</p><button id="terrain-sample">Fetch elevation / Pobierz wysokości</button><button id="terrain-clear">Flat ground / Płaski teren</button><p id="terrain-result" role="status"></p><p class="hint">Map layers are visual context. No flood clearance, utility availability or legal planning conclusion is inferred. / Warstwy nie potwierdzają bezpieczeństwa ani warunków zabudowy.</p><a href="https://wody.isok.gov.pl/imap_kzgw/?gpmap=gpMZP" target="_blank" rel="noopener noreferrer">Official flood hazard · Wody Polskie</a><br><a href="https://geoserwis.gdos.gov.pl/mapy/" target="_blank" rel="noopener noreferrer">Protected environments · GDOŚ</a>';$('#sel').before(terrainPanel);
+  $('#terrain-clear').onclick=()=>{snapshot();delete state.terrain;$('#terrain-result').textContent='';render();};
+  $('#terrain-sample').onclick=async()=>{const before=JSON.stringify(state);$('#terrain-sample').disabled=true;$('#terrain-result').textContent='…';try{const {sampleTerrain}=await import('./core/terrain.ts'),terrain=await sampleTerrain(state);if(JSON.stringify(state)!==before)throw new Error('Project changed; request again');snapshot();state.terrain=terrain;$('#terrain-result').textContent=`${terrain.source} · ${terrain.retrievedAt} · approximate slope ${terrain.slopePercent.toFixed(1)}%`;render();}catch(e){$('#terrain-result').textContent=e.message;}finally{$('#terrain-sample').disabled=false;}};
   const planningPanel=document.createElement('details');planningPanel.innerHTML='<summary>Geometric placement · Ustawienie geometryczne</summary><p class="hint">Source: user-selected setback input. Miter-corner offsets, millimetre precision. Not legal compliance. Grid suggestions are sampled, not exhaustive. / Źródło: odległość użytkownika. Obliczenia geometryczne, bez oceny prawnej.</p><button id="placement-analyze">Analyze selected object / Analizuj zaznaczony</button><p id="placement-result" role="status"></p><div id="placement-options"></div>';$('#sel').before(planningPanel);
   $('#placement-analyze').onclick=async()=>{const item=get(selected);if(!item)return;$('#placement-analyze').disabled=true;$('#placement-result').textContent='…';try{const {suggestPlacements}=await import('./core/placement.ts'),result=suggestPlacements(state,item),token=JSON.stringify(state);$('#placement-result').textContent=`${item.name}: ${result.area.toFixed(2)} m² inside geometric setback region; ${result.suggestions.length} sampled placements.`;$('#placement-options').replaceChildren();for(const p of result.suggestions){const button=document.createElement('button');button.textContent=`${p.x.toFixed(1)}, ${p.y.toFixed(1)} m / ${p.rot}°`;button.onclick=()=>{if(JSON.stringify(state)!==token){toast('Recalculate / Przelicz');return;}snapshot();Object.assign(item,{x:p.x,y:p.y,rot:p.rot});buildPanel();render();};$('#placement-options').append(button);}}catch{$('#placement-result').textContent='No region / Brak obszaru';}finally{$('#placement-analyze').disabled=false;}};
   const topologyPanel=document.createElement('details');topologyPanel.innerHTML='<summary>Parcel holes / parts · Otwory i części działki</summary><p class="hint">Local metric coordinates / Lokalne współrzędne w metrach. {holes: [[[x,y],…]], parts: [[outerRing, holeRing,…],…]}</p><textarea id="topology-json" aria-label="Additional parcel rings"></textarea><button id="topology-read">Read boundaries / Odczytaj</button><button id="topology-apply">Apply / Zastosuj</button><p id="topology-message" role="status"></p>';$('#sel').before(topologyPanel);
@@ -804,7 +811,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   $('#b-rect').onclick = () => {
     const w = parseFloat($('#rw').value), d = parseFloat($('#rd').value);
     if (!(w > 0 && d > 0)){ toast(t('badRect')); return; }
-    snapshot(); state.plotHoles=[];state.plotParts=[]; state.plot = [{x:0,y:0},{x:w,y:0},{x:w,y:d},{x:0,y:d}]; delete state.parcel; delete state.coordinates.projected; buildCorners(); fit(); render();
+    snapshot(); state.plotHoles=[];state.plotParts=[]; state.plot = [{x:0,y:0},{x:w,y:0},{x:w,y:d},{x:0,y:d}]; delete state.parcel; delete state.coordinates.projected; delete state.terrain; buildCorners(); fit(); render();
   };
   const snapSel = $('#o-snap'); snapSel.value = String(state.snap);
   if (snapSel.value === '') snapSel.value = '0.5';
@@ -871,7 +878,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     try{
       const {lookupParcel}=await import('./core/uldk.ts');const parcel=await lookupParcel(identifier);
       if(JSON.stringify(state)!==before){$('#parcel-result').textContent=t('uldkChanged');return;}
-      applyPlan(parseScene({...state,...parcel}),t('planLoaded'));$('#parcel-result').textContent=t('planLoaded');
+      applyPlan(parseScene({...state,...parcel,terrain:undefined}),t('planLoaded'));$('#parcel-result').textContent=t('planLoaded');
     }catch{$('#parcel-result').textContent=t('uldkError');}
     finally{$('#parcel-search').disabled=false;}
   };
@@ -882,7 +889,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       if(file.size>MAX_PROJECT_BYTES)throw new Error('large');
       const {importParcel}=await import('./core/geospatial.ts');
       const parcel=importParcel(JSON.parse(await file.text()),$('#parcel-crs').value,file.name.slice(0,120),new Date().toISOString());
-      applyPlan(parseScene({...state,...parcel}),t('planLoaded'));
+      applyPlan(parseScene({...state,...parcel,terrain:undefined}),t('planLoaded'));
     }catch{toast(t('parcelImportError'));}finally{e.target.value='';}
   };
   const VARIANT_LS='setback-planner-variants-v1';
@@ -930,6 +937,16 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       document.getElementById(`pc-${axis}-${i}`).setAttribute('aria-label', t('cornerAxis', {c:cornerName(i), axis}))));
     buildPanel(); render();
   });
+
+  const showroomHost=document.createElement('div');showroomHost.id='showroom-host';$('.rail').append(showroomHost);
+  let ordinaryHistory=null,ordinarySelected=null,ordinaryPaused=false,ordinaryWarning=null,business=null;
+  const {mountShowroom}=await import('./showroom.ts');
+  const showroom=mountShowroom({beforeEnter:async()=>{await business?.logout?.();},container:showroomHost,getScene:()=>state,applyScene:next=>{applyPlan(parseScene(next),t('planLoaded'));if(showroomActive)history=new ProjectHistory();},shareUrl:()=>location.href.split('#')[0]+plainShare(state),setView:mode=>{if(mode==='3d')$('#view-3d').click();else if(mode==='map')$('#view-map').click();else setStageMode('2d');},onActiveChange:active=>{
+    if(active){ordinaryHistory=history;ordinarySelected=selected;ordinaryPaused=persistencePaused;ordinaryWarning={hidden:$('#project-warning').hidden,text:$('#project-warning').textContent};showroomActive=true;clearTimeout(saveT);saveRevision++;history=new ProjectHistory();}
+    else{showroomActive=false;history=ordinaryHistory||new ProjectHistory();selected=get(ordinarySelected)?ordinarySelected:null;persistencePaused=ordinaryPaused;if(ordinaryWarning){$('#project-warning').hidden=ordinaryWarning.hidden;$('#project-warning').textContent=ordinaryWarning.text;}buildPanel();render();}
+    $('#b-download').closest('section').hidden=active;document.body.classList.toggle('showroom-active',active);
+  },onSessionReset:()=>{history=new ProjectHistory();selected=null;$('#io').value='';$('#report-frame').srcdoc='';$('#report-dialog').close();business?.clearPersonalData?.();}});
+  const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');business=mountBusiness({container:businessHost,getScene:()=>structuredClone(state),getAttribution:()=>showroom.getAttribution()});
 
   applyLang(); renderCatalogs();
   buildCorners();

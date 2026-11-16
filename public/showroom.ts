@@ -10,6 +10,7 @@ export interface ShowroomOptions {
   shareUrl:()=>string|Promise<string>;
   setView?:(view:'2d'|'3d'|'map')=>void;
   /** Host must suspend ordinary autosave while active and restore ordinary undo history on exit. */
+  beforeEnter?:()=>Promise<void>;
   onActiveChange?:(active:boolean)=>void;
   /** Clear host inquiry forms, temporary exports, selection and visitor undo history here. */
   onSessionReset?:()=>void;
@@ -80,7 +81,7 @@ export function mountShowroom(options:ShowroomOptions){
     if(document.fullscreenElement)void document.exitFullscreen().catch(()=>{});
   };
   const act=async(action:string)=>{
-    if(action==='enter'){enter();return;}
+    if(action==='enter'){const button=find<HTMLButtonElement>('[data-action="enter"]');button.disabled=true;try{await options.beforeEnter?.();enter();}catch{let error=setup.querySelector<HTMLElement>('[role="alert"]');if(!error){error=document.createElement('p');error.setAttribute('role','alert');setup.append(error);}error.textContent='Unable to end private session. Sign out before starting the public presentation.';}finally{button.disabled=false;}return;}
     if(!active)return;
     if(action==='continue'){warning.close();warningShown=false;lastActivity=Date.now();return;}
     if(action==='reset'){reset();return;}

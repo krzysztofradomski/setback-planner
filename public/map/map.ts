@@ -9,13 +9,13 @@ export function createParcelMap(container:HTMLElement,onError:()=>void){
   const canvas=document.createElement('canvas'),context=canvas.getContext('webgl2');if(!context)throw new Error('Map WebGL unavailable');context.getExtension('WEBGL_lose_context')?.loseContext();
   const map=new Map({container,center:[19,52],zoom:5,minZoom:4,maxZoom:20,maxBounds:[[13,48],[25,56]],attributionControl:false,style:{version:8,sources:{},layers:[{id:'background',type:'background',paint:{'background-color':'#e5e8df'}}]}});
   map.addControl(new NavigationControl(),'top-right');map.addControl(new AttributionControl({compact:false}),'bottom-right');
-  let loaded=false,current:Scene|null=null,base:'osm'|'ortho'|'none'='osm',cadastre=false,signature='',fittedOrigin='';
+  let loaded=false,current:Scene|null=null,base:'osm'|'ortho'|'none'='osm',cadastre=false,signature='',fittedOrigin='';const overlays=new Set<string>();
   map.on('error',()=>onError());
   map.on('idle',()=>{container.dataset.ready='true';});
   function sources(){
     if(!loaded)return;
     for(const [id,source]of Object.entries(mapSources)){
-      const visible=id==='cadastre'?cadastre:base===id;
+      const visible=id==='cadastre'?cadastre:overlays.has(id)||base===id;
       if(visible&&!map.getSource(id)){
         map.addSource(id,source as RasterSourceSpecification);
         map.addLayer({id,type:'raster',source:id,paint:{'raster-opacity':id==='cadastre'?0.85:1}},'project-fill');
@@ -48,6 +48,7 @@ export function createParcelMap(container:HTMLElement,onError:()=>void){
   const observer=new ResizeObserver(()=>map.resize());observer.observe(container);
   return {ready,update,fitProject,
     setBase(value:'osm'|'ortho'|'none'){base=value;sources();if(value==='ortho'&&map.getZoom()<10)map.jumpTo({zoom:10});},
+    setOverlay(id:string,value:boolean){if(!['planning','utilities','environment'].includes(id))return;if(value)overlays.add(id);else overlays.delete(id);sources();},
     setCadastre(value:boolean){cadastre=value;sources();},
     setActive(active:boolean){if(active)map.resize();},
     onClick(callback:(longitude:number,latitude:number)=>void){map.on('click',event=>callback(event.lngLat.lng,event.lngLat.lat));},
