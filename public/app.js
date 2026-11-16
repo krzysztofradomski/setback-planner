@@ -1,3 +1,4 @@
+import { materialPresets, resolveAppearance, resetAppearance } from './core/materials.ts';
 import { worldFootprint, boundingCorners } from './core/footprints.ts';
 import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
 import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
@@ -10,6 +11,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   // ---------- i18n ----------
   const I18N = {
     en: {
+      materials:'Materials', facade:'Façade finish', grout:'Grout color', roofColor:'Roof color', frameColor:'Window / door color', gutterColor:'Gutter color', trimColor:'Trim color', tileWidth:'Tile width (m)', tileHeight:'Tile height (m)', layout:'Tile direction', horizontal:'Horizontal', vertical:'Vertical', wallFinish:'Individual wall', allWalls:'All walls', inherit:'Use façade finish', resetMaterials:'Reset all finishes', resetFacade:'Reset façade', original:'Compare original', materialHint:'Conceptual finishes, not manufacturer-approved options. No price calculation. Patterns are schematic.',
       shape:'Footprint shape', rectangle:'Rectangular', wingRatio:'Wing proportion', height:'Wall height total (m)', storeys:'Storeys', roof:'Roof', flat:'Flat', gable:'Gable', pitch:'Roof pitch (°)', genericHint:'Generic conceptual house. Dimensions are user-defined; no manufacturer specifications or legal approval.',
       redo:'Redo', downloadProject:'Download JSON', openFile:'Open JSON file', variants:'Local variants', variantName:'Variant name', saveVariant:'Save as variant', openVariant:'Open variant', variantHint:'Stored only in this browser, up to 20 variants. Download JSON for a backup.', variantError:'Could not save or read variants. Check the name, storage space and 20-variant limit.',
       docTitle: 'Setback Planner', title: 'Setback Planner', tagline: 'Plot outline on a 1 m grid, buildings, and every clearance.',
@@ -38,6 +40,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      materials:'Materiały', facade:'Wykończenie elewacji', grout:'Kolor fugi', roofColor:'Kolor dachu', frameColor:'Kolor okien / drzwi', gutterColor:'Kolor rynien', trimColor:'Kolor detali', tileWidth:'Szerokość płytki (m)', tileHeight:'Wysokość płytki (m)', layout:'Kierunek płytek', horizontal:'Poziomo', vertical:'Pionowo', wallFinish:'Pojedyncza ściana', allWalls:'Wszystkie ściany', inherit:'Wykończenie elewacji', resetMaterials:'Resetuj wykończenia', resetFacade:'Resetuj elewację', original:'Porównaj oryginał', materialHint:'Wykończenia koncepcyjne, bez zatwierdzenia producenta i kalkulacji cen. Wzory są schematyczne.',
       shape:'Kształt obrysu', rectangle:'Prostokątny', wingRatio:'Proporcja skrzydła', height:'Łączna wysokość ścian (m)', storeys:'Kondygnacje', roof:'Dach', flat:'Płaski', gable:'Dwuspadowy', pitch:'Kąt dachu (°)', genericHint:'Dom koncepcyjny. Wymiary określa użytkownik; bez specyfikacji producenta i potwierdzenia zgodności z prawem.',
       redo:'Ponów', downloadProject:'Pobierz JSON', openFile:'Otwórz plik JSON', variants:'Warianty lokalne', variantName:'Nazwa wariantu', saveVariant:'Zapisz jako wariant', openVariant:'Otwórz wariant', variantHint:'Tylko w tej przeglądarce, do 20 wariantów. Pobierz JSON jako kopię zapasową.', variantError:'Nie można zapisać lub odczytać wariantów. Sprawdź nazwę, pamięć i limit 20 wariantów.',
       docTitle: 'Planer odległości od granic', title: 'Planer odległości', tagline: 'Obrys działki na siatce 1 m, budynki i wszystkie odległości.',
@@ -273,6 +276,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   }
 
   // ---------- rendering ----------
+  let originalAppearance = false;
   let C = compute();
   function render(){ C = compute(); renderSheet(); syncPanel(); save(); }
 
@@ -333,7 +337,8 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       const r = C.res.get(it.id), sp = r.c.map(S);
       const d = 'M' + sp.map(p => f(p.x) + ' ' + f(p.y)).join('L') + 'Z';
       const bad = !r.inside || r.overlap;
-      out.push(`<path class="bld ${it.type}${it.id === selected ? ' sel' : ''}${bad ? ' bad' : ''}" data-kind="item" data-id="${it.id}" d="${d}"/>`);
+      const appearance=resolveAppearance(originalAppearance?{}:it.appearance), finish=materialPresets[appearance.facade];
+      out.push(`<path class="bld ${it.type}${it.id === selected ? ' sel' : ''}${bad ? ' bad' : ''}" data-kind="item" data-id="${it.id}" style="fill:${finish.color};fill-opacity:.55" d="${d}"/>`);
       const c = S(it), minSide = Math.min(it.w, it.d) * k;
       if (minSide > 26){
         const two = minSide > 46;
@@ -396,6 +401,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   function buildPanel(){
     C = compute(); // syncPanel below reads C; callers change items before render()
     const it = get(selected), box = $('#sel');
+    const openDetails=[...box.querySelectorAll('details[open]')].map(el=>el.id);
     if (!it){
       box.innerHTML = `<h2 class="lbl">${t('selection')}</h2><p class="hint">${t('selectionHint')}</p>`;
     } else {
@@ -419,6 +425,17 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
             <div class="field"><label for="f-pitch">${t('pitch')}</label><input id="f-pitch" type="number" min="0" max="60" step="1"></div>
           </div>
         </details>
+        <details id="material-options"><summary>${t('materials')}</summary>
+          <p class="hint">${t('materialHint')}</p>
+          <div class="field"><label for="f-facade">${t('facade')}</label><select id="f-facade">${Object.entries(materialPresets).map(([id,m])=>`<option value="${id}">${m[lang]}</option>`).join('')}</select></div>
+          <div class="grid2">${['grout','roofColor','frameColor','gutterColor','trimColor'].map(key=>`<div class="field"><label for="f-${key}">${t(key)}</label><input id="f-${key}" type="color"></div>`).join('')}
+          <div class="field"><label for="f-layout">${t('layout')}</label><select id="f-layout"><option value="horizontal">${t('horizontal')}</option><option value="vertical">${t('vertical')}</option></select></div>
+          ${['tileWidth','tileHeight'].map(key=>`<div class="field"><label for="f-${key}">${t(key)}</label><input id="f-${key}" type="number" min="0.02" max="3" step="0.005"></div>`).join('')}</div>
+          <div class="grid2"><div class="field"><label for="f-wall">${t('wallFinish')}</label><select id="f-wall">${corners(it).map((_,i)=>`<option value="${i}">${i+1}</option>`).join('')}</select></div>
+          <div class="field"><label for="f-wall-material">${t('facade')}</label><select id="f-wall-material"><option value="">${t('inherit')}</option>${Object.entries(materialPresets).map(([id,m])=>`<option value="${id}">${m[lang]}</option>`).join('')}</select></div></div>
+          <label class="check"><input id="f-original" type="checkbox" ${originalAppearance?'checked':''}>${t('original')}</label>
+          <div class="row"><button id="f-reset-facade">${t('resetFacade')}</button><button id="f-reset-materials">${t('resetMaterials')}</button></div>
+        </details>
         <div class="row"><button id="b-rot">${t('rotate90')}</button><button id="b-dup">${t('duplicate')}</button><button id="b-del" class="danger">${t('del')}</button></div>
         <h3 class="lbl sm">${t('clearance')}</h3><div class="readout" id="f-clear"></div>
         <h3 class="lbl sm">${t('gaps')}</h3><div class="readout" id="f-gaps"></div>`;
@@ -430,16 +447,25 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       bindNum('f-d', v => { it.d = Math.min(1000, Math.max(0.5, v)); });
       bindNum('f-rot', v => { it.rot = ((v % 360) + 360) % 360; });
       bindNum('f-sb', v => { it.setback = Math.min(1000, Math.max(0, v)); });
-      $('#f-shape').onchange=e=>{snapshot();it.shape=e.target.value;render();};
+      $('#f-shape').onchange=e=>{snapshot();it.shape=e.target.value;it.appearance.walls={};buildPanel();render();};
       $('#f-roof').onchange=e=>{snapshot();it.architecture.roof=e.target.value;render();};
       bindNum('f-wing',v=>it.wingRatio=Math.max(0.15,Math.min(0.45,v)));
       bindNum('f-storeys',v=>it.architecture.storeys=Math.max(1,Math.min(3,Math.round(v))));
       bindNum('f-height',v=>it.architecture.height=Math.max(0.5,Math.min(30,v)));
       bindNum('f-pitch',v=>it.architecture.pitch=Math.max(0,Math.min(60,v)));
+      const setAppearance=(key,value)=>{snapshot();it.appearance={...it.appearance,[key]:value};render();};
+      for(const key of ['facade','grout','roofColor','frameColor','gutterColor','trimColor','layout']) $('#f-'+(key==='facade'?'facade':key)).onchange=e=>setAppearance(key,e.target.value);
+      for(const key of ['tileWidth','tileHeight']) bindNum('f-'+key,v=>it.appearance={...it.appearance,[key]:Math.max(0.02,Math.min(3,v))});
+      $('#f-wall').onchange=()=>{$('#f-wall-material').value=it.appearance.walls?.[$('#f-wall').value]||'';};
+      $('#f-wall-material').onchange=e=>{snapshot();const walls={...it.appearance.walls};if(e.target.value)walls[$('#f-wall').value]=e.target.value;else delete walls[$('#f-wall').value];it.appearance={...it.appearance,walls};render();};
+      $('#f-original').onchange=e=>{originalAppearance=e.target.checked;render();};
+      $('#f-reset-materials').onclick=()=>{snapshot();it.appearance=resetAppearance(it.appearance);render();};
+      $('#f-reset-facade').onclick=()=>{snapshot();it.appearance=resetAppearance(it.appearance,'facade');render();};
       $('#b-rot').onclick = () => rotate90();
       $('#b-dup').onclick = () => duplicate();
       $('#b-del').onclick = () => removeSelected();
     }
+    openDetails.forEach(id=>{const detail=document.getElementById(id);if(detail)detail.open=true;});
     syncPanel(true);
   }
 
@@ -447,6 +473,9 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     const it = get(selected);
     if (it){
       setVal('f-w', fmtN(it.w)); setVal('f-d', fmtN(it.d)); setVal('f-rot', fmtN(it.rot)); setVal('f-sb', fmtN(it.setback));
+      const appearance=resolveAppearance(it.appearance);
+      for(const key of ['facade','grout','roofColor','frameColor','gutterColor','trimColor','layout','tileWidth','tileHeight'])setVal('f-'+key,appearance[key]);
+      setVal('f-wall-material',it.appearance.walls?.[$('#f-wall')?.value]||'');
       setVal('f-shape',it.shape); setVal('f-wing',it.wingRatio);setVal('f-height',it.architecture.height);setVal('f-storeys',it.architecture.storeys);setVal('f-roof',it.architecture.roof);setVal('f-pitch',it.architecture.pitch);
       if (force) setVal('f-name', it.name);
       const r = C.res.get(it.id);

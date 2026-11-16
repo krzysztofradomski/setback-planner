@@ -139,14 +139,24 @@
       "dependencies": [
         "F005"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Brick slip variants plus plaster, wood, clinker, stone, concrete and composite",
         "Separate base and override data with per-material reset",
         "Conceptual finishes clearly distinguished"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/materials.test.ts (2 tests)",
+        "tests/browser/planner.spec.ts (8 passing after preserving expanded controls)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "All presets are conceptual, not manufacturer-confirmed.",
+        "2D shows facade tint; physical texture rendering is F008.",
+        "Normal maps, accent-area geometry and roof covering patterns remain to be added."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]

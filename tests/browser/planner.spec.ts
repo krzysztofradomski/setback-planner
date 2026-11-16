@@ -104,3 +104,24 @@ test('generic concave footprint and architecture survive sharing, duplication an
   await page.locator('#objs .obj').first().click();
   await expect(page.locator('#f-shape')).toHaveValue('L');
 });
+test('conceptual material overrides persist, compare and reset independently', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read','clipboard-write']);
+  await page.goto('/');
+  await page.locator('#material-options').evaluate((el:HTMLDetailsElement)=>el.open=true);
+  await page.locator('#f-facade').selectOption('brick-red');
+  await page.locator('#f-wall').selectOption('1');
+  await page.locator('#f-wall-material').selectOption('wood');
+  const custom=await page.locator('.bld').first().getAttribute('style');
+  await page.locator('#f-original').check();
+  expect(await page.locator('.bld').first().getAttribute('style')).not.toBe(custom);
+  await page.locator('#f-original').uncheck();
+  await page.locator('#b-link').click();
+  await page.goto(await page.evaluate(()=>navigator.clipboard.readText()));
+  await page.locator('#material-options').evaluate((el:HTMLDetailsElement)=>el.open=true);
+  await expect(page.locator('#f-facade')).toHaveValue('brick-red');
+  await page.locator('#f-wall').selectOption('1');
+  await expect(page.locator('#f-wall-material')).toHaveValue('wood');
+  await page.locator('#f-reset-facade').click();
+  await expect(page.locator('#f-facade')).toHaveValue('plaster');
+  await expect(page.locator('#f-wall-material')).toHaveValue('wood');
+});
