@@ -1,3 +1,4 @@
+import { catalogRegistrations, loadCatalog, catalogAvailable } from './core/catalogs.ts';
 import { materialPresets, resolveAppearance, resetAppearance } from './core/materials.ts';
 import { worldFootprint, boundingCorners } from './core/footprints.ts';
 import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
@@ -11,6 +12,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   // ---------- i18n ----------
   const I18N = {
     en: {
+      catalogs:'Optional catalogs', catalogHint:'Source metadata only. Authoritative dimensions and approved assets are unavailable; generic houses remain available.', catalogUnavailable:'Catalog unavailable or disabled. Saved user-defined fallback geometry is retained.', enableCatalog:'Enable catalog', catalogError:'Catalog could not be loaded. Generic planning remains available.', source:'Source', verifiedOn:'Checked', noDimensions:'Dimensions unverified · placement unavailable',
       materials:'Materials', facade:'Façade finish', grout:'Grout color', roofColor:'Roof color', frameColor:'Window / door color', gutterColor:'Gutter color', trimColor:'Trim color', tileWidth:'Tile width (m)', tileHeight:'Tile height (m)', layout:'Tile direction', horizontal:'Horizontal', vertical:'Vertical', wallFinish:'Individual wall', allWalls:'All walls', inherit:'Use façade finish', resetMaterials:'Reset all finishes', resetFacade:'Reset façade', original:'Compare original', materialHint:'Conceptual finishes, not manufacturer-approved options. No price calculation. Patterns are schematic.',
       shape:'Footprint shape', rectangle:'Rectangular', wingRatio:'Wing proportion', height:'Wall height total (m)', storeys:'Storeys', roof:'Roof', flat:'Flat', gable:'Gable', pitch:'Roof pitch (°)', genericHint:'Generic conceptual house. Dimensions are user-defined; no manufacturer specifications or legal approval.',
       redo:'Redo', downloadProject:'Download JSON', openFile:'Open JSON file', variants:'Local variants', variantName:'Variant name', saveVariant:'Save as variant', openVariant:'Open variant', variantHint:'Stored only in this browser, up to 20 variants. Download JSON for a backup.', variantError:'Could not save or read variants. Check the name, storage space and 20-variant limit.',
@@ -40,6 +42,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      catalogs:'Katalogi opcjonalne', catalogHint:'Tylko metadane źródłowe. Brak potwierdzonych wymiarów i zatwierdzonych zasobów; domy ogólne są dostępne.', catalogUnavailable:'Katalog niedostępny lub wyłączony. Zachowano zapisany obrys użytkownika.', enableCatalog:'Włącz katalog', catalogError:'Nie można wczytać katalogu. Planowanie ogólne jest nadal dostępne.', source:'Źródło', verifiedOn:'Sprawdzono', noDimensions:'Wymiary niepotwierdzone · brak umieszczania',
       materials:'Materiały', facade:'Wykończenie elewacji', grout:'Kolor fugi', roofColor:'Kolor dachu', frameColor:'Kolor okien / drzwi', gutterColor:'Kolor rynien', trimColor:'Kolor detali', tileWidth:'Szerokość płytki (m)', tileHeight:'Wysokość płytki (m)', layout:'Kierunek płytek', horizontal:'Poziomo', vertical:'Pionowo', wallFinish:'Pojedyncza ściana', allWalls:'Wszystkie ściany', inherit:'Wykończenie elewacji', resetMaterials:'Resetuj wykończenia', resetFacade:'Resetuj elewację', original:'Porównaj oryginał', materialHint:'Wykończenia koncepcyjne, bez zatwierdzenia producenta i kalkulacji cen. Wzory są schematyczne.',
       shape:'Kształt obrysu', rectangle:'Prostokątny', wingRatio:'Proporcja skrzydła', height:'Łączna wysokość ścian (m)', storeys:'Kondygnacje', roof:'Dach', flat:'Płaski', gable:'Dwuspadowy', pitch:'Kąt dachu (°)', genericHint:'Dom koncepcyjny. Wymiary określa użytkownik; bez specyfikacji producenta i potwierdzenia zgodności z prawem.',
       redo:'Ponów', downloadProject:'Pobierz JSON', openFile:'Otwórz plik JSON', variants:'Warianty lokalne', variantName:'Nazwa wariantu', saveVariant:'Zapisz jako wariant', openVariant:'Otwórz wariant', variantHint:'Tylko w tej przeglądarce, do 20 wariantów. Pobierz JSON jako kopię zapasową.', variantError:'Nie można zapisać lub odczytać wariantów. Sprawdź nazwę, pamięć i limit 20 wariantów.',
@@ -86,6 +89,25 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     document.querySelectorAll('#o-snap option:not([value="0"])').forEach(o => { o.textContent = dec(o.value) + ' m'; });
     document.querySelectorAll('.lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
   }
+  const CATALOG_LS='setback-planner-catalogs';
+  let enabledCatalogs;
+  try { const saved=JSON.parse(localStorage.getItem(CATALOG_LS)||'null');enabledCatalogs=Array.isArray(saved)?saved.filter(id=>catalogRegistrations.some(r=>r.id===id)):catalogRegistrations.map(r=>r.id); }
+  catch { enabledCatalogs=catalogRegistrations.map(r=>r.id); }
+  let catalogRevision=0;
+  async function renderCatalogs(){
+    const revision=++catalogRevision;
+    $('#catalog-switches').innerHTML=catalogRegistrations.map(r=>`<label class="check"><input type="checkbox" data-catalog="${r.id}" ${enabledCatalogs.includes(r.id)?'checked':''}>${esc(r.name)}</label>`).join('');
+    $('#catalog-models').textContent='';
+    const entries=await Promise.all(enabledCatalogs.map(async id=>{try{return await loadCatalog(id);}catch{return null;}}));
+    if(revision!==catalogRevision)return;
+    $('#catalog-models').innerHTML=entries.map(c=>c?`<p class="hint"><a href="${esc(c.source)}" target="_blank" rel="noopener noreferrer">${t('source')}: ${esc(c.name)}</a> · ${t('verifiedOn')} ${esc(c.retrievedAt)}</p>${c.models.map(m=>`<p class="hint"><b>${esc(m.name)}</b> — ${t('noDimensions')}</p>`).join('')}`:`<p class="hint">${t('catalogError')}</p>`).join('');
+  }
+  function toggleCatalog(id,enabled){
+    enabledCatalogs=enabled?[...new Set([...enabledCatalogs,id])]:enabledCatalogs.filter(c=>c!==id);
+    try {localStorage.setItem(CATALOG_LS,JSON.stringify(enabledCatalogs));}catch{toast(t('catalogError'));}
+    renderCatalogs();buildPanel();
+  }
+  $('#catalog-switches').onchange=e=>toggleCatalog(e.target.dataset.catalog,e.target.checked);
   const TYPES = {
     house:  { w: 12, d: 10, setback: 4 },
     garage: { w: 6,  d: 6,  setback: 3 },
@@ -407,6 +429,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
     } else {
       box.innerHTML = `
         <div class="sec-head"><h2 class="lbl">${t('selected')}</h2><span class="tag ${it.type}">${t(it.type)}</span></div>
+        ${it.catalog?`<p class="hint">${esc(it.catalog.catalogId)} / ${esc(it.catalog.modelId)} · ${esc(it.catalog.modelVersion)}<br>${t('catalogUnavailable')}</p>${!catalogAvailable(it.catalog,enabledCatalogs)&&catalogRegistrations.some(r=>r.id===it.catalog.catalogId)?`<button id="enable-missing-catalog">${t('enableCatalog')}</button>`:''}`:''}
         <div class="field"><label for="f-name">${t('name')}</label><input id="f-name" type="text" maxlength="60" value="${esc(it.name)}"></div>
         <div class="grid2">
           <div class="field"><label for="f-w">${t('width')}</label><input id="f-w" type="number" step="0.1" min="0.5" inputmode="decimal"></div>
@@ -439,6 +462,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
         <div class="row"><button id="b-rot">${t('rotate90')}</button><button id="b-dup">${t('duplicate')}</button><button id="b-del" class="danger">${t('del')}</button></div>
         <h3 class="lbl sm">${t('clearance')}</h3><div class="readout" id="f-clear"></div>
         <h3 class="lbl sm">${t('gaps')}</h3><div class="readout" id="f-gaps"></div>`;
+      if ($('#enable-missing-catalog')) $('#enable-missing-catalog').onclick=()=>toggleCatalog(it.catalog.catalogId,true);
       const nameEl = $('#f-name');
       let pending = false;
       nameEl.addEventListener('focus', () => { pending = true; });
@@ -781,13 +805,13 @@ import { containsPolygon, polygonRelation, validRing, polygonArea } from './core
   document.querySelectorAll('.lang button').forEach(b => b.onclick = () => {
     lang = b.dataset.lang;
     try { localStorage.setItem(LANG_LS, lang); } catch (e) {}
-    applyLang();
+    applyLang(); renderCatalogs();
     'ABCD'.split('').forEach((c, i) => ['x', 'y'].forEach(axis =>
       document.getElementById(`pc-${axis}-${i}`).setAttribute('aria-label', t('cornerAxis', {c, axis}))));
     buildPanel(); render();
   });
 
-  applyLang();
+  applyLang(); renderCatalogs();
   buildCorners();
   buildPanel();
   new ResizeObserver(() => renderSheet()).observe(svg);

@@ -125,3 +125,18 @@ test('conceptual material overrides persist, compare and reset independently', a
   await expect(page.locator('#f-facade')).toHaveValue('plaster');
   await expect(page.locator('#f-wall-material')).toHaveValue('wood');
 });
+test('optional catalog can be disabled without deleting placed fallback buildings', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#catalog-options').evaluate((el:HTMLDetailsElement)=>el.open=true);
+  await expect(page.locator('#catalog-models')).toContainText('DE 165');
+  await page.locator('[data-catalog="udana-budowa"]').uncheck();
+  await expect(page.locator('#catalog-models')).toBeEmpty();
+  await expect(page.locator('.obj')).toHaveCount(2);
+  const legacy={plot:[{x:0,y:0},{x:30,y:0},{x:30,y:40},{x:0,y:40}],items:[{id:'fallback',type:'house',name:'User-defined fallback',x:15,y:20,w:10,d:8,catalog:{catalogId:'udana-budowa',catalogVersion:'2026-11-16',modelId:'de-75',modelVersion:'metadata-1'}}]};
+  await page.locator('#project-file').setInputFiles({name:'fallback.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(legacy))});
+  await expect(page.locator('.obj')).toHaveCount(1);
+  await expect(page.locator('#enable-missing-catalog')).toBeVisible();
+  await page.locator('#enable-missing-catalog').click();
+  await expect(page.locator('#f-name')).toHaveValue('User-defined fallback');
+  await expect(page.locator('#catalog-models')).toContainText('DE 75');
+});

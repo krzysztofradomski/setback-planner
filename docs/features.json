@@ -167,14 +167,24 @@
       "dependencies": [
         "F003"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Explicitly registered lazy catalog with verified model names and dated sources",
         "Enable/disable without deleting placed objects",
         "Unknown dimensions never invented"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "tests/catalogs.test.ts (2 tests)",
+        "tests/browser/planner.spec.ts (9 passing)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build"
+      ],
+      "knownLimitations": [
+        "Metadata-only catalog; exact placement awaits authoritative drawings and licensed assets (F023).",
+        "No price is exposed because published source references conflict.",
+        "Catalog model migration/deprecation requires future authoritative versions and is tracked in F023."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]
