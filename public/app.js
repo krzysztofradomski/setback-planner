@@ -1,3 +1,4 @@
+import {transformGroup} from './core/operations.ts';
 import {parcelPolygons,parcelContains,parcelArea} from './core/topology.ts';
 import {fenceSchema,fenceSegments} from './core/fences.ts';
 import { objectLibrary, blocksPlacement } from './core/objects.ts';
@@ -356,7 +357,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     }
 
     // buildings
-    for (const it of state.items){
+    for (const it of state.items.filter(i=>i.visible)){
       const r = C.res.get(it.id), sp = r.c.map(S);
       const d = 'M' + sp.map(p => f(p.x) + ' ' + f(p.y)).join('L') + 'Z';
       const bad = !r.inside || r.overlap;
@@ -395,7 +396,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
 
     // resize handles
     const s = get(selected);
-    if (s){
+    if (s && s.visible && !s.locked){
       boundingCorners(s).map(S).forEach((p, i) => {
         out.push(`<rect class="handle" data-kind="handle" data-id="${s.id}" data-ci="${i}" x="${f(p.x-5.5)}" y="${f(p.y-5.5)}" width="11" height="11" style="cursor:${i % 2 ? 'nesw' : 'nwse'}-resize"/>`);
       });
@@ -445,11 +446,11 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
         <details id="architecture-options"><summary>${t('shape')} · ${t('roof')}</summary>
           <p class="hint">${t('genericHint')}</p>
           <div class="grid2">
-            <div class="field"><label for="f-shape">${t('shape')}</label><select id="f-shape">${['rectangle','L','T','U'].map(s=>`<option value="${s}">${s==='rectangle'?t('rectangle'):s}</option>`).join('')}</select></div>
+            <div class="field"><label for="f-shape">${t('shape')}</label><select id="f-shape">${['rectangle','L','T','U','custom'].map(s=>`<option value="${s}">${s==='rectangle'?t('rectangle'):s}</option>`).join('')}</select></div>
             <div class="field"><label for="f-wing">${t('wingRatio')}</label><input id="f-wing" type="number" min="0.15" max="0.45" step="0.05"></div>
             <div class="field"><label for="f-storeys">${t('storeys')}</label><input id="f-storeys" type="number" min="1" max="3" step="1"></div>
             <div class="field"><label for="f-height">${t('height')}</label><input id="f-height" type="number" min="0.02" max="30" step="0.1"></div>
-            <div class="field"><label for="f-roof">${t('roof')}</label><select id="f-roof"><option value="flat">${t('flat')}</option><option value="gable">${t('gable')}</option></select></div>
+            <div class="field"><label for="f-roof">${t('roof')}</label><select id="f-roof"><option value="flat">${t('flat')}</option><option value="gable">${t('gable')}</option><option value="hip">Hip / Kopertowy</option><option value="shed">Shed / Jednospadowy</option></select></div>
             <div class="field"><label for="f-pitch">${t('pitch')}</label><input id="f-pitch" type="number" min="0" max="60" step="1"></div>
           </div>
         </details>
@@ -469,6 +470,11 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
         <h3 class="lbl sm">${t('gaps')}</h3><div class="readout" id="f-gaps"></div>`;
       if ($('#enable-missing-catalog')) $('#enable-missing-catalog').onclick=()=>toggleCatalog(it.catalog.catalogId,true);
       if(it.type==='landscape'){const f=document.createElement('div');f.className='field';f.innerHTML=`<label for="outdoor-maturity">${t('mature')}</label><input id="outdoor-maturity" type="number" min="0" max="1" step="0.1" value="${it.outdoor.maturity}">`;box.append(f);bindNum('outdoor-maturity',v=>it.outdoor.maturity=Math.max(0,Math.min(1,v)));}
+      const ops=document.createElement('details');ops.id='scene-operations';ops.innerHTML=`<summary>Scene operations / Operacje</summary><label class="check"><input id="object-visible" type="checkbox" ${it.visible?'checked':''}>Visible / Widoczny</label><label class="check"><input id="object-locked" type="checkbox" ${it.locked?'checked':''}>Locked / Zablokowany</label><label>Group / Grupa<input id="object-group" type="text" maxlength="60" value="${esc(it.group)}"></label><label>Custom normalized footprint [[x,y],…], each −0.5…0.5<textarea id="object-custom">${esc(JSON.stringify(it.custom?.map(p=>[p.x,p.y])??[]))}</textarea></label><label>Openings JSON [{edge,offset,width,height,sill,type}]<textarea id="object-openings">${esc(JSON.stringify(it.openings))}</textarea></label><button id="object-apply">Apply geometry / Zastosuj</button><div class="row"><button id="attach-garage">+ Garage / Garaż</button><button id="attach-carport">+ Carport / Wiata</button></div><p id="object-error" role="status"></p>`;box.append(ops);
+      $('#object-visible').onchange=e=>{snapshot();it.visible=e.target.checked;render();};$('#object-locked').onchange=e=>{snapshot();it.locked=e.target.checked;buildPanel();render();};$('#object-group').onchange=e=>{snapshot();it.group=e.target.value;render();};
+      $('#object-apply').onclick=()=>{try{const openings=JSON.parse($('#object-openings').value),custom=JSON.parse($('#object-custom').value).map(([x,y])=>({x,y})),next=parseScene({...state,items:state.items.map(i=>i.id===it.id?{...i,openings,...(custom.length?{shape:'custom',custom}:{})}:i)});applyPlan(next,t('planLoaded'));}catch{$('#object-error').textContent='Invalid geometry / Nieprawidłowa geometria';}};
+      for(const kind of ['garage','carport'])$('#attach-'+kind).onclick=()=>{if(state.items.length>=100)return;const group=it.group||crypto.randomUUID(),w=3,d=6,r=it.rot*Math.PI/180,offset=(it.w+w)/2;const attached=parseScene({plot:state.plot,items:[{id:'o'+(uid++),type:kind==='garage'?'garage':'landscape',...(kind==='carport'?{kind:'pergola'}:{}),name:kind,x:it.x+Math.cos(r)*offset,y:it.y+Math.sin(r)*offset,w,d,rot:it.rot,setback:0,group,architecture:{height:2.6,storeys:1,roof:'flat',pitch:0}}]}).items[0];snapshot();it.group=group;state.items.push(attached);buildPanel();render();};
+      if(it.locked)box.querySelectorAll('input,select,textarea,button').forEach(el=>{if(!['object-locked','object-visible'].includes(el.id))el.disabled=true;});
       const nameEl = $('#f-name');
       let pending = false;
       nameEl.addEventListener('focus', () => { pending = true; });
@@ -477,7 +483,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       bindNum('f-d', v => { it.d = Math.min(1000, Math.max(0.5, v)); });
       bindNum('f-rot', v => { it.rot = ((v % 360) + 360) % 360; });
       bindNum('f-sb', v => { it.setback = Math.min(1000, Math.max(0, v)); });
-      $('#f-shape').onchange=e=>{snapshot();it.shape=e.target.value;it.appearance.walls={};buildPanel();render();};
+      $('#f-shape').onchange=e=>{snapshot();it.shape=e.target.value;if(it.shape==='custom'&&!it.custom)it.custom=[{x:-.5,y:-.5},{x:.5,y:-.5},{x:0,y:.5}];it.appearance.walls={};buildPanel();render();};
       $('#f-roof').onchange=e=>{snapshot();it.architecture.roof=e.target.value;render();};
       bindNum('f-wing',v=>it.wingRatio=Math.max(0.15,Math.min(0.45,v)));
       bindNum('f-storeys',v=>it.architecture.storeys=Math.max(1,Math.min(3,Math.round(v))));
@@ -603,7 +609,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   }
   function rotate90(){
     const it = get(selected); if (!it) return;
-    snapshot(); it.rot = (it.rot + 90) % 360; snapItem(it); render();
+    const next=transformGroup(state.items,it.id,0,0,90);if(next){snapshot();state.items=next;buildPanel();render();}
   }
   let toastT;
   function toast(msg){ const el = $('#toast'); el.textContent = msg; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 2200); }
@@ -633,7 +639,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     } else if (kind === 'item'){
       const it = get(t.dataset.id);
       if (selected !== it.id){ selected = it.id; buildPanel(); render(); }
-      drag = {mode: 'item', id: it.id, wx: w.x, wy: w.y, x0: it.x, y0: it.y, sx: pt.x, sy: pt.y, started: false};
+      if(it.locked)return;
+      drag = {mode: 'item', groupStart:structuredClone(state.items), id: it.id, wx: w.x, wy: w.y, x0: it.x, y0: it.y, sx: pt.x, sy: pt.y, started: false};
     } else if (kind === 'handle'){
       const it = get(t.dataset.id);
       drag = {mode: 'handle', id: it.id, ci: +t.dataset.ci, start: {...it}, sx: pt.x, sy: pt.y, started: false};
@@ -668,7 +675,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       state.plot[drag.i] = {x: snapV(drag.x0 + w.x - drag.wx), y: snapV(drag.y0 + w.y - drag.wy)};
     } else if (drag.mode === 'item'){
       const it = get(drag.id); if (!it) return;
-      it.x = drag.x0 + w.x - drag.wx; it.y = drag.y0 + w.y - drag.wy; snapItem(it);
+      const next=transformGroup(drag.groupStart,it.id,snapV(w.x-drag.wx),snapV(w.y-drag.wy));if(next)state.items=next;
     } else if (drag.mode === 'handle'){
       const it = get(drag.id); if (!it) return;
       const st = drag.start, F = boundingCorners(st)[(drag.ci + 2) % 4];
@@ -705,10 +712,10 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && tag !== 'input' && tag !== 'textarea'){ e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
     const it = get(selected);
-    if (!it) return;
+    if (!it || it.locked) return;
     const step = (state.snap > 0 ? state.snap : 0.1) * (e.shiftKey ? 10 : 1);
     const moves = {ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1]};
-    if (moves[e.key]){ e.preventDefault(); snapshot(); it.x += moves[e.key][0]*step; it.y += moves[e.key][1]*step; render(); }
+    if (moves[e.key]){ e.preventDefault(); const next=transformGroup(state.items,it.id,moves[e.key][0]*step,moves[e.key][1]*step);if(next){snapshot();state.items=next;render();} }
     else if (e.key === 'r' || e.key === 'R'){ rotate90(); }
     else if (e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); removeSelected(); }
     else if (e.key === 'Escape'){ selected = null; buildPanel(); render(); }
@@ -762,6 +769,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     } catch {viewer?.dispose();viewer=null;setViewerMode(false);toast(t('viewerFailure'));}
     finally {$('#view-3d').disabled=false;}
   };
+  const walkButton=document.createElement('button');walkButton.textContent='Walk / Spacer';walkButton.onclick=()=>viewer?.view('walk');$('#viewer-controls').append(walkButton);
   $('#view-top').onclick=()=>viewer?.view('top');$('#view-axon').onclick=()=>viewer?.view('axonometric');
   $('#view-low').onchange=e=>viewer?.quality(e.target.checked);
   $('#view-capture').onclick=()=>{try{const a=document.createElement('a');a.download='setback-3d.png';a.href=viewer.screenshot();a.click();}catch{toast(t('viewerFailure'));}};
@@ -897,6 +905,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     try { localStorage.setItem(VARIANT_LS,JSON.stringify(loadVariants().filter(v=>v.id!==$('#variant-list').value)));updateVariants(); }
     catch { toast(t('variantError')); }
   };
+  const compareVariant=document.createElement('button'),comparison=document.createElement('p');compareVariant.textContent='Compare variant / Porównaj wariant';comparison.className='hint';$('#variant-delete').after(compareVariant,comparison);compareVariant.onclick=()=>{try{const v=loadVariants().find(v=>v.id===$('#variant-list').value);if(!v)return;const changed=state.items.filter(i=>{const old=v.scene.items.find(o=>o.id===i.id);return !old||JSON.stringify(old)!==JSON.stringify(i);}).length;comparison.textContent=`${v.name}: ${v.scene.items.length} objects, ${parcelArea(v.scene).toFixed(2)} m² parcel. Current: ${state.items.length} objects, ${parcelArea(state).toFixed(2)} m². Changed/added: ${changed}.`;}catch{toast(t('variantError'));}};
   updateVariants();
   // A shared link pasted into an already-open tab only changes the hash.
   window.addEventListener('hashchange', async () => { const hash=location.hash;const o = await fromHash(); if (o && location.hash===hash) applyPlan(o, t('planFromLink')); });

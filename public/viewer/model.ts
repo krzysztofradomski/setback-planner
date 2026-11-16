@@ -16,15 +16,25 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
     const materialId=appearance.walls[String(i)]??appearance.facade,preset=materialPresets[materialId];
     const geometry=new THREE.BufferGeometry();
     geometry.setAttribute('position',new THREE.Float32BufferAttribute([a.x,0,a.y,b.x,0,b.y,b.x,height,b.y,a.x,height,a.y],3));
-    const u=length/(appearance.tileWidth*2),v=height/(appearance.tileHeight*2);
+    const u=length/(((original?undefined:item.appearance.tileWidth)??preset.tileWidth)*2),v=height/(((original?undefined:item.appearance.tileHeight)??preset.tileHeight)*2);
     const uv=appearance.layout==='vertical'?[0,0,0,u,v,u,v,0]:[0,0,u,0,u,v,0,v];
     geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geometry.setIndex([0,2,1,0,3,2]);geometry.computeVertexNormals();
     const texture=textureFactory?.(materialId,appearance)??null;
     const material=new THREE.MeshStandardMaterial({color:texture?'#ffffff':preset.color,map:texture,roughness:preset.roughness,side:THREE.DoubleSide});
     const mesh=new THREE.Mesh(geometry,material);mesh.name=`wall-${i}`;mesh.userData.materialId=materialId;mesh.castShadow=true;mesh.receiveShadow=true;root.add(mesh);
   });
+  item.openings.forEach(opening=>{
+    const a=points[opening.edge],b=points[(opening.edge+1)%points.length];if(!a||!b)return;const length=Math.hypot(b.x-a.x,b.y-a.y);if(opening.offset+opening.width>length||opening.sill+opening.height>height)return;
+    const u=(opening.offset+opening.width/2)/length,mesh=new THREE.Mesh(new THREE.BoxGeometry(opening.width,opening.height,.06),new THREE.MeshStandardMaterial({color:appearance.frameColor,roughness:.3}));mesh.position.set(a.x+(b.x-a.x)*u,opening.sill+opening.height/2,a.y+(b.y-a.y)*u);mesh.rotation.y=-Math.atan2(b.y-a.y,b.x-a.x);mesh.name=opening.type;root.add(mesh);
+  });
   let roofGeometry:THREE.BufferGeometry;
-  if(item.shape==='rectangle'&&item.architecture.roof==='gable'){
+  if(item.shape==='rectangle'&&item.architecture.roof==='hip'){
+    const hw=item.w/2,hd=item.d/2,rise=Math.min(hw,hd)*Math.tan(item.architecture.pitch*Math.PI/180),longZ=hd>=hw,ridge=Math.abs(hd-hw);
+    const p=[[-hw,height,-hd],[hw,height,-hd],[hw,height,hd],[-hw,height,hd],longZ?[0,height+rise,-ridge]:[-ridge,height+rise,0],longZ?[0,height+rise,ridge]:[ridge,height+rise,0]];
+    const faces=longZ?[0,1,4,1,2,5,1,5,4,2,3,5,3,0,4,3,4,5]:[0,1,5,0,5,4,1,2,5,2,3,4,2,4,5,3,0,4];roofGeometry=new THREE.BufferGeometry();roofGeometry.setAttribute('position',new THREE.Float32BufferAttribute(faces.flatMap(i=>p[i]),3));roofGeometry.computeVertexNormals();
+  }else if(item.shape==='rectangle'&&item.architecture.roof==='shed'){
+    const rise=item.w*Math.tan(item.architecture.pitch*Math.PI/180),shape=new THREE.Shape([new THREE.Vector2(-item.w/2,height),new THREE.Vector2(item.w/2,height),new THREE.Vector2(item.w/2,height+rise)]);roofGeometry=new THREE.ExtrudeGeometry(shape,{depth:item.d,bevelEnabled:false});roofGeometry.translate(0,0,-item.d/2);
+  }else if(item.shape==='rectangle'&&item.architecture.roof==='gable'){
     const rise=item.w/2*Math.tan(item.architecture.pitch*Math.PI/180);
     const triangle=new THREE.Shape([new THREE.Vector2(-item.w/2,height),new THREE.Vector2(item.w/2,height),new THREE.Vector2(0,height+rise)]);
     roofGeometry=new THREE.ExtrudeGeometry(triangle,{depth:item.d,bevelEnabled:false,steps:1});roofGeometry.translate(0,0,-item.d/2);

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { catalogReferenceSchema } from './catalogs.ts';
 import { appearanceSchema } from './materials.ts';
+import {localFootprint} from './footprints.ts';
 import { validateTopology } from './topology.ts';
 import { fenceSchema } from './fences.ts';
 import { objectLibrary } from './objects.ts';
@@ -16,8 +17,11 @@ export const itemSchema=z.object({
   outdoor:z.object({maturity:finite.min(0).max(1).default(1),matureWidth:finite.min(0.5).max(50).default(4),matureHeight:finite.min(0.1).max(50).default(6),paving:z.enum(['granite','concrete','gravel','timber','grass-pavers']).default('concrete')}).default({maturity:1,matureWidth:4,matureHeight:6,paving:'concrete'}),
   catalog:catalogReferenceSchema.optional(),
   appearance:appearanceSchema.default({}),
-  shape:z.enum(['rectangle','L','T','U']).default('rectangle'),wingRatio:finite.min(0.15).max(0.45).default(0.3),
-  architecture:z.object({storeys:z.number().int().min(1).max(3),height:finite.min(0.02).max(30),roof:z.enum(['flat','gable']),pitch:finite.min(0).max(60)}).strict().default({storeys:1,height:3,roof:'gable',pitch:30}),
+  visible:z.boolean().default(true),locked:z.boolean().default(false),group:z.string().max(60).default(''),
+  custom:z.array(pointSchema).max(32).optional(),
+  openings:z.array(z.object({edge:z.number().int().min(0).max(31),offset:finite.min(0).max(1000),width:finite.min(.2).max(10),height:finite.min(.2).max(10),sill:finite.min(0).max(10),type:z.enum(['window','door'])}).strict()).max(64).default([]),
+  shape:z.enum(['rectangle','L','T','U','custom']).default('rectangle'),wingRatio:finite.min(0.15).max(0.45).default(0.3),
+  architecture:z.object({storeys:z.number().int().min(1).max(3),height:finite.min(0.02).max(30),roof:z.enum(['flat','gable','hip','shed']),pitch:finite.min(0).max(60)}).strict().default({storeys:1,height:3,roof:'gable',pitch:30}),
   rot:finite.min(-36000).max(36000).default(0),setback:finite.min(0).max(1000).default(4),
 }).strict();
 export const sceneSchema=z.object({
@@ -39,10 +43,10 @@ export function parseScene(input:unknown):Scene {
   if(!input||typeof input!=='object'||Array.isArray(input)) throw new Error('Invalid project');
   const raw=input as Record<string,unknown>;
   if(raw.schemaVersion!==undefined && raw.schemaVersion!==2) throw new Error('Unsupported scene version');
-  if(raw.schemaVersion===2){const scene=sceneSchema.parse(raw);validateTopology(scene);return scene;}
+  if(raw.schemaVersion===2){const scene=sceneSchema.parse(raw);validateTopology(scene);for(const i of scene.items)if(i.shape==='custom'&&(!i.custom||!validRing(i.custom)||i.custom.some(p=>Math.abs(p.x)>.5||Math.abs(p.y)>.5)))throw new Error('Invalid normalized custom footprint');for(const i of scene.items){const points=localFootprint(i);for(const o of i.openings){const a=points[o.edge],b=points[(o.edge+1)%points.length];if(!a||!b||o.offset+o.width>Math.hypot(a.x-b.x,a.y-b.y)+1e-8||o.sill+o.height>i.architecture.height)throw new Error('Opening exceeds wall dimensions');}}return scene;}
   // Legacy imports are migrated atomically. Do not silently discard unknown objects.
   const legacy=z.object({plot:z.unknown(),items:z.array(z.record(z.string(),z.unknown())).max(100).default([]),snap:z.unknown().optional(),dimScope:z.unknown().optional(),showPairs:z.unknown().optional()}).strict().parse(raw);
-  return sceneSchema.parse({...legacy,schemaVersion:2,units:'m',coordinates:{crs:'LOCAL',axis:'x-east-y-south'},items:legacy.items.map((i,n)=>({...i,id:String(i.id||`o${n+1}`),name:String(i.name||i.type||'Building').slice(0,60),setback:i.setback??(i.type==='garage'?3:4)}))});
+  return parseScene({...legacy,schemaVersion:2,units:'m',coordinates:{crs:'LOCAL',axis:'x-east-y-south'},items:legacy.items.map((i,n)=>({...i,id:String(i.id||`o${n+1}`),name:String(i.name||i.type||'Building').slice(0,60),setback:i.setback??(i.type==='garage'?3:4)}))});
 }
 export function serializeScene(scene:Scene):string {
   const json=JSON.stringify(parseScene(scene));

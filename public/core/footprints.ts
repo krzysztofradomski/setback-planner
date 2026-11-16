@@ -1,7 +1,8 @@
 import { transformFootprint, type Point } from './geometry.ts';
-export interface Footprint {w:number;d:number;shape?:'rectangle'|'L'|'T'|'U';wingRatio?:number}
+export interface Footprint {w:number;d:number;shape?:'rectangle'|'L'|'T'|'U'|'custom';custom?:Point[];wingRatio?:number}
 export interface PlacedFootprint extends Footprint {x:number;y:number;rot:number}
 export function localFootprint(item:Footprint):Point[] {
+  if(item.shape==='custom'&&item.custom)return item.custom.map(p=>({x:p.x*item.w,y:p.y*item.d}));
   const w=item.w,d=item.d,a=item.wingRatio??0.3;
   let points:number[][];
   switch(item.shape){

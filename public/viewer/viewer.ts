@@ -30,14 +30,16 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   controls.maxPolarAngle=Math.PI*0.49;controls.enableDamping=false;controls.minDistance=2;controls.maxDistance=2000;
   const ambient=new THREE.HemisphereLight('#e6f2ff','#6e775f',2);scene.add(ambient);
   const sun=new THREE.DirectionalLight('#fff2d8',3);sun.position.set(-30,60,-35);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.bias=-0.0005;scene.add(sun,sun.target);
-  let active=true,signature='',extent=50,center=new THREE.Vector3(),disposed=false;
+  let walkMode=false;let active=true,signature='',extent=50,center=new THREE.Vector3(),disposed=false;
   const render=()=>{if(active&&!disposed)renderer.render(scene,camera);};
   controls.addEventListener('change',render);
+  const walk=(e:KeyboardEvent)=>{if(!active||!walkMode||!['w','a','s','d'].includes(e.key.toLowerCase())||['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement)?.tagName))return;const forward=controls.target.clone().sub(camera.position);forward.y=0;forward.normalize();const right=new THREE.Vector3().crossVectors(forward,camera.up);const direction=e.key==='w'?forward:e.key==='s'?forward.negate():e.key==='d'?right:right.negate();camera.position.add(direction);controls.target.add(direction);render();};window.addEventListener('keydown',walk);
   const resize=()=>{const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();render();};
   const observer=new ResizeObserver(resize);observer.observe(container);
   const failure=(event:Event)=>{event.preventDefault();active=false;onFailure();};renderer.domElement.addEventListener('webglcontextlost',failure);
-  function view(mode:'top'|'axonometric'|'orbit'){
-    camera.up.set(0,1,0);controls.target.copy(center);
+  function view(mode:'top'|'axonometric'|'orbit'|'walk'){
+    walkMode=mode==='walk';camera.up.set(0,1,0);controls.target.copy(center);
+    if(mode==='walk'){camera.position.set(center.x,1.65,center.z+extent*.4);controls.target.copy(camera.position).add(new THREE.Vector3(0,0,-5));controls.maxPolarAngle=Math.PI*.95;controls.update();render();return;}controls.maxPolarAngle=Math.PI*.49;
     const offset=mode==='top'?new THREE.Vector3(0,extent*1.6,0.001):new THREE.Vector3(extent*0.85,extent,extent*1.15);
     camera.position.copy(center).add(offset);camera.lookAt(center);controls.update();render();
   }
@@ -49,7 +51,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
       const ground=new THREE.Mesh(new THREE.ShapeGeometry(shape),new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
       const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(outer.map(p=>new THREE.Vector3(p.x,0.03,p.y))),new THREE.LineBasicMaterial({color:'#405442'}));content.add(boundary);
     }
-    for(const item of project.items)content.add(buildBuilding(item,original,makeTexture,project.environment.season));
+    for(const item of project.items.filter(i=>i.visible))content.add(buildBuilding(item,original,makeTexture,project.environment.season));
     for(const fence of project.fences)content.add(buildFence(fence,project.environment.season));
     content.updateMatrixWorld(true);
     const bounds=new THREE.Box3().setFromObject(content),size=bounds.getSize(new THREE.Vector3());
@@ -66,7 +68,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},
     screenshot(){render();return renderer.domElement.toDataURL('image/png');},
-    dispose(){disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);renderer.dispose();renderer.domElement.remove();},
+    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);renderer.dispose();renderer.domElement.remove();},
     memory(){return {...renderer.info.memory};},
   };
 }

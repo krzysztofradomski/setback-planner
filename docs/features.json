@@ -584,14 +584,22 @@
         "F004",
         "F009"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Object grouping, visibility and locking",
         "Custom footprint, garage/carport assemblies",
         "Variant comparison and walkthrough camera"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build",
+        "npm run test:e2e"
+      ],
+      "knownLimitations": [
+        "Groups transform atomically and honor locking; custom normalized footprints, visibility, attached garage/carport objects, openings, hip/shed roofs, variant comparison and walk camera are implemented. Openings are conceptual facade geometry; walk camera has no physical collision simulation."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]

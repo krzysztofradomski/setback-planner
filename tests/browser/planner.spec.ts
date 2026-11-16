@@ -188,3 +188,6 @@ test('a multipart parcel retains holes in area and the drawn boundary',async({pa
 test('placement analysis produces selectable deterministic geometric options',async({page})=>{
  await page.goto('/');await page.locator('#placement-analyze').evaluate((el:HTMLButtonElement)=>el.closest('details')!.open=true);await page.locator('#placement-analyze').click();await expect(page.locator('#placement-result')).toContainText('sampled placements');await expect(page.locator('#placement-options button').first()).toBeVisible();await page.locator('#placement-options button').first().click();await expect(page.locator('.obj')).toHaveCount(2);
 });
+test('visibility, locking and attached structures survive scene operations',async({page})=>{
+ await page.goto('/');await page.locator('#object-locked').evaluate((el:HTMLInputElement)=>el.closest('details')!.open=true);await page.locator('#attach-garage').click();await expect(page.locator('.obj')).toHaveCount(3);await page.locator('#object-locked').check();await expect(page.locator('#f-w')).toBeDisabled();await page.locator('#object-visible').uncheck();await expect(page.locator('#sheet .bld')).toHaveCount(2);await page.locator('#object-locked').uncheck();await expect(page.locator('#f-w')).toBeEnabled();
+});

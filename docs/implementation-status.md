@@ -65,3 +65,5 @@ F015 completed: Fence and hedge paths support editable dimensions, spacing, colo
 F025 completed: Multipart polygons and holes persist, render and participate in containment and area calculations. Total topology is bounded to 512 vertices; intersecting or touching hole boundaries are rejected.
 
 F013 completed: Uniform user-defined setback geometry uses deterministic millimetre miter offsets; suggestions use a bounded grid and are not exhaustive or a legal feasibility decision.
+
+F024 completed: Groups transform atomically and honor locking; custom normalized footprints, visibility, attached garage/carport objects, openings, hip/shed roofs, variant comparison and walk camera are implemented. Openings are conceptual facade geometry; walk camera has no physical collision simulation.
