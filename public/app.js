@@ -1,3 +1,4 @@
+import { objectLibrary, blocksPlacement } from './core/objects.ts';
 import { catalogRegistrations, loadCatalog, catalogAvailable } from './core/catalogs.ts';
 import { materialPresets, resolveAppearance, resetAppearance } from './core/materials.ts';
 import { worldFootprint, boundingCorners } from './core/footprints.ts';
@@ -12,6 +13,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
   // ---------- i18n ----------
   const I18N = {
     en: {
+      landscape:'Landscape', garden:'Garden library', addOutdoor:'Add outdoor object', mature:'Maturity (0–1)',
       objectLimit:'This project supports up to 100 buildings.',
       exportSvg:'Export SVG', report:'Report / PDF', printReport:'Print / Save PDF', close:'Close',
       pickParcel:'Select parcel', pickHint:'Click a parcel to replace the current boundary. Coordinates are sent to GUGiK ULDK. Buildings keep their local positions.',
@@ -49,6 +51,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
       exampleRestored: 'Example restored. Ctrl+Z undoes this.',
     },
     pl: {
+      landscape:'Ogród', garden:'Biblioteka ogrodu', addOutdoor:'Dodaj obiekt ogrodowy', mature:'Dojrzałość (0–1)',
       objectLimit:'Projekt obsługuje do 100 budynków.',
       exportSvg:'Eksport SVG', report:'Raport / PDF', printReport:'Drukuj / Zapisz PDF', close:'Zamknij',
       pickParcel:'Wybierz działkę', pickHint:'Kliknij działkę, aby zastąpić granicę. Współrzędne zostaną wysłane do GUGiK ULDK. Budynki zachowają pozycje lokalne.',
@@ -95,6 +98,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
   const dec = v => lang === 'pl' ? String(v).replace('.', ',') : String(v);
   function applyLang(){
     document.documentElement.lang = lang;
+    document.querySelectorAll('[data-object-kind]').forEach(o=>{o.textContent=objectLibrary[o.dataset.objectKind][lang];});
     document.title = t('docTitle');
     document.querySelectorAll('[data-t]').forEach(el => { el.textContent = t(el.dataset.t); });
     document.querySelectorAll('[data-t-html]').forEach(el => { el.innerHTML = t(el.dataset.tHtml); });
@@ -246,6 +250,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
     }
     const pairs = [], its = state.items;
     for (let i = 0; i < its.length; i++) for (let j = i+1; j < its.length; j++){
+      if(!blocksPlacement(its[i])||!blocksPlacement(its[j]))continue;
       const g = pairGap(res.get(its[i].id).c, res.get(its[j].id).c);
       if (g) pairs.push({a: its[i].id, b: its[j].id, ...g});
     }
@@ -352,8 +357,9 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
       const r = C.res.get(it.id), sp = r.c.map(S);
       const d = 'M' + sp.map(p => f(p.x) + ' ' + f(p.y)).join('L') + 'Z';
       const bad = !r.inside || r.overlap;
-      const appearance=resolveAppearance(originalAppearance?{}:it.appearance), finish=materialPresets[appearance.facade];
-      out.push(`<path class="bld ${it.type}${it.id === selected ? ' sel' : ''}${bad ? ' bad' : ''}" data-kind="item" data-id="${it.id}" style="fill:${finish.color};fill-opacity:.55" d="${d}"/>`);
+      const appearance=resolveAppearance(originalAppearance?{}:it.appearance); let finish=materialPresets[appearance.facade];
+      if(it.type==='landscape'&&it.kind)finish={...finish,color:objectLibrary[it.kind].color};
+      out.push(`<path class="bld ${it.type}${it.id === selected ? ' sel' : ''}${bad ? ' bad' : ''}" data-kind="item" data-id="${it.id}" style="fill:${finish.color};fill-opacity:.55;${it.type==='landscape'?'stroke:'+finish.color+';':''}" d="${d}"/>`);
       const c = S(it), minSide = Math.min(it.w, it.d) * k;
       if (minSide > 26){
         const two = minSide > 46;
@@ -436,7 +442,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
             <div class="field"><label for="f-shape">${t('shape')}</label><select id="f-shape">${['rectangle','L','T','U'].map(s=>`<option value="${s}">${s==='rectangle'?t('rectangle'):s}</option>`).join('')}</select></div>
             <div class="field"><label for="f-wing">${t('wingRatio')}</label><input id="f-wing" type="number" min="0.15" max="0.45" step="0.05"></div>
             <div class="field"><label for="f-storeys">${t('storeys')}</label><input id="f-storeys" type="number" min="1" max="3" step="1"></div>
-            <div class="field"><label for="f-height">${t('height')}</label><input id="f-height" type="number" min="0.5" max="30" step="0.1"></div>
+            <div class="field"><label for="f-height">${t('height')}</label><input id="f-height" type="number" min="0.02" max="30" step="0.1"></div>
             <div class="field"><label for="f-roof">${t('roof')}</label><select id="f-roof"><option value="flat">${t('flat')}</option><option value="gable">${t('gable')}</option></select></div>
             <div class="field"><label for="f-pitch">${t('pitch')}</label><input id="f-pitch" type="number" min="0" max="60" step="1"></div>
           </div>
@@ -456,6 +462,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
         <h3 class="lbl sm">${t('clearance')}</h3><div class="readout" id="f-clear"></div>
         <h3 class="lbl sm">${t('gaps')}</h3><div class="readout" id="f-gaps"></div>`;
       if ($('#enable-missing-catalog')) $('#enable-missing-catalog').onclick=()=>toggleCatalog(it.catalog.catalogId,true);
+      if(it.type==='landscape'){const f=document.createElement('div');f.className='field';f.innerHTML=`<label for="outdoor-maturity">${t('mature')}</label><input id="outdoor-maturity" type="number" min="0" max="1" step="0.1" value="${it.outdoor.maturity}">`;box.append(f);bindNum('outdoor-maturity',v=>it.outdoor.maturity=Math.max(0,Math.min(1,v)));}
       const nameEl = $('#f-name');
       let pending = false;
       nameEl.addEventListener('focus', () => { pending = true; });
@@ -468,7 +475,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
       $('#f-roof').onchange=e=>{snapshot();it.architecture.roof=e.target.value;render();};
       bindNum('f-wing',v=>it.wingRatio=Math.max(0.15,Math.min(0.45,v)));
       bindNum('f-storeys',v=>it.architecture.storeys=Math.max(1,Math.min(3,Math.round(v))));
-      bindNum('f-height',v=>it.architecture.height=Math.max(0.5,Math.min(30,v)));
+      bindNum('f-height',v=>it.architecture.height=Math.max(0.02,Math.min(30,v)));
       bindNum('f-pitch',v=>it.architecture.pitch=Math.max(0,Math.min(60,v)));
       const setAppearance=(key,value)=>{snapshot();it.appearance={...it.appearance,[key]:value};render();};
       for(const key of ['facade','grout','roofColor','frameColor','gutterColor','trimColor','layout']) $('#f-'+(key==='facade'?'facade':key)).onchange=e=>setAppearance(key,e.target.value);
@@ -525,7 +532,7 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
     // plot
     const area = polyArea(state.plot);
     let per = 0; edges(state.plot).forEach(([a,b]) => per += len(sub(b,a)));
-    const built = state.items.reduce((s, i) => s + polygonArea(corners(i)), 0);
+    const built = state.items.reduce((s, i) => s + (i.type==='landscape'?0:polygonArea(corners(i))), 0);
     $('#parcel-source').textContent=state.parcel ? `${state.parcel.source.name}${state.parcel.identifier?' · '+state.parcel.identifier:''} · ${state.parcel.source.retrievedAt} · ${state.parcel.source.crs}${state.parcel.edited?' · '+t('parcelEdited'):''}` : '';
     $('#p-area').textContent = group(area) + ' m²';
     $('#p-ares').textContent = dec((area / 100).toFixed(2)) + ' a';
@@ -754,6 +761,13 @@ import { containsPolygon, polygonRelation, validRing, polygonArea, perpendicular
   $('#view-capture').onclick=()=>{try{const a=document.createElement('a');a.download='setback-3d.png';a.href=viewer.screenshot();a.click();}catch{toast(t('viewerFailure'));}};
   window.addEventListener('pagehide',()=>{viewer?.dispose();viewer=null;parcelMap?.dispose();parcelMap=null;});
   // ---------- wiring ----------
+  const garden=document.createElement('details');garden.innerHTML=`<summary data-t="garden">${t('garden')}</summary><select id="garden-kind" aria-label="${t('garden')}">${Object.entries(objectLibrary).map(([id,v])=>`<option data-object-kind="${id}" value="${id}">${v[lang]}</option>`).join('')}</select><button id="garden-add" data-t="addOutdoor">${t('addOutdoor')}</button>`;$('#sel').before(garden);
+  $('#garden-add').onclick=()=>{
+    if(state.items.length>=100){toast(t('objectLimit'));return;}
+    const kind=$('#garden-kind').value,spec=objectLibrary[kind],x=state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,y=state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length;
+    const item=parseScene({plot:state.plot,items:[{id:'o'+(uid++),type:'landscape',kind,name:spec[lang],x,y,w:spec.w,d:spec.d,setback:0,architecture:{height:spec.height,roof:'flat',pitch:0,storeys:1}}]}).items[0];
+    snapshot();state.items.push(item);selected=item.id;buildPanel();render();
+  };
   $('#add-house').onclick = () => addItem('house');
   $('#add-garage').onclick = () => addItem('garage');
   $('#objs').addEventListener('click', e => {

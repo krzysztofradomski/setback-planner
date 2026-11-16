@@ -1,18 +1,21 @@
 import { z } from 'zod';
 import { catalogReferenceSchema } from './catalogs.ts';
 import { appearanceSchema } from './materials.ts';
+import { objectLibrary } from './objects.ts';
 import { validRing } from './geometry.ts';
 export const MAX_PROJECT_BYTES=262144;
 const finite=z.number().finite();
 const coord=finite.min(-1e5).max(1e5);
 export const pointSchema=z.object({x:coord,y:coord}).strict();
 export const itemSchema=z.object({
-  id:z.string().min(1).max(80).regex(/^[\w-]+$/),type:z.enum(['house','garage']),name:z.string().max(60),
+  id:z.string().min(1).max(80).regex(/^[\w-]+$/),type:z.enum(['house','garage','landscape']),name:z.string().max(60),
   x:coord,y:coord,w:finite.min(0.5).max(1000),d:finite.min(0.5).max(1000),
+  kind:z.enum(Object.keys(objectLibrary) as [keyof typeof objectLibrary,...(keyof typeof objectLibrary)[]]).optional(),
+  outdoor:z.object({maturity:finite.min(0).max(1).default(1),matureWidth:finite.min(0.5).max(50).default(4),matureHeight:finite.min(0.1).max(50).default(6),paving:z.enum(['granite','concrete','gravel','timber','grass-pavers']).default('concrete')}).default({maturity:1,matureWidth:4,matureHeight:6,paving:'concrete'}),
   catalog:catalogReferenceSchema.optional(),
   appearance:appearanceSchema.default({}),
   shape:z.enum(['rectangle','L','T','U']).default('rectangle'),wingRatio:finite.min(0.15).max(0.45).default(0.3),
-  architecture:z.object({storeys:z.number().int().min(1).max(3),height:finite.min(0.5).max(30),roof:z.enum(['flat','gable']),pitch:finite.min(0).max(60)}).strict().default({storeys:1,height:3,roof:'gable',pitch:30}),
+  architecture:z.object({storeys:z.number().int().min(1).max(3),height:finite.min(0.02).max(30),roof:z.enum(['flat','gable']),pitch:finite.min(0).max(60)}).strict().default({storeys:1,height:3,roof:'gable',pitch:30}),
   rot:finite.min(-36000).max(36000).default(0),setback:finite.min(0).max(1000).default(4),
 }).strict();
 export const sceneSchema=z.object({

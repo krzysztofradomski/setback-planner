@@ -353,14 +353,22 @@
         "F005",
         "F008"
       ],
-      "status": "queued",
+      "status": "completed",
       "acceptanceCriteria": [
         "Parametric structures, surfaces, furniture and vegetation",
         "Physical dimensions and mature sizes",
         "Consistent placement and rendering"
       ],
-      "tests": [],
-      "knownLimitations": [],
+      "tests": [
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "npm run build",
+        "npm run test:e2e"
+      ],
+      "knownLimitations": [
+        "Parametric concept library with editable dimensions and maturity. Species-specific horticultural growth models and photorealistic assets are not claimed."
+      ],
       "documentation": [
         "docs/repository-audit.md"
       ]

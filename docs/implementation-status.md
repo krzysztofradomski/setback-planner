@@ -55,3 +55,5 @@ No D1/R2/Workers AI bindings, personal-data forms, accounts, showroom, commissio
 4. Before future deployment, implement/verify staging configuration under F019 and run the existing checks. No approval has been requested for continuing ordinary implementation.
 
 Useful commands: `npm ci`, `npx playwright install chromium`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run test:e2e`, `npm run test:production`, `npm run dev`.
+
+F014 completed: Parametric concept library with editable dimensions and maturity. Species-specific horticultural growth models and photorealistic assets are not claimed.

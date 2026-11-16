@@ -169,3 +169,11 @@ test('Polish controls remain inside the plan at 320px',async({page})=>{
     const rect=await button.boundingBox();expect(rect!.x).toBeGreaterThanOrEqual(stage!.x);expect(rect!.x+rect!.width).toBeLessThanOrEqual(stage!.x+stage!.width);
   }
 });
+test('garden objects are editable, persisted and excluded from building coverage',async({page})=>{
+ await page.goto('/');const coverage=await page.locator('#p-cov').textContent();
+ await page.locator('#garden-kind').evaluate((el:HTMLSelectElement)=>el.closest('details')!.open=true);
+ await page.locator('#garden-kind').selectOption('tree');await page.locator('#garden-add').click();await expect(page.locator('.obj')).toHaveCount(3);
+ await expect(page.locator('#p-cov')).toHaveText(coverage!);await expect(page.locator('#outdoor-maturity')).toBeVisible();
+ await page.locator('#outdoor-maturity').fill('0.5');await page.locator('#f-name').fill('My tree');await page.waitForTimeout(400);await page.reload();
+ await page.locator('#objs .obj').last().click();await expect(page.locator('#f-name')).toHaveValue('My tree');await expect(page.locator('#outdoor-maturity')).toHaveValue('0.5');
+});

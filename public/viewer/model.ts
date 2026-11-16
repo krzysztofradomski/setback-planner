@@ -1,3 +1,4 @@
+import { outdoorModel } from './outdoor.ts';
 import * as THREE from 'three';
 import { localFootprint, worldFootprint } from '../core/footprints.ts';
 import { materialPresets, resolveAppearance } from '../core/materials.ts';
@@ -5,6 +6,7 @@ import type { SceneItem } from '../core/scene.ts';
 export type TextureFactory=(materialId:keyof typeof materialPresets,appearance:ReturnType<typeof resolveAppearance>)=>THREE.Texture|null;
 export function groundShape(points:{x:number;y:number}[]){return new THREE.Shape(points.map(p=>new THREE.Vector2(p.x,-p.y)));}
 export function buildBuilding(item:SceneItem,original=false,textureFactory?:TextureFactory):THREE.Group {
+  if(item.type==='landscape'&&item.kind)return outdoorModel(item);
   const root=new THREE.Group(),points=localFootprint(item),height=item.architecture.height;
   const appearance=resolveAppearance(original?{}:item.appearance);
   root.name=item.id;root.position.set(item.x,0,item.y);root.rotation.y=-item.rot*Math.PI/180;
