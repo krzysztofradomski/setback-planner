@@ -26,6 +26,7 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
   item.openings.forEach(opening=>{
     const a=points[opening.edge],b=points[(opening.edge+1)%points.length];if(!a||!b)return;const length=Math.hypot(b.x-a.x,b.y-a.y);if(opening.offset+opening.width>length||opening.sill+opening.height>height)return;
     const u=(opening.offset+opening.width/2)/length,mesh=new THREE.Mesh(new THREE.BoxGeometry(opening.width,opening.height,.06),new THREE.MeshStandardMaterial({color:opening.type==='door'?appearance.doorColor:appearance.frameColor,roughness:.3}));mesh.position.set(a.x+(b.x-a.x)*u,opening.sill+opening.height/2,a.y+(b.y-a.y)*u);mesh.rotation.y=-Math.atan2(b.y-a.y,b.x-a.x);mesh.name=opening.type;root.add(mesh);
+    if(opening.type==='window'){const glass=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.05,opening.width-.12),Math.max(.05,opening.height-.12),.065),new THREE.MeshStandardMaterial({color:'#8da6b0',roughness:.18,metalness:.25}));glass.position.copy(mesh.position);glass.rotation.copy(mesh.rotation);root.add(glass);}
   });
   let roofGeometry:THREE.BufferGeometry;
   if(item.shape==='rectangle'&&item.architecture.roof==='hip'){
@@ -35,9 +36,10 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
   }else if(item.shape==='rectangle'&&item.architecture.roof==='shed'){
     const rise=item.w*Math.tan(item.architecture.pitch*Math.PI/180),shape=new THREE.Shape([new THREE.Vector2(-item.w/2,height),new THREE.Vector2(item.w/2,height),new THREE.Vector2(item.w/2,height+rise)]);roofGeometry=new THREE.ExtrudeGeometry(shape,{depth:item.d,bevelEnabled:false});roofGeometry.translate(0,0,-item.d/2);
   }else if(item.shape==='rectangle'&&item.architecture.roof==='gable'){
-    const rise=item.w/2*Math.tan(item.architecture.pitch*Math.PI/180);
-    const triangle=new THREE.Shape([new THREE.Vector2(-item.w/2,height),new THREE.Vector2(item.w/2,height),new THREE.Vector2(0,height+rise)]);
-    roofGeometry=new THREE.ExtrudeGeometry(triangle,{depth:item.d,bevelEnabled:false,steps:1});roofGeometry.translate(0,0,-item.d/2);
+    const across=item.architecture.roofAxis==='width'?item.d:item.w,along=item.architecture.roofAxis==='width'?item.w:item.d;
+    const rise=across/2*Math.tan(item.architecture.pitch*Math.PI/180);
+    const triangle=new THREE.Shape([new THREE.Vector2(-across/2,height),new THREE.Vector2(across/2,height),new THREE.Vector2(0,height+rise)]);
+    roofGeometry=new THREE.ExtrudeGeometry(triangle,{depth:along,bevelEnabled:false,steps:1});roofGeometry.translate(0,0,-along/2);if(item.architecture.roofAxis==='width')roofGeometry.rotateY(Math.PI/2);
   }else{
     roofGeometry=new THREE.ShapeGeometry(groundShape(points));roofGeometry.rotateX(-Math.PI/2);roofGeometry.translate(0,height,0);
     if(item.architecture.roof==='gable')root.userData.approximateRoof=true;
@@ -46,7 +48,8 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
   if(season!=='winter'&&typeof document!=='undefined'&&appearance.roofCovering!=='membrane'){
     const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;const ctx=canvas.getContext('2d');if(ctx){ctx.fillStyle=appearance.roofColor;ctx.fillRect(0,0,128,128);ctx.strokeStyle='#242a2b';ctx.lineWidth=appearance.roofCovering==='metal'?3:1;for(let y=0;y<128;y+=appearance.roofCovering==='metal'?128:32){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(128,y);ctx.stroke();}for(let x=0;x<128;x+=32){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,128);ctx.stroke();}roofMap=new THREE.CanvasTexture(canvas);roofMap.colorSpace=THREE.SRGBColorSpace;roofMap.wrapS=roofMap.wrapT=THREE.RepeatWrapping;const positions=roofGeometry.getAttribute('position'),uv:number[]=[];for(let i=0;i<positions.count;i++)uv.push(positions.getX(i)/.6,positions.getZ(i)/.6);roofGeometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));}
   }
-  const roof=new THREE.Mesh(roofGeometry,new THREE.MeshStandardMaterial({color:season==='winter'?'#e5e7e3':roofMap?'#ffffff':appearance.roofColor,map:season==='winter'?null:roofMap,roughness:0.65,side:THREE.DoubleSide}));
+  const roofMaterial=new THREE.MeshStandardMaterial({color:season==='winter'?'#e5e7e3':roofMap?'#ffffff':appearance.roofColor,map:season==='winter'?null:roofMap,roughness:0.65,side:THREE.DoubleSide});
+  const roof=new THREE.Mesh(roofGeometry,roofGeometry instanceof THREE.ExtrudeGeometry?[new THREE.MeshStandardMaterial({color:materialPresets[appearance.facade].color,roughness:.85}),roofMaterial]:roofMaterial);
   roof.name='roof';roof.castShadow=true;roof.receiveShadow=true;root.add(roof);
   return root;
 }

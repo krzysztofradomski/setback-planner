@@ -7,6 +7,7 @@ export function createCatalogItem(catalog:Catalog,modelId:string,position:{id:st
   return itemSchema.parse({
     ...position,type:'house',name:`${catalog.name} ${model.name}`,w:model.footprint.width,d:model.footprint.depth,
     catalog:{catalogId:catalog.id,catalogVersion:catalog.version,modelId:model.id,modelVersion:model.version},
+    architecture:{storeys:1,height:3,roof:'gable',pitch:30,roofAxis:'width'},
     appearance:{roofCovering:'metal',roofColor:'#34383b'},
   });
 }

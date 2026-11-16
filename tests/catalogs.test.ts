@@ -13,7 +13,7 @@ test('registered catalog exposes dimensions transcribed from manufacturer plans 
     assert.equal(model.price,null); assert.equal(model.height,null); assert.equal(model.roof.pitch,null);
     assert.equal(model.geometryStatus,'verified-envelope');
     assert.match(model.footprint.source,/^https:\/\/udanabudowa\.pl\/img\/dom\d+_\d+\.jpg$/);
-    for(const asset of [model.thumbnail,model.plan]) assert.ok(existsSync(new URL(`../public${asset}`,import.meta.url)));
+    for(const asset of [model.thumbnail,model.plan]) assert.ok(existsSync(new URL(`../static${asset}`,import.meta.url)));
   }
   assert.equal(catalog.models[0].floorArea,75.6);
   assert.equal(catalog.models[0].footprintArea,92.2);

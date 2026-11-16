@@ -21,7 +21,7 @@ export const itemSchema=z.object({
   custom:z.array(pointSchema).max(32).optional(),
   openings:z.array(z.object({edge:z.number().int().min(0).max(31),offset:finite.min(0).max(1000),width:finite.min(.2).max(10),height:finite.min(.2).max(10),sill:finite.min(0).max(10),type:z.enum(['window','door'])}).strict()).max(64).default([]),
   shape:z.enum(['rectangle','L','T','U','custom']).default('rectangle'),wingRatio:finite.min(0.15).max(0.45).default(0.3),
-  architecture:z.object({storeys:z.number().int().min(1).max(3),height:finite.min(0.02).max(30),roof:z.enum(['flat','gable','hip','shed']),pitch:finite.min(0).max(60)}).strict().default({storeys:1,height:3,roof:'gable',pitch:30}),
+  architecture:z.object({storeys:z.number().int().min(1).max(3),height:finite.min(0.02).max(30),roof:z.enum(['flat','gable','hip','shed']),roofAxis:z.enum(['width','depth']).optional(),pitch:finite.min(0).max(60)}).strict().default({storeys:1,height:3,roof:'gable',pitch:30}),
   rot:finite.min(-36000).max(36000).default(0),setback:finite.min(0).max(1000).default(4),
 }).strict();
 export const sceneSchema=z.object({

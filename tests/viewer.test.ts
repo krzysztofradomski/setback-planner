@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Box3 } from 'three';
+import { Box3, type Mesh } from 'three';
 import { buildBuilding, disposeObject } from '../public/viewer/model.ts';
 import { worldFootprint } from '../public/core/footprints.ts';
 import { parseScene } from '../public/core/scene.ts';
@@ -26,4 +26,9 @@ test('rectangular roof rise uses physical pitch and per-wall overrides do not mu
   assert.ok(Math.abs(bounds.max.y-(object.architecture.height+object.w/2))<1e-5);
   assert.equal(group.getObjectByName('wall-1')!.userData.materialId,'wood');
   assert.equal(buildBuilding(object,true).getObjectByName('wall-1')!.userData.materialId,'plaster');
+});
+test('catalog gable follows the long plan axis without changing its measured envelope',async()=>{
+ const {loadCatalog}=await import('../public/core/catalogs.ts'),{createCatalogItem}=await import('../public/catalogs/placement.ts');
+ const item=createCatalogItem(await loadCatalog('udana-budowa'),'de-75',{id:'de75',x:0,y:0});const model=buildBuilding(item),roof=model.getObjectByName('roof') as Mesh;roof.geometry.computeBoundingBox();const bounds=roof.geometry.boundingBox!;
+ assert.ok(Math.abs(bounds.max.x-bounds.min.x-11.76)<.001);assert.ok(Math.abs(bounds.max.z-bounds.min.z-7.84)<.001);assert.ok(Math.abs(bounds.max.y-bounds.min.y-7.84/2*Math.tan(Math.PI/6))<.001);disposeObject(model);
 });

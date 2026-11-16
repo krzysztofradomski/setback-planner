@@ -59,7 +59,7 @@ export async function registeredCatalogSources(ids:string[]):Promise<AssistantSo
     const sources:AssistantSource[]=[];
     for(const catalogId of [...new Set(ids)]){
         const c=await loadCatalog(catalogId);
-        sources.push({id:c.id,title:c.name+' '+c.version,url:c.source,retrievedAt:c.retrievedAt+'T00:00:00Z',text:[`Registered catalog: ${c.name}. Verified catalog identity and published model names only.`,...c.models.map(m=>`Model: ${m.name}. Precise footprint: unverified and not provided. Manufacturer price: unverified and not provided. Geometry representation is approximate, not an authoritative manufacturer drawing.`)].join('\n')});
+        sources.push({id:c.id,title:c.name+' '+c.version,url:c.source,retrievedAt:c.retrievedAt+'T00:00:00Z',text:[`Registered catalog: ${c.name}. Verified model names and main-building envelopes transcribed from published dimensioned plans.`,...c.models.map(m=>`Model: ${m.name}. Main-building envelope: ${m.footprint.width} by ${m.footprint.depth} metres, transcribed from ${m.footprint.source}. Excludes terraces, carports and roof overhangs. Floor area: ${m.floorArea??'unknown'}. Manufacturer price: unverified and not provided. Heights and roof pitch are unverified; 3D representation is illustrative.`)].join('\n')});
     }
     return sources;
 }
