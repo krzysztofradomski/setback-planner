@@ -69,7 +69,6 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
         if (!outcome.success || outcome.hostname !== url.hostname || outcome.action !== 'inquiry')
             fail(403, 'Challenge verification failed');
         const hash = await digest(body.contact.email.toLowerCase()), now = Date.now();
-        const dup = !!await env.DB.prepare('SELECT id FROM leads WHERE tenant_id=? AND email_hash=? AND anonymized=0 LIMIT 1').bind(body.tenantId, hash).first();
         const first = body.attribution.firstSeenAt;
         const attributed = first === undefined ? now : typeof first === 'number' ? first : Date.parse(first);
         if (attributed > now || attributed < now - 3650 * 86400000)
@@ -77,7 +76,7 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
         const leadId = crypto.randomUUID(), projectJson = JSON.stringify(body.project);
         if (projectJson.length > 65000)
             fail(413, 'Project too large');
-        await env.DB.batch([env.DB.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent,duplicate) VALUES(?,?,?,?,?,?,?,?,?,?,(SELECT EXISTS(SELECT 1 FROM leads WHERE tenant_id=? AND email_hash=? AND anonymized=0)))').bind(leadId, body.tenantId, body.projectId, JSON.stringify(body.contact), hash, projectJson, JSON.stringify(body.attribution), now, attributed, JSON.stringify({ processing: true, marketing: body.marketingConsent, privacyNotice: recipient.privacy_notice, at: now }), body.tenantId, hash), audit(env, body.tenantId, leadId, 'visitor', 'submitted', { duplicate: dup })]);
+        await env.DB.batch([env.DB.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent,duplicate) VALUES(?,?,?,?,?,?,?,?,?,?,(SELECT EXISTS(SELECT 1 FROM leads WHERE tenant_id=? AND email_hash=? AND anonymized=0)))').bind(leadId, body.tenantId, body.projectId, JSON.stringify(body.contact), hash, projectJson, JSON.stringify(body.attribution), now, attributed, JSON.stringify({ processing: true, marketing: body.marketingConsent, privacyNotice: recipient.privacy_notice, at: now }), body.tenantId, hash), env.DB.prepare("INSERT INTO audit(id,tenant_id,lead_id,actor,action,detail,created) SELECT ?,tenant_id,id,'visitor','submitted',json_object('duplicate',json(CASE WHEN duplicate=1 THEN 'true' ELSE 'false' END)),? FROM leads WHERE id=?").bind(crypto.randomUUID(), now, leadId)]);
         return response({ id: leadId, status: 'new', delivery: 'Stored privately for recipient review; no email sent' }, 201);
     }
     if (path === '/api/auth/logout' && method === 'POST') {
@@ -150,10 +149,10 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
             return response((await env.DB.prepare('SELECT * FROM audit WHERE tenant_id=? ORDER BY created DESC LIMIT 1000').bind(tenantId).all()).results);
         const rows = (await env.DB.prepare('SELECT * FROM leads WHERE tenant_id=? ORDER BY created DESC LIMIT 1000').bind(tenantId).all<Lead>()).results;
         if (path === '/api/report') {
-            const sources: Record<string, number> = {}, counts: Record<string, number> = {}, currency: Record<string, {
+            const sources: Record<string, number> = Object.create(null), counts: Record<string, number> = Object.create(null), currency: Record<string, {
                 eligibleCents: number;
                 settledCents: number;
-            }> = {};
+            }> = Object.create(null);
             for (const row of rows) {
                 counts[row.status] = (counts[row.status] ?? 0) + 1;
                 const a = JSON.parse(row.attribution) as {
@@ -201,7 +200,7 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
             return fail(422, (error as Error).message);
         }
         // changes() gates audit insertion on the preceding compare-and-swap update in one D1 transaction.
-        const updates = await env.DB.batch([env.DB.prepare('UPDATE leads SET status=?,evidence=?,existing_customer=?,commission_cents=?,currency=?,commission_rules=?,revision=revision+1 WHERE id=? AND revision=?').bind(b.status, JSON.stringify(b.evidence), b.existingCustomer ? 1 : 0, cents, rules.currency, JSON.stringify(rules), row.id, b.revision), env.DB.prepare('INSERT INTO audit(id,tenant_id,lead_id,actor,action,detail,created) SELECT ?,tenant_id,id,?,?,?,? FROM leads WHERE id=? AND changes()=1').bind(crypto.randomUUID(), user.id, 'status_changed', JSON.stringify({ from: row.status, to: b.status, evidence: b.evidence, commissionCents: cents, rules }), Date.now(), row.id)]);
+        const updates = await env.DB.batch([env.DB.prepare('UPDATE leads SET status=?,evidence=?,existing_customer=?,commission_cents=?,currency=?,commission_rules=?,revision=revision+1 WHERE id=? AND revision=?').bind(b.status, JSON.stringify(b.evidence), b.existingCustomer ? 1 : 0, cents, rules.currency, JSON.stringify(rules), row.id, b.revision), env.DB.prepare('INSERT INTO audit(id,tenant_id,lead_id,actor,action,detail,created) SELECT ?,tenant_id,id,?,?,?,? FROM leads WHERE id=? AND changes()=1').bind(crypto.randomUUID(), user.id, 'status_changed', JSON.stringify({ from: row.status, to: b.status, existingCustomerBefore: !!row.existing_customer, existingCustomerAfter: b.existingCustomer, evidence: b.evidence, commissionCents: cents, rules }), Date.now(), row.id)]);
         if ((updates[0] as {
             meta: {
                 changes: number;

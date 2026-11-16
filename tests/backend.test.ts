@@ -143,6 +143,50 @@ test('settlement uses snapshotted commission agreement and cannot rewrite confir
     };
     assert.equal(report.currency.PLN.settledCents, 50000);
 });
-test('retention clears expired personal data and private cache while preserving financial audit', async () => { const { env, db } = setup(); const cookie = await ownerSession(env); const t = await (await api(env, '/api/tenants', { name: 'Retention recipient' }, cookie)).json() as {
+test('retention clears expired personal data and private cache while preserving financial audit', async () => {
+    const { env, db } = setup();
+    const cookie = await ownerSession(env);
+    const t = await (await api(env, '/api/tenants', { name: 'Retention recipient' }, cookie)).json() as {
+        id: string;
+    };
+    const old = Date.now() - 100 * 86400000;
+    db.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent,status,commission_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run('old', t.id, 'p', '{"email":"private@example.com"}', 'h', '{"private":true}', '{"representative":"rep"}', old, old, '{}', 'commission_settled', 10000);
+    db.prepare('INSERT INTO ai_cache(key,tenant_id,result,expires) VALUES(?,?,?,?)').run('cache', t.id, '{"private":"quote"}', old);
+    await worker.scheduled({}, env);
+    const row = db.prepare('SELECT * FROM leads WHERE id=?').get('old')!;
+    assert.equal(row.contact, '{}');
+    assert.equal(row.project, '{}');
+    assert.equal(row.email_hash, '');
+    assert.equal(row.anonymized, 1);
+    assert.equal(row.commission_cents, 10000);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM ai_cache').get()!.n, 0);
+    assert.equal(db.prepare("SELECT count(*) AS n FROM audit WHERE action='personal_data_erased'").get()!.n, 1);
+});
+test('submission audit uses inserted duplicate flag despite a concurrent prior insertion', async () => { const { env, db } = setup(); const cookie = await ownerSession(env); const t = await (await api(env, '/api/tenants', { name: 'Concurrent recipient' }, cookie)).json() as {
     id: string;
-}; const old = Date.now() - 100 * 86400000; db.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent,status,commission_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run('old', t.id, 'p', '{"email":"private@example.com"}', 'h', '{"private":true}', '{"representative":"rep"}', old, old, '{}', 'commission_settled', 10000); db.prepare('INSERT INTO ai_cache(key,tenant_id,result,expires) VALUES(?,?,?,?)').run('cache', t.id, '{"private":"quote"}', old); await worker.scheduled({}, env); const row = db.prepare('SELECT * FROM leads WHERE id=?').get('old')!; assert.equal(row.contact, '{}'); assert.equal(row.project, '{}'); assert.equal(row.email_hash, ''); assert.equal(row.anonymized, 1); assert.equal(row.commission_cents, 10000); assert.equal(db.prepare('SELECT count(*) AS n FROM ai_cache').get()!.n, 0); assert.equal(db.prepare("SELECT count(*) AS n FROM audit WHERE action='personal_data_erased'").get()!.n, 1); });
+}; const privacy = 'Independent recipient, inquiry purpose and privacy contact, retention 90 days.'; await api(env, '/api/tenants/' + t.id, { recipient_enabled: true, privacy_notice: privacy, retention_days: 90, rules: {} }, cookie, 'PATCH'); env.TURNSTILE_SITEKEY = 'site'; env.TURNSTILE_SECRET_KEY = 'secret'; const batch = env.DB.batch.bind(env.DB); let inserted = false; env.DB.batch = async (statements) => { if (!inserted) {
+    inserted = true;
+    const emailHash = await import('../worker/security.ts').then(m => m.digest('visitor@example.com'));
+    db.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent) VALUES(?,?,?,?,?,?,?,?,?,?)').run('concurrent', t.id, 'p', '{}', emailHash, '{}', '{}', Date.now(), Date.now(), '{}');
+} return batch(statements); }; const original = globalThis.fetch; globalThis.fetch = async () => Response.json({ success: true, hostname: 'planner.example', action: 'inquiry' }); try {
+    const response = await api(env, '/api/inquiries', { tenantId: t.id, projectId: 'p', contact: { name: 'Visitor', email: 'visitor@example.com' }, project: {}, processingConsent: true, privacyNotice: privacy, turnstileToken: 'token' });
+    assert.equal(response.status, 201);
+    const body = await response.json() as {
+        id: string;
+    };
+    const row = db.prepare('SELECT duplicate FROM leads WHERE id=?').get(body.id)!;
+    const audit = db.prepare("SELECT detail FROM audit WHERE lead_id=? AND action='submitted'").get(body.id)!;
+    assert.equal(row.duplicate, 1);
+    assert.equal(JSON.parse(audit.detail as string).duplicate, true);
+}
+finally {
+    globalThis.fetch = original;
+} });
+test('settlement excludes newly identified existing customers and audits manual classification changes', async () => { const { env, db } = setup(); const cookie = await ownerSession(env); const t = await (await api(env, '/api/tenants', { name: 'Existing customer policy' }, cookie)).json() as {
+    id: string;
+}; const rules = rulesSchema.parse({ agreement: 'A-1', mode: 'fixed', value: 50000 }); const evidence = { contractRef: 'C-1', contractCents: 1000000, paymentRef: 'P-1' }; db.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent,status,evidence,commission_rules,commission_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('existing', t.id, 'p', '{}', 'h', '{}', '{}', Date.now(), Date.now(), '{}', 'commission_eligible', JSON.stringify(evidence), JSON.stringify(rules), 50000); assert.equal((await api(env, '/api/leads/existing', { status: 'commission_settled', evidence: { ...evidence, settlementRef: 'S-1' }, existingCustomer: true, revision: 0 }, cookie, 'PATCH')).status, 422); assert.equal(db.prepare('SELECT revision FROM leads WHERE id=?').get('existing')!.revision, 0); assert.equal((await api(env, '/api/leads/existing', { status: 'reversed', evidence: { ...evidence, resolution: 'Customer identified as existing' }, existingCustomer: true, revision: 0 }, cookie, 'PATCH')).status, 200); const audit = db.prepare("SELECT detail FROM audit WHERE lead_id=? AND action='status_changed'").get('existing')!; assert.equal(JSON.parse(audit.detail as string).existingCustomerBefore, false); assert.equal(JSON.parse(audit.detail as string).existingCustomerAfter, true); });
+test('reports count untrusted campaign/source property names without prototype collisions', async () => { const { env, db } = setup(); const cookie = await ownerSession(env); const t = await (await api(env, '/api/tenants', { name: 'Source recipient' }, cookie)).json() as {
+    id: string;
+}; db.prepare('INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent) VALUES(?,?,?,?,?,?,?,?,?,?)').run('source', t.id, 'p', '{}', 'h', '{}', '{"utm_source":"__proto__"}', Date.now(), Date.now(), '{}'); const report = await (await api(env, '/api/report?tenant=' + t.id, undefined, cookie)).json() as {
+    sources: Record<string, number>;
+}; assert.equal(Object.hasOwn(report.sources, '__proto__'), true); assert.equal(report.sources.__proto__, 1); });
