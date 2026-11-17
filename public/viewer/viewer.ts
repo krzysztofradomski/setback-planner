@@ -35,7 +35,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   const scene=new THREE.Scene(),content=new THREE.Group();scene.add(content);
   // Sky gradient and a neutral meadow around the parcel so the plot sits in a landscape, fading into the horizon fog.
   const sky=(top:string,horizon:string)=>{const c=document.createElement('canvas');c.width=2;c.height=256;const g=c.getContext('2d');if(g){const grad=g.createLinearGradient(0,0,0,256);grad.addColorStop(0,top);grad.addColorStop(1,horizon);g.fillStyle=grad;g.fillRect(0,0,2,256);}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;};
-  const daySky=sky('#8fb8d6','#e6ecec'),nightSky=sky('#070d16','#1b2838'),greySky=sky('#8e989f','#d3d8da');
+  const daySky=sky('#5ea8ff','#e8f2ff'),nightSky=sky('#070d16','#1b2838'),greySky=sky('#8e989f','#d3d8da');
   // Rain and snow particles around the parcel; animated only while visible.
   let weatherFx:THREE.LineSegments|THREE.Points|null=null,weatherKind='clear',weatherBox=new THREE.Box3(),frame=0,last=0;
   function setWeather(kind:string,center:THREE.Vector3,range:number){
@@ -101,8 +101,8 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     const range=extent,env=project.environment,origin=project.coordinates.projected?.origin;
     const [lon,lat]=origin?geographicPoint([origin.x,origin.y]):[env.longitude,env.latitude];
     const position=sunPosition(env.date,lat,lon);sun.target.position.copy(center);sun.position.copy(center).add(new THREE.Vector3(position.direction.x,position.direction.y,position.direction.z).multiplyScalar(range*2));sun.intensity=position.daylight?(env.weather==='clear'?3:1.2):0;ambient.intensity=position.daylight?1.15:.18;
-    renderer.setClearColor(position.daylight?'#dce4e7':'#15212f');scene.background=!position.daylight?nightSky:env.weather==='clear'?daySky:greySky;setWeather(env.weather,center,range);scene.fog=env.weather==='clear'?new THREE.Fog(position.daylight?'#e6ecec':'#1b2838',range*7,range*16):new THREE.Fog('#b7c1c4',range*1.5,range*4);
-    land.scale.setScalar(range*18);land.position.set(center.x,-0.08,center.z);(land.material as THREE.MeshStandardMaterial).color.set(seasonalGround[env.season]).lerp(new THREE.Color('#9da393'),.55).multiplyScalar(.78);
+    renderer.setClearColor(position.daylight?'#dce4e7':'#15212f');scene.background=!position.daylight?nightSky:env.weather==='clear'?daySky:greySky;setWeather(env.weather,center,range);scene.fog=env.weather==='clear'?new THREE.Fog(position.daylight?'#e8f2ff':'#1b2838',range*7,range*16):new THREE.Fog('#b7c1c4',range*1.5,range*4);
+    land.scale.setScalar(range*18);land.position.set(center.x,-0.08,center.z);(land.material as THREE.MeshStandardMaterial).color.set(seasonalGround[env.season]).lerp(new THREE.Color('#bfe3b0'),.45);
     Object.assign(sun.shadow.camera,{left:-range,right:range,top:range,bottom:-range,near:0.1,far:range*5});sun.shadow.camera.updateProjectionMatrix();
     if(camera.position.length()===0)view('axonometric');render();
     return content.children.some(c=>c.userData.approximateRoof);
