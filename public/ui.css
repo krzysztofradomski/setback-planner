@@ -2163,39 +2163,6 @@ body {
   font-weight: 600;
 }
 
-/* ---------- presentation ---------- */
-.showroom-active .workspace .workspace-nav,
-.showroom-active .workspace .workspace-header {
-  display: none;
-}
-.showroom-active .app.workspace,
-.showroom-active .app.workspace.has-selection {
-  grid-template-columns: 300px minmax(0, 1fr) 300px;
-  grid-template-rows: 1fr;
-}
-.showroom-active .workspace .rail {
-  grid-column: 1;
-  grid-row: 1;
-}
-.showroom-active .workspace .stage {
-  grid-column: 2;
-  grid-row: 1;
-}
-.showroom-active .workspace .inspector {
-  display: block;
-  grid-column: 3;
-  grid-row: 1;
-}
-.showroom-active .workspace .library-heading {
-  display: none;
-}
-.showroom-active .workspace .workspace-panel:not([data-panel="presentation"]) {
-  display: none;
-}
-.showroom-active .workspace [data-panel="presentation"] {
-  display: flex !important;
-}
-
 /* ---------- discovery (parcel search with map) ---------- */
 @media (min-width: 761px) {
   .workspace.journey-discovery,
@@ -2555,26 +2522,6 @@ body {
   }
   .workspace [data-panel="parcel"] .journey-search-heading {
     display: none;
-  }
-  .showroom-active .app.workspace,
-  .showroom-active .app.workspace.has-selection {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
-  }
-  .showroom-active .workspace .rail {
-    top: 8px;
-    bottom: auto;
-    max-height: 40dvh;
-  }
-  .showroom-active .workspace .stage {
-    grid-column: 1;
-    grid-row: 1;
-  }
-  .showroom-active .workspace .inspector {
-    display: none;
-  }
-  .showroom-active .app.workspace.mobile-inspector .inspector {
-    display: block;
   }
   .catalog-plan-dialog {
     padding: 14px;

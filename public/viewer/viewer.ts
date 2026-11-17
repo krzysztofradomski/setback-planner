@@ -12,6 +12,7 @@ import type { Scene } from '../core/scene.ts';
 import type { SceneContext } from '../core/context.ts';
 import type { CatalogExterior } from '../core/catalogs.ts';
 import { setbackArea } from '../core/placement.ts';
+import { pointLocation } from '../core/geometry.ts';
 const makeTexture:TextureFactory=(id,appearance)=>{
   const preset=materialPresets[id];if(preset.pattern==='plain')return null;
   const canvas=document.createElement('canvas');canvas.width=256;canvas.height=128;
@@ -72,7 +73,9 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     const offset=mode==='top'?new THREE.Vector3(0,extent*1.6,0.001):new THREE.Vector3(extent*0.8,extent*1.05,extent*1.15);
     camera.position.copy(center).add(offset);camera.lookAt(center);controls.update();render();
   }
+  let contextSeason='summer',lastPlot:{x:number;y:number}[]=[];
   function update(project:Scene,original=false,exteriorFor:(item:Scene['items'][number])=>CatalogExterior|undefined=()=>undefined){
+    contextSeason=project.environment.season;lastPlot=project.plot;
     const next=JSON.stringify([project.plot,project.plotHoles,project.plotParts,project.terrain,project.items,project.fences,project.environment,project.coordinates,original,project.items.map(i=>!!exteriorFor(i))]);if(next===signature){render();return;}signature=next;
     disposeObject(content);
     if(validRing(project.plot))for(const [outer,...holes] of parcelPolygons(project)){
@@ -104,18 +107,48 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     if(camera.position.length()===0)view('axonometric');render();
     return content.children.some(c=>c.userData.approximateRoof);
   }
+  const roofMat=new THREE.MeshStandardMaterial({color:'#8d8a83',roughness:.9});
+  /** Trees where the orthophoto shows dark-green canopy outside the parcel and buildings (estimated, one per 4 m cell). */
+  function addCanopyTrees(image:CanvasImageSource,ctx:SceneContext){
+    const size=256,c=document.createElement('canvas');c.width=c.height=size;const g=c.getContext('2d',{willReadFrequently:true});if(!g)return;
+    try{g.drawImage(image,0,0,size,size);}catch{return;}
+    let data:Uint8ClampedArray;try{data=g.getImageData(0,0,size,size).data;}catch{return;}// tainted canvas: skip trees
+    const cell=ctx.half*2/size,x0=ctx.center.x-ctx.half,y0=ctx.center.y-ctx.half,taken=new Set<string>(),spots:{x:number;y:number;s:number}[]=[];
+    const rings=ctx.buildings.map(b=>b.ring),plot=lastPlot;
+    for(let py=1;py<size-1;py+=2)for(let px=1;px<size-1;px+=2){
+      const i=(py*size+px)*4,r=data[i],gr=data[i+1],b=data[i+2],lum=(r+gr+b)/3;
+      if(!(gr>r+6&&gr>=b-4&&lum<105&&lum>18))continue;
+      const p={x:x0+(px+.5)*cell,y:y0+(py+.5)*cell},key=`${Math.floor(p.x/4)},${Math.floor(p.y/4)}`;
+      if(taken.has(key)||(plot.length>2&&pointLocation(p,plot)!=='outside')||rings.some(r=>pointLocation(p,r)!=='outside'))continue;
+      taken.add(key);spots.push({...p,s:.75+((px*7+py*13)%10)/20});if(spots.length>=450)break;
+    }
+    if(!spots.length)return;
+    const crownColor={spring:'#6b9846',summer:'#4b7536',autumn:'#b57138',winter:'#6d6a5c'}[contextSeason]??'#4b7536';
+    const crown=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,1),new THREE.MeshStandardMaterial({color:crownColor,roughness:.95,flatShading:true}),spots.length);
+    const trunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(.12,.18,1,6),new THREE.MeshStandardMaterial({color:'#5b4632',roughness:1}),spots.length);
+    const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
+    spots.forEach((t,i)=>{const h=5.5*t.s+2;m.compose(v.set(t.x,h-1.6*t.s,t.y),q,new THREE.Vector3(2.1*t.s,2.4*t.s,2.1*t.s));crown.setMatrixAt(i,m);m.compose(v.set(t.x,(h-2*t.s)/2,t.y),q,new THREE.Vector3(1,h-2*t.s,1));trunk.setMatrixAt(i,m);});
+    crown.castShadow=trunk.castShadow=true;crown.userData.canopy=trunk.userData.canopy=true;contextGroup.add(crown,trunk);
+  }
   function setContext(ctx:SceneContext|null){
     disposeObject(contextGroup);contextActive=!!ctx;
     content.traverse(o=>{if(o.userData.parcelGround){const m=(o as THREE.Mesh).material as THREE.MeshStandardMaterial;m.opacity=ctx?.3:1;m.depthWrite=!ctx;}});
     if(!ctx){render();return;}
     const plane=new THREE.Mesh(new THREE.PlaneGeometry(ctx.half*2,ctx.half*2),new THREE.MeshStandardMaterial({color:'#ffffff',roughness:1}));
     plane.rotation.x=-Math.PI/2;plane.position.set(ctx.center.x,-0.04,ctx.center.y);plane.receiveShadow=true;contextGroup.add(plane);
-    contextReady=new Promise<void>(done=>new THREE.TextureLoader().setCrossOrigin('anonymous').load(ctx.ortho,texture=>{if(disposed||!plane.parent){texture.dispose();done();return;}texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();const m=plane.material as THREE.MeshStandardMaterial;m.map=texture;m.needsUpdate=true;render();done();},undefined,()=>{(plane.material as THREE.MeshStandardMaterial).color.set('#b9c2ad');render();done();}));
-    const wall=new THREE.MeshStandardMaterial({color:'#ece8df',roughness:.85}),existing=new THREE.MeshStandardMaterial({color:'#d8c3a8',roughness:.85,transparent:true,opacity:.75}),edge=new THREE.LineBasicMaterial({color:'#7d786d'});
+    contextReady=new Promise<void>(done=>new THREE.TextureLoader().setCrossOrigin('anonymous').load(ctx.ortho,texture=>{if(disposed||!plane.parent){texture.dispose();done();return;}texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();const m=plane.material as THREE.MeshStandardMaterial;m.map=texture;m.needsUpdate=true;roofMat.map=texture;roofMat.color.set('#ffffff');roofMat.needsUpdate=true;addCanopyTrees(texture.image as CanvasImageSource,ctx);render();done();},undefined,()=>{(plane.material as THREE.MeshStandardMaterial).color.set('#b9c2ad');render();done();}));
+    // Neighbours: roofs show the orthophoto projected from above; walls get plaster with window rows in varied tones.
+    const span=ctx.half*2,x0=ctx.center.x-ctx.half,y0=ctx.center.y-ctx.half;
+    const orthoUV={generateTopUV:(_g:THREE.ExtrudeGeometry,v:number[],a:number,b:number,c:number)=>[a,b,c].map(i=>new THREE.Vector2((v[i*3]-x0)/span,1-(-v[i*3+1]-y0)/span)),
+      generateSideWallUV:(_g:THREE.ExtrudeGeometry,v:number[],a:number,b:number,c:number,d:number)=>{const ax=v[a*3],ay=v[a*3+1],bx=v[b*3],by=v[b*3+1],len=Math.hypot(bx-ax,by-ay);return [new THREE.Vector2(0,v[a*3+2]),new THREE.Vector2(len,v[b*3+2]),new THREE.Vector2(len,v[c*3+2]),new THREE.Vector2(0,v[d*3+2])];}};
+    const facade=(tone:string)=>{const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');if(g){g.fillStyle=tone;g.fillRect(0,0,64,64);g.fillStyle='rgba(40,52,60,.78)';g.fillRect(20,18,24,22);g.fillStyle='rgba(255,255,255,.55)';g.fillRect(18,40,28,3);}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(1/3,1/3);return t;};
+    const walls=['#ece8df','#e4ddd0','#dfe1df','#efe6d6'].map(tone=>new THREE.MeshStandardMaterial({map:facade(tone),roughness:.85}));
+    roofMat.map=null;roofMat.color.set('#8d8a83');
+    const edge=new THREE.LineBasicMaterial({color:'#6f6a60',transparent:true,opacity:.6});
     // Existing buildings on the parcel are drawn as a ground outline, so the planned house stays visible.
     for(const b of ctx.buildings.filter(b=>b.onParcel)){const line=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(b.ring.map(p=>new THREE.Vector3(p.x,.05,p.y))),new THREE.LineDashedMaterial({color:'#b8392a',dashSize:.6,gapSize:.4}));line.computeLineDistances();contextGroup.add(line);}
-    for(const b of ctx.buildings.filter(b=>!b.onParcel)){const geometry=new THREE.ExtrudeGeometry(groundShape(b.ring),{depth:b.height,bevelEnabled:false}),mesh=new THREE.Mesh(geometry,b.onParcel?existing:wall);mesh.rotation.x=-Math.PI/2;mesh.castShadow=mesh.receiveShadow=true;mesh.userData.contextBuilding=true;
-      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geometry,30),edge);mesh.add(edges);contextGroup.add(mesh);}
+    ctx.buildings.filter(b=>!b.onParcel).forEach((b,i)=>{const geometry=new THREE.ExtrudeGeometry(groundShape(b.ring),{depth:b.height,bevelEnabled:false,UVGenerator:orthoUV as unknown as THREE.UVGenerator}),mesh=new THREE.Mesh(geometry,[roofMat,walls[i%walls.length]]);mesh.rotation.x=-Math.PI/2;mesh.castShadow=mesh.receiveShadow=true;mesh.userData.contextBuilding=true;
+      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geometry,30),edge);mesh.add(edges);contextGroup.add(mesh);});
     render();
   }
   /** Frame one building from its front-left, at eye-catching height. */
@@ -139,7 +172,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},
     screenshot(){render();return renderer.domElement.toDataURL('image/png');},
-    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();disposeObject(contextGroup);land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
+    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();disposeObject(contextGroup);roofMat.dispose();land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
     memory(){return {...renderer.info.memory};},
   };
 }

@@ -515,7 +515,7 @@
     },
     {
       "id": "F020",
-      "description": "Showroom and campaign attribution",
+      "description": "Campaign attribution (showroom/kiosk mode removed 2026-11-16 at the owner's request)",
       "dependencies": [
         "F004"
       ],
@@ -533,11 +533,10 @@
         "npm run test:production"
       ],
       "knownLimitations": [
-        "Fullscreen guided showroom, generic examples, QR scene transfer, first-party attribution and warning/reset. Autosave, undo, visitor data and server administration sessions are isolated. Manufacturer branding requires approved assets."
+        "Showroom and kiosk mode were removed. First-party campaign attribution for inquiries remains in public/core/attribution.ts."
       ],
       "documentation": [
-        "docs/implementation-status.md",
-        "docs/showroom.md"
+        "docs/implementation-status.md"
       ]
     },
     {

@@ -19,7 +19,7 @@ const copy = {
     parcel: "Parcel",
     garden: "Garden",
     project: "Project",
-    presentation: "Present",
+    presentation: "Inquiries",
     backPlan: "Back to plan",
     selected: "Inspector",
     houseTitle: "Find your home",
@@ -31,8 +31,8 @@ const copy = {
     gardenIntro: "Structures, planting, paths and outdoor spaces.",
     projectTitle: "Your project",
     projectIntro: "Saved locally. Export a backup or share the current layout.",
-    presentationTitle: "Presentation",
-    presentationIntro: "Prepare a display or manage private inquiries.",
+    presentationTitle: "Inquiries",
+    presentationIntro: "Manage private inquiries.",
     workspace: "Concept project",
     saved: "Saved on this device",
     share: "Share project",
@@ -66,7 +66,7 @@ const copy = {
     parcel: "Działka",
     garden: "Ogród",
     project: "Projekt",
-    presentation: "Pokaz",
+    presentation: "Zapytania",
     backPlan: "Wróć do planu",
     selected: "Właściwości",
     houseTitle: "Wybierz swój dom",
@@ -77,8 +77,8 @@ const copy = {
     gardenIntro: "Mała architektura, zieleń, ścieżki i wypoczynek.",
     projectTitle: "Twój projekt",
     projectIntro: "Zapisany lokalnie. Pobierz kopię lub udostępnij układ.",
-    presentationTitle: "Prezentacja",
-    presentationIntro: "Przygotuj pokaz lub zarządzaj prywatnymi zapytaniami.",
+    presentationTitle: "Zapytania",
+    presentationIntro: "Zarządzaj prywatnymi zapytaniami.",
     workspace: "Projekt koncepcyjny",
     saved: "Zapis na tym urządzeniu",
     share: "Udostępnij projekt",
@@ -229,7 +229,6 @@ export function mountWorkspace({
   }
   panels.project.append(saveSection, drawSection);
   move(".foot", "project");
-  move("#showroom-host", "presentation");
   move("#business-host", "presentation");
   const inspector = document.createElement("aside");
   inspector.className = "inspector";

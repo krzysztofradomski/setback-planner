@@ -1,6 +1,6 @@
+// First-party campaign attribution (UTM and campaign labels) for inquiries. Bounded labels only; no personal data.
 import { parseScene, type Scene } from './scene.ts';
 
-export const KIOSK_PREFIX='setback-planner:kiosk:';
 export const ATTRIBUTION_KEY='setback-planner:attribution:v1';
 export const attributionFields=['utm_source','utm_medium','utm_campaign','utm_term','utm_content','manufacturer','showroom','event','campaign','representative'] as const;
 export type AttributionField=typeof attributionFields[number];
@@ -26,31 +26,4 @@ export function validateAttribution(input:unknown):Attribution|null {
   const values:Partial<Record<AttributionField,string>>={};
   for(const key of attributionFields){const value=campaignLabel(raw[key]);if(value)values[key]=value;}
   return Object.keys(values).length?{...values,firstSeenAt:new Date(raw.firstSeenAt).toISOString(),lastSeenAt:new Date(raw.lastSeenAt).toISOString()}:null;
-}
-export function inactivitySettings(idleSeconds=180,warningSeconds=20){
-  const idle=Number.isFinite(idleSeconds)?Math.min(1800,Math.max(30,Math.round(idleSeconds))):180;
-  const warning=Number.isFinite(warningSeconds)?Math.min(60,Math.max(10,Math.round(warningSeconds))):20;
-  return {idleSeconds:idle,warningSeconds:Math.min(warning,idle-10)};
-}
-export interface KeyStorage {length:number;key(index:number):string|null;removeItem(key:string):void}
-export function clearKioskStorage(storage:KeyStorage){
-  const keys:string[]=[];
-  for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key?.startsWith(KIOSK_PREFIX))keys.push(key);}
-  for(const key of keys)storage.removeItem(key);
-}
-export function exampleScene(kind:'compact'|'garden'='compact'):Scene {
-  return parseScene({plot:[{x:0,y:0},{x:32,y:0},{x:32,y:40},{x:0,y:40}],items:[
-    {id:'demo-house',type:'house',name:'Example home',x:10,y:12,w:10,d:12,setback:4},
-    ...(kind==='garden'?[
-      {id:'demo-terrace',type:'landscape',kind:'terrace',name:'Terrace',x:12,y:24,w:6,d:4,setback:0},
-      {id:'demo-tree',type:'landscape',kind:'tree',name:'Garden tree',x:25,y:30,w:4,d:4,setback:0},
-    ]:[]),
-  ]});
-}
-/** Remove query parameters entirely: project links carry scene state, not visitor or campaign data. */
-export function publicProjectUrl(value:string,base:string):string {
-  const url=new URL(value,base),origin=new URL(base).origin;
-  if(url.origin!==origin||!/^#(?:p|s|z)=[\w-]+$/.test(url.hash))throw new Error('A complete project link is unavailable.');
-  url.search='';url.username='';url.password='';
-  return url.toString();
 }

@@ -5,6 +5,7 @@ import {designGarden} from './core/garden.ts';
 import {sourceDirectory,mapOverlayIds} from './map/sources.ts';
 import {mountWorkspace} from './workspace.ts';
 import {mountParcelJourney} from './parcel-journey.ts';
+import {ATTRIBUTION_KEY,readAttribution,validateAttribution} from './core/attribution.ts';
 import {renderLayoutReview as renderReview} from './layout-review.ts';
 import {transformGroup} from './core/operations.ts';
 import {parcelPolygons,parcelContains,parcelArea} from './core/topology.ts';
@@ -198,20 +199,19 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     try { return await decodeShare(location.hash); }
     catch { projectWarning(lang === 'pl' ? 'Nieprawidłowy lub nieobsługiwany link projektu.' : 'Invalid or unsupported project link.'); return null; }
   }
-  let showroomActive=false;
   const sharedScene=await fromHash(),savedScene=sharedScene?null:load();let freshScene=!sharedScene&&!savedScene&&!persistencePaused,entryDismissed=false;try{entryDismissed=window.sessionStorage.getItem('setback-entry-dismissed')==='1';}catch{}
   const freshVisit=freshScene&&!entryDismissed;let entryPending=freshVisit,journey=null,workspace=null;
   let state = sharedScene || savedScene || parseScene(DEFAULT());
   let saveT, saveRevision = 0;
   function save(){
     clearTimeout(saveT); const revision = ++saveRevision;
-    if (persistencePaused || showroomActive || entryPending) return;
+    if (persistencePaused || entryPending) return;
     saveT = setTimeout(async () => {
       try {
         const json = serializeScene(state);
         localStorage.setItem(LS, json); $('#project-warning').hidden = true;
         const hash = await encodeShare(JSON.parse(json));
-        if (revision === saveRevision && !persistencePaused && !showroomActive) window.history.replaceState(null, '', hash);
+        if (revision === saveRevision && !persistencePaused) window.history.replaceState(null, '', hash);
       } catch { projectWarning(lang === 'pl' ? 'Nie można zapisać projektu. Sprawdź geometrię i pamięć przeglądarki.' : 'Project could not be saved. Check geometry and browser storage.', false); }
     }, 300);
   }
@@ -1135,15 +1135,11 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     buildPanel(); render();
   });
 
-  const showroomHost=document.createElement('div');showroomHost.id='showroom-host';$('.rail').append(showroomHost);
-  let ordinaryHistory=null,ordinarySelected=null,ordinaryPaused=false,ordinaryWarning=null,business=null;
-  const {mountShowroom}=await import('./showroom.ts');
-  const showroom=mountShowroom({beforeEnter:async()=>{await business?.logout?.();},container:showroomHost,getScene:()=>state,applyScene:next=>{applyPlan(parseScene(next),t('planLoaded'));if(showroomActive)history=new ProjectHistory();},shareUrl:()=>location.href.split('#')[0]+plainShare(state),setView:mode=>{if(mode==='3d')$('#view-3d').click();else if(mode==='map')$('#view-map').click();else setStageMode('2d');},onActiveChange:active=>{
-    if(active){ordinaryHistory=history;ordinarySelected=selected;ordinaryPaused=persistencePaused;ordinaryWarning={hidden:$('#project-warning').hidden,text:$('#project-warning').textContent};showroomActive=true;clearTimeout(saveT);saveRevision++;history=new ProjectHistory();}
-    else{showroomActive=false;history=ordinaryHistory||new ProjectHistory();selected=get(ordinarySelected)?ordinarySelected:null;persistencePaused=ordinaryPaused;if(ordinaryWarning){$('#project-warning').hidden=ordinaryWarning.hidden;$('#project-warning').textContent=ordinaryWarning.text;}buildPanel();render();}
-    $('#b-download').closest('section').hidden=active;document.body.classList.toggle('showroom-active',active);
-  },onSessionReset:()=>{history=new ProjectHistory();selected=null;$('#io').value='';$('#report-frame').srcdoc='';$('#report-dialog').close();business?.clearPersonalData?.();}});
-  const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');business=mountBusiness({container:businessHost,getScene:()=>structuredClone(state),getAttribution:()=>showroom.getAttribution()});
+  let business=null,attribution=null;
+  try{attribution=validateAttribution(JSON.parse(window.sessionStorage.getItem(ATTRIBUTION_KEY)??'null'));}catch{/* storage unavailable */}
+  attribution=readAttribution(location.search,attribution);
+  try{if(attribution)window.sessionStorage.setItem(ATTRIBUTION_KEY,JSON.stringify(attribution));}catch{/* in-memory attribution still works */}
+  const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');business=mountBusiness({container:businessHost,getScene:()=>structuredClone(state),getAttribution:()=>(attribution?structuredClone(attribution):null)});
 
   workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
   document.querySelector('[data-panel=houses]')?.prepend($('#house-brief'));
