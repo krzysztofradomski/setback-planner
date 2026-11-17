@@ -649,7 +649,18 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     const plotValid = validRing(state.plot);
     const warnCount = state.items.filter(i => C.res.get(i.id).warn).length;
     $('#chipbar').innerHTML = (!plotValid ? `<span style="color:var(--warn)">${lang === 'pl' ? 'Nieprawidłowa granica działki' : 'Invalid parcel boundary'}</span>` : '') + `<span>${group(area)} m² · ${dec((area/100).toFixed(2))} a</span>` +
-      (state.coordinates.projected?`<span>${t('north')}</span>`:'') + (state.items.length ? `<span style="color:var(${warnCount ? '--warn' : '--ok'})">${warnCount ? t('toCheck', {n: warnCount}) : t('allMet')}</span>` : '');
+      (state.coordinates.projected?`<span>${t('north')}</span>`:'') + (state.items.length ? (warnCount ? `<button type="button" class="check-pill" data-issues aria-expanded="${issuesOpen}">${t('toCheck', {n: warnCount})}</button>` : `<span style="color:var(--ok)">${t('allMet')}</span>`) : '') +
+      (warnCount && issuesOpen ? `<div class="issues-pop" role="list">${issueRows()}</div>` : '');
+  }
+  // Issues behind the "to check" pill: why each building fails, one click selects it on the plan.
+  let issuesOpen=false;
+  function issueRows(){
+    const pl=lang==='pl',m=v=>dec(v.toFixed(2))+' m';
+    return state.items.filter(i=>C.res.get(i.id).warn).map(i=>{const r=C.res.get(i.id),why=[
+      !r.inside?(pl?'Wychodzi poza granicę działki':'Outside the parcel boundary'):null,
+      r.overlap?(pl?'Koliduje z innym obiektem':'Overlaps another object'):null,
+      ...r.sides.filter(s=>s.warn).map(s=>`${t('wall',{side:t(s.name)})}: ${m(s.t)} ${pl?'zamiast':'instead of'} ${m(i.setback)}`)].filter(Boolean);
+      return `<button type="button" role="listitem" data-issue="${esc(i.id)}"><b>${esc(i.name)}</b>${why.map(w=>`<small>${esc(w)}</small>`).join('')}</button>`;}).join('');
   }
 
   function buildCorners(){
@@ -1199,6 +1210,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
   document.querySelector('[data-panel=houses]')?.prepend($('#house-brief'));
   document.querySelector('[data-panel=garden]')?.prepend(boundaryToggle,gardenCard);
+  $('#chipbar').onclick=e=>{const pill=e.target.closest('[data-issues]'),row=e.target.closest('[data-issue]');if(pill)issuesOpen=!issuesOpen;else if(row){selected=row.dataset.issue;issuesOpen=false;buildPanel();}else return;render();};
   $('#boundary-fence').onchange=e=>{snapshot();setBoundaryFence(e.target.checked);render();if(e.target.checked)void gateToStreet();};
   // Simple mode hides manual, expert setup; the header switch reveals it and remembers the choice.
   const ADV_LS='setback-planner-advanced',advanced=document.createElement('label');advanced.className='advanced-switch';

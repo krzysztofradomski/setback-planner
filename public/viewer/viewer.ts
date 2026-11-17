@@ -1,6 +1,6 @@
 import {terrainHeight} from '../core/terrain.ts';
 import {parcelPolygons} from '../core/topology.ts';
-import {buildFence} from './fences.ts';
+import {buildFence} from './fences.ts';import {boundaryFence,BOUNDARY_FENCE_ID} from '../core/fences.ts';
 import {sunPosition,seasonalGround} from '../core/environment.ts';
 import {geographicPoint} from '../core/geospatial.ts';
 import * as THREE from 'three';
@@ -57,7 +57,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   const contextGroup=new THREE.Group();scene.add(contextGroup);let contextActive=false,contextReady:Promise<void>=Promise.resolve();
   const land=new THREE.Mesh(new THREE.CircleGeometry(1,72),new THREE.MeshStandardMaterial({color:'#9aae86',roughness:1}));land.rotation.x=-Math.PI/2;land.receiveShadow=true;scene.add(land);
   const camera=new THREE.PerspectiveCamera(42,1,0.1,10000),controls=new OrbitControls(camera,renderer.domElement);
-  controls.maxPolarAngle=Math.PI*0.49;controls.enableDamping=false;controls.minDistance=2;controls.maxDistance=2000;
+  controls.maxPolarAngle=Math.PI*0.49;controls.enableDamping=false;controls.minDistance=2;controls.maxDistance=150;
   const ambient=new THREE.HemisphereLight('#e6f2ff','#6e775f',2);scene.add(ambient);
   const sun=new THREE.DirectionalLight('#fff2d8',3);sun.position.set(-30,60,-35);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.radius=3;sun.shadow.bias=-0.0005;scene.add(sun,sun.target);
   let walkMode=false;let active=true,signature='',extent=50,center=new THREE.Vector3(),disposed=false;
@@ -95,9 +95,11 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     }
     for(const item of project.items.filter(i=>i.visible)){const object=buildBuilding(item,original,makeTexture,project.environment.season,exteriorFor(item));if(project.terrain)object.position.y=terrainHeight(project.terrain.samples,item.x,item.y)-project.terrain.samples[0].z;content.add(object);}
     for(const fence of project.fences)content.add(buildFence(fence,project.environment.season));
+    // The boundary fence follows the main ring; extra parcel parts and inner rings get a matching fence without a gate.
+    if(project.fences.some(f=>f.id===BOUNDARY_FENCE_ID))for(const ring of parcelPolygons(project).flat().slice(1)){const f=boundaryFence(ring,-1,'');if(f)content.add(buildFence(f,project.environment.season));}
     content.updateMatrixWorld(true);
     const bounds=new THREE.Box3().setFromObject(content),size=bounds.getSize(new THREE.Vector3());
-    center=bounds.getCenter(new THREE.Vector3());extent=Math.max(size.x,size.z,20);
+    center=bounds.getCenter(new THREE.Vector3());extent=Math.max(size.x,size.z,20);controls.maxDistance=extent*3;// ponytail: zoom-out stops a few parcel widths away, the surroundings tile ends soon after
     const range=extent,env=project.environment,origin=project.coordinates.projected?.origin;
     const [lon,lat]=origin?geographicPoint([origin.x,origin.y]):[env.longitude,env.latitude];
     const position=sunPosition(env.date,lat,lon);sun.target.position.copy(center);sun.position.copy(center).add(new THREE.Vector3(position.direction.x,position.direction.y,position.direction.z).multiplyScalar(range*2));sun.intensity=position.daylight?(env.weather==='clear'?3:1.2):0;ambient.intensity=position.daylight?1.15:.18;
