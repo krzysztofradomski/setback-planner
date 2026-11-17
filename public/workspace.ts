@@ -15,10 +15,10 @@ const copy = {
     openMap: "Open geographical map",
     layerHint:
       "Switch layers on in the map view. Empty coverage is not evidence that a risk or utility is absent.",
-    houses: "Houses",
+    houses: "House",
     parcel: "Parcel",
     garden: "Garden",
-    project: "Project",
+    project: "Review",
     presentation: "Inquiries",
     backPlan: "Back to plan",
     selected: "Inspector",
@@ -62,10 +62,10 @@ const copy = {
     openMap: "Otwórz mapę działki",
     layerHint:
       "Włącz warstwy w widoku mapy. Pusta warstwa nie oznacza braku ryzyka lub sieci.",
-    houses: "Domy",
+    houses: "Dom",
     parcel: "Działka",
     garden: "Ogród",
-    project: "Projekt",
+    project: "Przegląd",
     presentation: "Zapytania",
     backPlan: "Wróć do planu",
     selected: "Właściwości",
@@ -121,7 +121,7 @@ export function mountWorkspace({
   const header = document.createElement("header");
   header.className = "workspace-header";
   header.innerHTML =
-    '<div class="project-identity"><span class="project-eyebrow" data-ui="workspace"></span><span class="project-name" data-ui="saved"></span></div><div class="header-actions"></div>';
+    '<div class="project-identity"></div><div class="header-actions"></div>';
   header.prepend(brand);
   app.prepend(header);
   const actions = header.querySelector(".header-actions")!;
@@ -138,21 +138,20 @@ export function mountWorkspace({
     );
     actions.append(button);
   }
+  // One navigation for the whole flow: a numbered stepper in the header on wide screens, a bottom tab bar on phones.
   const nav = document.createElement("nav");
   nav.className = "workspace-nav";
-  nav.setAttribute("aria-label", "Workspace");
-  for (const tab of [
-    "houses",
-    "parcel",
-    "garden",
-    "project",
-    "presentation",
-    "selected",
-  ] as const) {
+  nav.setAttribute("aria-label", "Planning steps");
+  const steps = ["parcel", "houses", "garden", "project"] as const;
+  for (const tab of [...steps, "selected"] as const) {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.workspaceTab = tab;
-    button.innerHTML = icon(tab) + `<span data-ui="${tab}"></span>`;
+    const n = steps.indexOf(tab as (typeof steps)[number]);
+    button.innerHTML =
+      icon(tab) +
+      (n >= 0 ? `<b class="step-no">${n + 1}</b>` : "") +
+      `<span data-ui="${tab}"></span>`;
     button.onclick = () => {
       if (tab === "selected") {
         setInspector(!mobileInspector);
@@ -162,7 +161,14 @@ export function mountWorkspace({
     };
     nav.append(button);
   }
-  app.append(nav);
+  const inquiries = document.createElement("button");
+  inquiries.type = "button";
+  inquiries.className = "ghost-action";
+  inquiries.dataset.workspaceTab = "presentation";
+  inquiries.innerHTML = icon("presentation") + '<span data-ui="presentation"></span>';
+  inquiries.onclick = () => activate("presentation");
+  actions.prepend(inquiries);
+  header.querySelector(".project-identity")!.replaceChildren(nav);
   const intro = document.createElement("div");
   intro.className = "library-heading";
   intro.innerHTML =
@@ -298,8 +304,14 @@ export function mountWorkspace({
       ];
   };
   function updateNav() {
-    nav
-      .querySelectorAll<HTMLButtonElement>("button")
+    const current = steps.indexOf(active as (typeof steps)[number]);
+    nav.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+      const n = steps.indexOf(button.dataset.workspaceTab as (typeof steps)[number]);
+      button.classList.toggle("complete", n >= 0 && n < current);
+      button.toggleAttribute("data-step", n >= 0);
+    });
+    app
+      .querySelectorAll<HTMLButtonElement>("[data-workspace-tab]")
       .forEach((button) =>
         button.setAttribute(
           "aria-pressed",

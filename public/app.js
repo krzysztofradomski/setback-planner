@@ -952,7 +952,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   const contextHint=document.createElement('div');contextHint.id='context-hint';contextHint.hidden=true;
   contextHint.innerHTML='<p><span data-bi="This plan has no map location, so there is no aerial photo or neighbouring buildings yet.|Ten plan nie ma lokalizacji na mapie, więc nie ma jeszcze zdjęcia lotniczego ani sąsiednich budynków."></span></p><button type="button"><span data-bi="Find your parcel|Znajdź swoją działkę"></span></button>';
   contextHint.querySelectorAll('[data-bi]').forEach(el=>{const [en,pl]=el.dataset.bi.split('|');el.textContent=lang==='pl'?pl:en;});
-  contextHint.querySelector('button').onclick=()=>{setStageMode('2d');document.querySelector('.journey-steps [data-step="1"]')?.click();};
+  contextHint.querySelector('button').onclick=()=>{setStageMode('2d');workspace.activate('parcel');};
   $('#viewer').after(contextHint);
   $('#view-top').onclick=()=>viewer?.view('top');$('#view-axon').onclick=()=>viewer?.view('axonometric');
   $('#view-low').onchange=e=>viewer?.quality(e.target.checked);

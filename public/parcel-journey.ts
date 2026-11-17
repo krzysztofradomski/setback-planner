@@ -198,12 +198,6 @@ export function mountParcelJourney(o: Options) {
     "</svg></figure>";
   o.stage.append(welcome);
   o.container.prepend(root);
-  const steps = document.createElement("nav");
-  steps.className = "journey-steps";
-  steps.setAttribute("aria-label", "Planning steps");
-  steps.innerHTML =
-    '<button type="button" data-step="1"><b>1</b><span></span></button><i></i><button type="button" data-step="2"><b>2</b><span></span></button><i></i><button type="button" data-step="3"><b>3</b><span></span></button>';
-  document.querySelector(".project-identity")?.replaceChildren(steps);
   const summary = document.createElement("section");
   summary.className = "journey-parcel-summary";
   o.container.prepend(summary);
@@ -236,28 +230,11 @@ export function mountParcelJourney(o: Options) {
     o.activate("parcel");
     root.querySelector<HTMLInputElement>("input")?.focus();
   }
-  function setStep(step: number) {
-    steps.querySelectorAll<HTMLButtonElement>("button").forEach((b, i) => {
-      b.setAttribute("aria-current", i + 1 === step ? "step" : "false");
-      b.classList.toggle("complete", i + 1 < step);
-    });
-  }
-  steps
-    .querySelector('[data-step="1"]')!
-    .addEventListener("click", enterSearch);
-  steps.querySelector('[data-step="2"]')!.addEventListener("click", () => {
-    if (intro) o.onExploreExample();
-    leaveIntro();
-    o.activate("houses");
-    setStep(2);
-  });
-  steps.querySelector('[data-step="3"]')!.addEventListener("click", review);
   function review() {
     leaveIntro();
     cancel();
     o.activate("project");
     o.reviewLayout();
-    setStep(3);
     document
       .querySelector("#review-layout")
       ?.scrollIntoView({ block: "start" });
@@ -321,7 +298,6 @@ export function mountParcelJourney(o: Options) {
       cancel();
       root.hidden = false;
       o.activate("houses");
-      setStep(2);
     };
     welcome.querySelector("h2")!.textContent = l.title;
     welcome.querySelector("p")!.textContent = l.intro;
@@ -336,14 +312,6 @@ export function mountParcelJourney(o: Options) {
     );
     welcome.querySelector('[data-wd="house"]')!.textContent = l.drawingHouse;
     welcome.querySelector('[data-wd="fits"]')!.textContent = l.drawingFits;
-    steps
-      .querySelectorAll("button")
-      .forEach(
-        (b, i) =>
-          (b.querySelector("span")!.textContent = [l.step1, l.step2, l.step3][
-            i
-          ]),
-      );
     next.textContent = l.next;
     inspectorNext.textContent = l.next;
     renderSummary();
@@ -419,7 +387,6 @@ export function mountParcelJourney(o: Options) {
       // clickable. Towns and streets only centre the map.
       const exact = !!point && (!point.kind || point.kind === "address");
       status(exact ? w().addressHint : point ? w().placeHint : w().pickHint);
-      setStep(1);
       if (exact) void previewAt(point.longitude, point.latitude);
     } catch {
       status(w().failed, true);
@@ -506,7 +473,6 @@ export function mountParcelJourney(o: Options) {
       root.hidden = true;
       renderSummary();
       o.activate("houses");
-      setStep(2);
     };
     card.querySelector<HTMLButtonElement>("[data-another]")!.onclick = () => {
       cancel();
@@ -558,7 +524,6 @@ export function mountParcelJourney(o: Options) {
     change.onclick = enterSearch;
     house.onclick = () => {
       o.activate("houses");
-      setStep(2);
     };
     summary.append(label, id, area, house, change);
   }
@@ -594,9 +559,6 @@ export function mountParcelJourney(o: Options) {
       o.onExploreExample();
       leaveIntro();
     }
-    if (tab === "parcel") setStep(1);
-    else if (tab === "houses") setStep(2);
-    else if (tab === "project") setStep(3);
   }
   function refresh() {
     renderSummary();
@@ -631,7 +593,6 @@ export function mountParcelJourney(o: Options) {
     welcome.hidden = true;
     root.hidden = !!o.getScene().parcel;
   }
-  setStep(o.getScene().parcel ? 2 : 1);
   return {
     previewAt,
     beginMapPick: () => chooseMap(),
@@ -647,7 +608,6 @@ export function mountParcelJourney(o: Options) {
       langObserver.disconnect();
       root.remove();
       welcome.remove();
-      steps.remove();
       topics.remove();
       summary.remove();
       next.remove();
