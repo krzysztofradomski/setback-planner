@@ -13,6 +13,14 @@ export function outdoorModel(item:SceneItem,season='summer'){
    if(item.kind!=='evergreen')mesh.scale.set(w*.5*growth,height*.4,d*.5*growth);
    mesh.position.y=spec.render==='tree'?height*.65:height*.5;mesh.castShadow=true;g.add(mesh);
   }
+ }else if(spec.render==='carport'){
+  // Flat-roof carport as in the Udana Budowa renders: white slab and piers, solid outer wall, timber slat screen at the back.
+  // ponytail: the outer wall is on local −x (left of a house facing +y), where catalogue carports sit; mirror via rotation otherwise.
+  const white='#f1f1ee',slab=.35;
+  box(w+.1,slab,d+.1,0,h-slab/2,0,white);
+  box(.25,h-slab,d,-w/2+.125,(h-slab)/2,0,white);
+  box(.3,h-slab,.3,w/2-.15,(h-slab)/2,d/2-.15,white);box(.3,h-slab,.3,w/2-.15,(h-slab)/2,-d/2+.15,white);
+  const slats=Math.round((w-.4)/.14);for(let i=0;i<slats;i++)box(.09,h-slab-.1,.05,-w/2+.3+i*.14,(h-slab)/2,-d/2+.2,i%2?'#a8743f':'#9a6533');
  }else if(spec.render==='pergola'||spec.render==='glass'||spec.render==='play'){
   for(const x of [-w/2,w/2])for(const z of [-d/2,d/2])box(.12,h,.12,x,h/2,z,spec.color);
   for(let i=0;i<7;i++)box(w+.2,.12,.12,0,h,-d/2+i*d/6,spec.color);

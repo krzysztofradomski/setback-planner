@@ -15,3 +15,20 @@ export function fenceSegments(f:Fence){
  for(let j=0;j<n;j++){const p=from+(to-from)*j/n,q=from+(to-from)*(j+1)/n;result.push({a:{x:a.x+(b.x-a.x)*p/length,y:a.y+(b.y-a.y)*p/length},b:{x:a.x+(b.x-a.x)*q/length,y:a.y+(b.y-a.y)*q/length},gate:isGate});}}
  }return result;
 }
+
+export const BOUNDARY_FENCE_ID='boundary';
+type P={x:number;y:number};
+/** Edge whose midpoint lies furthest in front of the house (rot 0 faces +y); without a house, the edge nearest the plan's bottom. */
+export function facingEdge(plot:P[],house?:{x:number;y:number;rot:number}){
+ const r=(house?.rot??0)*Math.PI/180,front={x:-Math.sin(r),y:Math.cos(r)},o=house??{x:0,y:0};
+ const score=plot.map((a,i)=>{const b=plot[(i+1)%plot.length];return((a.x+b.x)/2-o.x)*front.x+((a.y+b.y)/2-o.y)*front.y;});
+ return score.indexOf(Math.max(...score));
+}
+/** Metal panel fence along every property line, with a 4 m sliding gate centred on `gateEdge` when that edge is long enough. Null when the parcel cannot carry one. */
+export function boundaryFence(plot:P[],gateEdge:number,name:string):Fence|null{
+ if(plot.length<3||plot.length>63)return null;
+ const a=plot[gateEdge],b=plot[(gateEdge+1)%plot.length],len=a&&b?Math.hypot(b.x-a.x,b.y-a.y):0,width=Math.min(4,len-1);
+ const r=fenceSchema.safeParse({id:BOUNDARY_FENCE_ID,name,type:'metal-panel',path:[...plot,plot[0]].map(p=>({x:p.x,y:p.y})),height:1.5,width:.08,spacing:2.5,color:'#3a3d41',foundation:.3,maturity:1,
+  gate:width>=2.5?{edge:gateEdge,offset:(len-width)/2,width,type:'sliding',open:false,inward:true}:null});
+ return r.success?r.data:null;
+}

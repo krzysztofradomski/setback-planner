@@ -43,6 +43,10 @@ const roofTiles = (color: string, covering: string) => canvasTexture(g => {
   if (covering === 'tile') for (let y = 0; y < 128; y += 32) { g.fillRect(0, y + 28, 128, 4); for (let x = (y / 32) % 2 ? 16 : 0; x < 128; x += 32) g.fillRect(x, y, 2, 28); }
   else for (let x = 0; x < 128; x += 32) g.fillRect(x, 0, 3, 128);
 });
+const slats = () => canvasTexture(g => {
+  g.fillStyle = '#b07a44'; g.fillRect(0, 0, 32, 64);
+  for (let y = 0; y < 64; y += 8) { g.fillStyle = 'rgba(70,40,15,.45)'; g.fillRect(0, y + 6, 32, 2); g.fillStyle = 'rgba(255,230,190,.18)'; g.fillRect(0, y, 32, 2); }
+}, 32, 64);
 const solarCells = () => canvasTexture(g => {
   g.fillStyle = '#151d2b'; g.fillRect(0, 0, 128, 128); g.strokeStyle = '#3d4a5e'; g.lineWidth = 2;
   for (let i = 0; i <= 128; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 128); g.moveTo(0, i); g.lineTo(128, i); g.stroke(); }
@@ -117,15 +121,22 @@ export function buildExterior(item: SceneItem, spec: CatalogExterior, appearance
 }
 
 /** Opening finish for every building: frame bars, dark glass and sill; doors as a solid leaf with a steel pull. */
-export function buildOpening(origin: THREE.Vector3, u: THREE.Vector3, n: THREE.Vector3, opening: SceneItem['openings'][number], appearance: Appearance) {
+export function buildOpening(origin: THREE.Vector3, u: THREE.Vector3, n: THREE.Vector3, opening: SceneItem['openings'][number], appearance: Appearance, blinds = false) {
   const group = new THREE.Group(), frame: Frame = { origin, u, n, length: 0 };
   const cx = opening.offset + opening.width / 2, cy = opening.sill + opening.height / 2, w = opening.width, h = opening.height, bar = .07;
   const frameMat = mat(opening.type === 'door' ? appearance.doorColor : appearance.frameColor, .55);
-  if (opening.type === 'door') {
+  if (opening.type === 'door' && w >= 2) {
+    // Wide doors are garage doors: sectional panels, no pull handle.
+    group.add(onWall(frame, cx, cy, .07, w, h, .06, frameMat));
+    const groove = mat('#000000', .9, { transparent: true, opacity: .25 });
+    for (let y = opening.sill + .5; y < opening.sill + h - .1; y += .5) group.add(onWall(frame, cx, y, .105, w - .04, .025, .01, groove));
+  } else if (opening.type === 'door') {
     group.add(onWall(frame, cx, cy, .07, w, h, .06, frameMat));
     group.add(onWall(frame, cx + w * .3, cy, .12, .03, h * .55, .03, mat('#c9cdd0', .3, { metalness: .8 })));
   } else {
     group.add(onWall(frame, cx, cy, .055, w - bar, h - bar, .02, mat('#22303a', .08, { metalness: .6 })));
+    // Catalogue renders show external timber blinds lowered over the upper part of each window.
+    if (blinds) { const drop = (h - bar) * .55, tex = slats(); tex.repeat.set(1, drop / .5); group.add(onWall(frame, cx, opening.sill + h - bar / 2 - drop / 2, .065, w - bar * 1.6, drop, .015, mat('#ffffff', .8, { map: tex }))); }
     const bars: [number, number, number, number][] = [[0, h / 2 - bar / 2, w, bar], [0, -h / 2 + bar / 2, w, bar], [-w / 2 + bar / 2, 0, bar, h], [w / 2 - bar / 2, 0, bar, h]];
     if (w > 1.4) bars.push([0, 0, bar * .8, h]);
     for (const [dx, dy, bw, bh] of bars) group.add(onWall(frame, cx + dx, cy + dy, .08, bw, bh, .07, frameMat));

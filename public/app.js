@@ -10,7 +10,7 @@ import {ATTRIBUTION_KEY,readAttribution,validateAttribution} from './core/attrib
 import {renderLayoutReview as renderReview} from './layout-review.ts';
 import {transformGroup} from './core/operations.ts';
 import {parcelPolygons,parcelContains,parcelArea} from './core/topology.ts';
-import {fenceSchema,fenceSegments} from './core/fences.ts';
+import {fenceSchema,fenceSegments,boundaryFence,facingEdge,BOUNDARY_FENCE_ID} from './core/fences.ts';
 import { objectLibrary, blocksPlacement } from './core/objects.ts';
 import { catalogRegistrations, loadCatalog, catalogAvailable } from './core/catalogs.ts';
 import { materialPresets, resolveAppearance, resetAppearance } from './core/materials.ts';
@@ -153,8 +153,10 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
         const catalog=await loadCatalog(button.dataset.placeCatalog||button.dataset.addCatalog),x=replace?current.x:state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,y=replace?current.y:state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length,item=createCatalogItem(catalog,button.dataset.model||button.dataset.addModel,{id:replace?current.id:'o'+uid++,x,y,rot:replace?current.rot:parcelAxis(state.plot)});
         if(replace){item.setback=current.setback;item.group=current.group;}else{const {suggestPlacements}=await import('./core/placement.ts'),candidate=suggestPlacements(state,item).suggestions[0];if(!candidate){toast(lang==='pl'?'Brak wolnego miejsca. Przesuń istniejące obiekty lub wybierz większą działkę.':'No free placement found. Move existing objects or use a larger parcel.');return;}Object.assign(item,{x:candidate.x,y:candidate.y,rot:candidate.rot});}
         const exterior=catalog.models.find(m=>m.id===(button.dataset.model||button.dataset.addModel))?.exterior;let carport=null;
-        if(!replace&&exterior?.carport){item.group=crypto.randomUUID();carport=catalogCarport(exterior,item,'o'+uid++,lang==='pl'?'Wiata (wg rzutu)':'Carport (from plan)');}
-        snapshot();if(replace)state.items=state.items.map(i=>i.id===current.id?item:i);else{state.items.push(item);if(carport)state.items.push(carport);}selected=item.id;buildPanel();render();toast(replace?(lang==='pl'?'Zmieniono projekt wybranego domu.':'Selected house design updated.'):(lang==='pl'?'Dodano dom w wolnym miejscu. Możesz go przesunąć.':'House added in a free position. Drag it to adjust.'));
+        // Carport or garage wing from the plan or render; on replace only when the house has no attached structures yet.
+        const alone=replace&&!state.items.some(i=>i.id!==current.id&&current.group&&i.group===current.group);
+        if(exterior?.carport&&(!replace||alone)){const c=exterior.carport;item.group=item.group||crypto.randomUUID();carport=catalogCarport(exterior,item,'o'+uid++,(c.kind==='garage'?bi('Garage','Garaż'):bi('Carport','Wiata'))+' '+(c.source==='plan'?bi('(from plan)','(wg rzutu)'):bi('(from render)','(wg wizualizacji)')));}
+        snapshot();if(replace)state.items=state.items.map(i=>i.id===current.id?item:i);else state.items.push(item);if(carport)state.items.push(carport);selected=item.id;buildPanel();render();toast(replace?(lang==='pl'?'Zmieniono projekt wybranego domu.':'Selected house design updated.'):(lang==='pl'?'Dodano dom w wolnym miejscu. Możesz go przesunąć.':'House added in a free position. Drag it to adjust.'));
       }catch{toast(t('catalogError'));}finally{button.disabled=false;}
     });
     $('#catalog-models').querySelectorAll('[data-plan-src]').forEach(button=>button.onclick=()=>showCatalogPlan(button.dataset.planSrc,button.dataset.planName));
@@ -174,6 +176,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     garage: { w: 6,  d: 6,  setback: 3 },
   };
   const LS = 'setback-planner-v1';
+  // The example parcel comes fenced, gate on the edge in front of the house.
+  const exampleScene = () => { const scene = parseScene(DEFAULT()), f = boundaryFence(scene.plot, 2, bi('Boundary fence','Ogrodzenie działki')); if (f) scene.fences = [f]; return scene; };
   const DEFAULT = () => ({
     plot: [{x:0,y:0},{x:24,y:0},{x:26,y:42},{x:-1,y:40}],
     items: [
@@ -204,13 +208,14 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   }
   const sharedScene=await fromHash(),savedScene=sharedScene?null:load();let freshScene=!sharedScene&&!savedScene&&!persistencePaused,entryDismissed=false;try{entryDismissed=window.sessionStorage.getItem('setback-entry-dismissed')==='1';}catch{}
   const freshVisit=freshScene&&!entryDismissed;let entryPending=freshVisit,journey=null,workspace=null;
-  let state = sharedScene || savedScene || parseScene(DEFAULT());
+  let state = sharedScene || savedScene || exampleScene();
   let saveT, saveRevision = 0;
   // View preference, not project data: garden objects and fences are hidden on the 2D plan, SVG and report unless switched on.
   const GARDEN_LS='setback-planner-show-garden';
   let showGarden=(()=>{try{return localStorage.getItem(GARDEN_LS)==='1';}catch{return false;}})();
-  const planItems=()=>state.items.filter(i=>i.visible&&(showGarden||i.type!=='landscape'));
-  const reportScene=()=>showGarden?state:{...state,items:state.items.filter(i=>i.type!=='landscape'),fences:[]};
+  const structure=i=>i.type!=='landscape'||i.kind==='carport';
+  const planItems=()=>state.items.filter(i=>i.visible&&(showGarden||structure(i)));
+  const reportScene=()=>showGarden?state:{...state,items:state.items.filter(structure),fences:state.fences.filter(f=>f.id===BOUNDARY_FENCE_ID)};
   function save(){
     clearTimeout(saveT); const revision = ++saveRevision;
     if (persistencePaused || entryPending) return;
@@ -356,7 +361,28 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     // ponytail: 1.2 s debounce so dragging a corner does not query every registry on every frame
     siteJob=new Promise(resolve=>{siteTimer=setTimeout(async()=>{try{const r=await fetch('/api/site-data?'+key);if(!r.ok)throw new Error('site data');const d=await r.json();if(siteKey===key){siteData=d;siteState='ready';}}catch{if(siteKey===key)siteState='error';}if(siteKey===key)renderSitePanel();resolve();},1200);});
   }
-  function render(){ for(const it of state.items)if(it.openings.length)it.openings=fitOpenings(it); syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d){viewer.update(state,originalAppearance,exteriorFor);void refreshContext();} if(parcelMap && mapActive)parcelMap.update(state); save(); journey?.refresh(); syncSiteData(); }
+  // The boundary fence follows the parcel: corner edits move it, the gate stays on its edge where possible.
+  function syncBoundaryFence(){
+    const i=state.fences.findIndex(f=>f.id===BOUNDARY_FENCE_ID);if(i<0)return;
+    const f=state.fences[i],ring=[...state.plot,state.plot[0]];
+    if(f.path.length===ring.length&&f.path.every((p,j)=>Math.abs(p.x-ring[j].x)<1e-6&&Math.abs(p.y-ring[j].y)<1e-6))return;
+    const edge=f.gate&&f.gate.edge<state.plot.length?f.gate.edge:facingEdge(state.plot,state.items.find(x=>x.type==='house'));
+    const next=boundaryFence(state.plot,edge,f.name);state.fences=next?state.fences.map(x=>x.id===f.id?next:x):state.fences.filter(x=>x.id!==f.id);
+  }
+  function setBoundaryFence(on,edge){
+    state.fences=state.fences.filter(f=>f.id!==BOUNDARY_FENCE_ID);if(!on)return;
+    const f=boundaryFence(state.plot,edge??facingEdge(state.plot,state.items.find(x=>x.type==='house')),bi('Boundary fence','Ogrodzenie działki'));
+    if(f&&state.fences.length<12)state.fences=[f,...state.fences];
+  }
+  // Moves the gate to the edge facing a mapped street once OpenStreetMap roads are known.
+  async function gateToStreet(){
+    if(!state.coordinates.projected||!state.fences.some(f=>f.id===BOUNDARY_FENCE_ID))return;
+    const key=JSON.stringify(state.plot);
+    try{const {loadStreets,streetEdge}=await import('./core/context.ts'),edge=streetEdge(state.plot,await loadStreets(state));
+      if(edge===null||JSON.stringify(state.plot)!==key)return;const f=state.fences.find(x=>x.id===BOUNDARY_FENCE_ID);if(!f||f.gate?.edge===edge)return;
+      setBoundaryFence(true,edge);render();}catch{/* no map data: keep the facing edge */}
+  }
+  function render(){ for(const it of state.items)if(it.openings.length)it.openings=fitOpenings(it); syncBoundaryFence(); syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d){viewer.update(state,originalAppearance,exteriorFor);void refreshContext();} if(parcelMap && mapActive)parcelMap.update(state); save(); journey?.refresh(); syncSiteData(); }
 
   function dim(a, b, cls, text){
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
@@ -426,7 +452,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
         if (two) labels.push(`<text class="bsize" x="${f(c.x)}" y="${f(c.y + 13)}" text-anchor="middle">${fmtD(it.w)} × ${fmtD(it.d)} m</text>`);
       }
     }
-    for(const fence of showGarden?state.fences:[])for(const segment of fenceSegments(fence)){
+    for(const fence of showGarden?state.fences:state.fences.filter(f=>f.id===BOUNDARY_FENCE_ID))for(const segment of fenceSegments(fence)){
       if(segment.gate&&fence.gate?.open)continue;const a=S(segment.a),b=S(segment.b);out.push(`<path d="M${a.x} ${a.y}L${b.x} ${b.y}" fill="none" stroke="${segment.gate?'#39799b':fence.color}" stroke-width="${fence.type.startsWith('hedge')?fence.width*k:3}"/>`);
     }
     out.push(...labels);
@@ -867,7 +893,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     const house=parseScene({plot:state.plot,items:[{id:'o'+uid++,type:'house',name:bi('House (from description)','Dom (z opisu)'),x:cx,y:cy,w:plan.w,d:plan.d,rot:parcelAxis(state.plot),setback:4,group,architecture:{storeys:plan.storeys,height:plan.height,roof:plan.roof,pitch:plan.pitch,roofAxis:'width'}}]}).items[0];
     const spot=suggestPlacements(state,house).suggestions[0];if(spot)Object.assign(house,{x:spot.x,y:spot.y,rot:spot.rot});
     snapshot();state.items.push(house);
-    if(plan.garage){const g=plan.garage,lx=-((house.w+g.w)/2+.02),ly=house.d/2-g.d/2,r=house.rot*Math.PI/180;state.items.push(parseScene({plot:state.plot,items:[{id:'o'+uid++,type:g.kind==='attached'?'garage':'landscape',...(g.kind==='carport'?{kind:'pergola'}:{}),name:g.kind==='attached'?t('garage'):bi('Carport','Wiata'),x:house.x+lx*Math.cos(r)-ly*Math.sin(r),y:house.y+lx*Math.sin(r)+ly*Math.cos(r),w:g.w,d:g.d,rot:house.rot,setback:3,group,architecture:{storeys:1,height:2.8,roof:'flat',pitch:0}}]}).items[0]);}
+    if(plan.garage){const g=plan.garage,lx=-((house.w+g.w)/2+.02),ly=house.d/2-g.d/2,r=house.rot*Math.PI/180;state.items.push(parseScene({plot:state.plot,items:[{id:'o'+uid++,type:g.kind==='attached'?'garage':'landscape',...(g.kind==='carport'?{kind:'carport'}:{}),name:g.kind==='attached'?t('garage'):bi('Carport','Wiata'),x:house.x+lx*Math.cos(r)-ly*Math.sin(r),y:house.y+lx*Math.sin(r)+ly*Math.cos(r),w:g.w,d:g.d,rot:house.rot,setback:3,group,architecture:{storeys:1,height:2.8,roof:'flat',pitch:0}}]}).items[0]);}
     selected=house.id;buildPanel();render();toast(spot?bi('House added in a free position. Check the values.','Dodano dom w wolnym miejscu. Sprawdź wartości.'):bi('Added in the centre: no free position found.','Dodano na środku: brak wolnego miejsca.'));
   }
   function showBrief(answer,plan){
@@ -895,6 +921,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   };
   // One-click garden: deterministic layout around the main house; re-running replaces the previous auto-garden.
   const gardenCard=document.createElement('div');gardenCard.id='garden-designer';
+  const boundaryToggle=document.createElement('label');boundaryToggle.className='check boundary-toggle';boundaryToggle.innerHTML='<input type="checkbox" id="boundary-fence"><span data-bi="Fence on the property lines (gate on the street side)|Ogrodzenie na granicy działki (brama od ulicy)"></span>';
   gardenCard.innerHTML='<h3><span data-bi="Design my garden|Zaprojektuj ogród"></span></h3><div class="garden-chat" aria-live="polite"><p class="bubble ai"><span data-bi="Tell me what you would like: a pool, a vegetable patch, lots of trees, a place for kids… I will design it on your parcel.|Napisz, czego chcesz: basen, warzywnik, dużo drzew, miejsce dla dzieci… Zaprojektuję to na Twojej działce."></span></p></div><form class="garden-ask"><input id="garden-wish" type="text" maxlength="500" autocomplete="off" data-bi-placeholder="e.g. lush garden with a pergola and a vegetable patch|np. bujny ogród z pergolą i warzywnikiem"><button type="submit" aria-label="Send"><span data-bi="Design|Projektuj"></span></button></form><div class="garden-styles" role="radiogroup"><button type="button" role="radio" aria-checked="true" data-style="lush"><span data-bi="Lush|Bujny"></span></button><button type="button" role="radio" aria-checked="false" data-style="family"><span data-bi="Family|Rodzinny"></span></button><button type="button" role="radio" aria-checked="false" data-style="modern"><span data-bi="Modern|Nowoczesny"></span></button><button type="button" role="radio" aria-checked="false" data-style="natural"><span data-bi="Natural|Naturalny"></span></button></div><label class="gate-edge"><span data-bi="Gate on the side|Brama od strony"></span><select id="garden-gate"></select></label><button type="button" id="garden-design"><span data-bi="Design garden|Zaprojektuj ogród"></span></button>';
   gardenCard.querySelectorAll('[data-style]').forEach(b=>b.onclick=()=>gardenCard.querySelectorAll('[data-style]').forEach(x=>x.setAttribute('aria-checked',String(x===b))));
   // Garden chat: Workers AI turns a wish into style + elements; the deterministic designer places them.
@@ -930,7 +957,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   gardenCard.querySelector('#garden-design').onclick=()=>runGarden({});
   function runGarden(options){
     const style=gardenCard.querySelector('[aria-checked=true]').dataset.style;
-    const base={...state,items:state.items.filter(i=>!autoGarden.items.includes(i.id)),fences:state.fences.filter(f=>!autoGarden.fences.includes(f.id))},gateValue=$('#garden-gate').value;
+    const base={...state,items:state.items.filter(i=>!autoGarden.items.includes(i.id)),fences:state.fences.filter(f=>!autoGarden.fences.includes(f.id)&&f.id!==BOUNDARY_FENCE_ID)},gateValue=$('#garden-gate').value;
     let result;try{result=designGarden(base,style,()=>'o'+uid++,kind=>objectLibrary[kind][lang],gateValue===''?null:Number(gateValue),options);}catch{toast(bi('Add a house first.','Najpierw dodaj dom.'));return false;}
     if(base.items.length+result.items.length>100){toast(t('objectLimit'));return false;}
     snapshot();state.items=[...base.items,...result.items];state.fences=base.fences;
@@ -986,7 +1013,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   $('#topology-apply').onclick=()=>{try{if($('#topology-json').value.length>MAX_PROJECT_BYTES)throw new Error('large');const value=JSON.parse($('#topology-json').value),point=([x,y])=>({x,y});const next=parseScene({...state,plotHoles:value.holes.map(r=>r.map(point)),plotParts:value.parts.map(part=>part.map(r=>r.map(point)))});if(next.parcel)next.parcel.edited=true;applyPlan(next,t('planLoaded'));$('#topology-message').textContent='';}catch{$('#topology-message').textContent=t('parcelImportError');}};
   const fencesPanel=document.createElement('details');fencesPanel.innerHTML=`<summary><span data-bi="Fences, gates and hedges|Ogrodzenia, bramy i żywopłoty">Fences, gates and hedges</span></summary><label><span data-bi="Design|Typ">Design</span><select id="fence-type">${[['metal-panel','Metal panels','Panele metalowe'],['palisade-horizontal','Horizontal palisade','Palisada pozioma'],['palisade-vertical','Vertical palisade','Palisada pionowa'],['wood','Timber','Drewniane'],['gabion','Gabion','Gabion'],['masonry','Masonry','Murowane'],['mixed','Mixed','Mieszane'],['hedge-evergreen','Evergreen hedge','Żywopłot zimozielony'],['hedge-deciduous','Deciduous hedge','Żywopłot liściasty']].map(([v,en,pl])=>`<option value="${v}" data-bi="${en}|${pl}">${en}</option>`).join('')}</select></label><div class="grid2"><label><span data-bi="Height (m)|Wysokość (m)">Height (m)</span><input id="fence-height" type="number" min="0.2" max="5" value="1.8" step=".1"></label><label><span data-bi="Post spacing (m)|Rozstaw (m)">Post spacing (m)</span><input id="fence-spacing" type="number" min=".5" max="10" value="2" step=".1"></label><label><span data-bi="Width (m)|Szerokość (m)">Width (m)</span><input id="fence-width" type="number" min=".05" max="3" value=".15" step=".05"></label><label><span data-bi="Color|Kolor">Color</span><input id="fence-color" type="color" value="#59645b"></label></div><label><span data-bi="Custom path [[x,y],…] (empty = whole parcel boundary)|Własna trasa [[x,y],…] (puste = cała granica działki)">Custom path [[x,y],…] (empty = whole parcel boundary)</span><textarea id="fence-path" aria-label="${bi('Fence path','Przebieg ogrodzenia')}"></textarea></label><button id="fence-boundary"><span data-bi="Use parcel boundary|Granica działki">Use parcel boundary</span></button><label><span data-bi="Gate on first edge|Brama na 1. boku">Gate on first edge</span><select id="fence-gate"><option value="" data-bi="None|Brak">None</option><option value="sliding" data-bi="Sliding gate|Brama przesuwna">Sliding gate</option><option value="swing" data-bi="Swing gate|Brama skrzydłowa">Swing gate</option><option value="wicket" data-bi="Wicket|Furtka">Wicket</option></select></label><label><span data-bi="Gate opening width (m)|Światło bramy (m)">Gate opening width (m)</span><input id="fence-gate-width" type="number" min=".5" max="10" step=".1" value="3.5"></label><label class="check"><input id="fence-open" type="checkbox"><span data-bi="Open|Otwarta">Open</span></label><button id="fence-add"><span data-bi="Add fence|Dodaj ogrodzenie">Add fence</span></button><div id="fence-list"></div><p id="fence-message" class="hint" role="status"></p>`;$('#sel').before(fencesPanel);
   $('#fence-boundary').onclick=()=>{$('#fence-path').value=JSON.stringify([...state.plot,state.plot[0]].map(p=>[p.x,p.y]));};
-  function syncFences(){if(!$('#fence-list'))return;$('#fence-list').innerHTML=state.fences.map(f=>`<button data-remove-fence="${esc(f.id)}">× ${esc(f.name)} · ${f.height} m${f.gate?' · gate '+f.gate.width+' m':''}</button>`).join('');}
+  function syncFences(){const bt=$('#boundary-fence');if(bt)bt.checked=state.fences.some(f=>f.id===BOUNDARY_FENCE_ID);if(!$('#fence-list'))return;$('#fence-list').innerHTML=state.fences.map(f=>`<button data-remove-fence="${esc(f.id)}">× ${esc(f.name)} · ${f.height} m${f.gate?' · gate '+f.gate.width+' m':''}</button>`).join('');}
   $('#fence-list').onclick=e=>{const id=e.target.dataset.removeFence;if(id){snapshot();state.fences=state.fences.filter(f=>f.id!==id);render();}};
   $('#fence-add').onclick=()=>{try{if(state.fences.length>=12)throw new Error('Maximum 12 paths');const raw=$('#fence-path').value.trim(),points=raw?JSON.parse(raw):[...state.plot,state.plot[0]].map(p=>[p.x,p.y]),type=$('#fence-type').value;const fence=fenceSchema.parse({id:crypto.randomUUID(),name:type,type,path:points.map(([x,y])=>({x,y})),height:Number($('#fence-height').value),spacing:Number($('#fence-spacing').value),width:Number($('#fence-width').value),color:$('#fence-color').value,foundation:0,maturity:1,gate:$('#fence-gate').value?{edge:0,offset:0,width:Number($('#fence-gate-width').value),type:$('#fence-gate').value,open:$('#fence-open').checked,inward:true}:null});snapshot();state.fences.push(fence);$('#fence-message').textContent='';render();}catch{$('#fence-message').textContent=bi('Check the fence path and gate width.','Sprawdź trasę ogrodzenia i szerokość bramy.');}};
   const environmentPanel=document.createElement('details');environmentPanel.innerHTML=`<summary data-t="environment">${t('environment')}</summary><p class="hint" data-t="solarHint">${t('solarHint')}</p><div class="grid2"><label><span data-bi="Season|Pora roku">Season</span><select id="env-season">${[['spring','Spring','Wiosna'],['summer','Summer','Lato'],['autumn','Autumn','Jesień'],['winter','Winter','Zima']].map(([v,en,pl])=>`<option value="${v}" data-bi="${en}|${pl}">${en}</option>`).join('')}</select></label><label><span data-bi="Weather|Pogoda">Weather</span><select id="env-weather">${[['clear','Clear','Bezchmurnie'],['clouds','Cloudy','Pochmurno'],['rain','Rain','Deszcz'],['snow','Snow','Śnieg']].map(([v,en,pl])=>`<option value="${v}" data-bi="${en}|${pl}">${en}</option>`).join('')}</select></label></div><label><span data-bi="Date|Data">Date</span><input id="env-date" type="datetime-local"></label><div class="grid2"><label><span data-bi="Latitude|Szerokość">Latitude</span><input id="env-latitude" type="number" min="-90" max="90" step="0.01"></label><label><span data-bi="Longitude|Długość">Longitude</span><input id="env-longitude" type="number" min="-180" max="180" step="0.01"></label></div>`;$('#sel').before(environmentPanel);
@@ -1146,7 +1173,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     const b = e.currentTarget;
     if (!resetArmed){ resetArmed = true; b.textContent = t('resetConfirm'); resetT = setTimeout(() => { resetArmed = false; b.textContent = t('resetExample'); }, 3000); return; }
     clearTimeout(resetT); resetArmed = false; b.textContent = t('resetExample');
-    snapshot(); state = parseScene(DEFAULT()); persistencePaused = false; $('#project-warning').hidden = true;
+    snapshot(); state = exampleScene(); persistencePaused = false; $('#project-warning').hidden = true;
     uid = 3; selected = 'o1'; buildCorners(); buildPanel(); fit(); render(); toast(t('exampleRestored'));
   };
   $('#t-undo').onclick = undo; $('#t-redo').onclick = redo;
@@ -1171,7 +1198,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
 
   workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
   document.querySelector('[data-panel=houses]')?.prepend($('#house-brief'));
-  document.querySelector('[data-panel=garden]')?.prepend(gardenCard);
+  document.querySelector('[data-panel=garden]')?.prepend(boundaryToggle,gardenCard);
+  $('#boundary-fence').onchange=e=>{snapshot();setBoundaryFence(e.target.checked);render();if(e.target.checked)void gateToStreet();};
   // Simple mode hides manual, expert setup; the header switch reveals it and remembers the choice.
   const ADV_LS='setback-planner-advanced',advanced=document.createElement('label');advanced.className='advanced-switch';
   advanced.innerHTML='<input type="checkbox" id="advanced-mode" role="switch"><span data-bi="Advanced|Zaawansowane">'+bi('Advanced','Zaawansowane')+'</span>';
@@ -1186,7 +1214,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   journey=mountParcelJourney({container:parcelPanel,stage:$('.stage'),fresh:freshVisit,language:()=>lang,getScene:()=>state,onIntroEnd:()=>{entryPending=false;requestAnimationFrame(()=>{fit();renderSheet();});},onExploreExample:()=>{freshScene=false;entryPending=false;},
     lookupId:async id=>(await import('./core/uldk.ts')).lookupParcel(id),lookupAt:async(longitude,latitude)=>(await import('./core/uldk.ts')).lookupParcelAt(longitude,latitude),
     showMap:journeyMap,showPreview:parcel=>{if(parcelMap){parcelMap.clearLocation();parcelMap.update(parcel?parseScene({...state,...parcel,items:[],terrain:undefined}):state);if(parcel)parcelMap.fitProject();}},
-    applyParcel:parcel=>{entryPending=false;const next=parseScene({...state,...parcel,items:freshScene?[]:state.items,terrain:undefined});next.items=fitItemsToParcel(next);applyPlan(next,t('planLoaded'));freshScene=false;setStageMode('2d');fit();render();requestAnimationFrame(()=>{fit();renderSheet();});},activate:tab=>workspace.activate(tab),
+    applyParcel:parcel=>{entryPending=false;const next=parseScene({...state,...parcel,items:freshScene?[]:state.items,terrain:undefined});next.items=fitItemsToParcel(next);next.fences=next.fences.filter(f=>f.id!==BOUNDARY_FENCE_ID);{const f=boundaryFence(next.plot,facingEdge(next.plot,next.items.find(x=>x.type==='house')),bi('Boundary fence','Ogrodzenie działki'));if(f&&next.fences.length<12)next.fences.unshift(f);}applyPlan(next,t('planLoaded'));void gateToStreet();freshScene=false;setStageMode('2d');fit();render();requestAnimationFrame(()=>{fit();renderSheet();});},activate:tab=>workspace.activate(tab),
     pickMap:()=>{mapPick=true;$('#map-pick').setAttribute('aria-pressed','true');},stopPicking:()=>{mapPick=false;$('#map-pick').setAttribute('aria-pressed','false');},
     showTopic:async topic=>{workspace.activate('parcel');await journeyMap();const ids={planning:['planning'],water:['flood','groundwater'],utilities:['utilities'],nature:['environment'],ground:['relief','landslides','mining','wells']}[topic];for(const id of mapOverlayIds){const enabled=ids.includes(id);$('#map-'+id).checked=enabled;parcelMap.setOverlay(id,enabled);}},reviewLayout:renderLayoutReview});
   // Public registry data: fetched in the background whenever the located parcel changes, listed here and included in the report.

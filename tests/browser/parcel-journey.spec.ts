@@ -70,7 +70,7 @@ test("identifier search previews a parcel, confirms it, then leads to house and 
     })
     .toBeLessThan(45);
   await page.locator("[data-model=de-75]").click();
-  await expect(page.locator(".obj")).toHaveCount(1);
+  await expect(page.locator(".obj")).toHaveCount(2) // house + carport seen in the DE 75 render;
   await expect(page.locator("#f-w")).toHaveValue("11.76");
   await page.locator(".journey-next").click();
   await expect(page.locator("#review-layout")).toBeVisible();

@@ -2731,3 +2731,63 @@ body {
 .workspace .site-data li.error::before { background: var(--line-strong); }
 .workspace .site-data li b { font-weight: 600; }
 .workspace .site-data li span { color: var(--muted); overflow-wrap: anywhere; }
+
+/* ---------- tablet header and intro ---------- */
+@media (max-width: 1000px) and (min-width: 761px) {
+  .app.workspace.journey-intro,
+  .app.workspace.journey-intro.has-selection {
+    grid-template-columns: 0 0 minmax(0, 1fr);
+  }
+  .workspace .workspace-header {
+    gap: 12px;
+    padding: 0 12px;
+  }
+  .workspace .brand h1,
+  .workspace .advanced-switch span {
+    display: none;
+  }
+  .workspace .project-identity {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+  .workspace .project-identity .workspace-nav button[data-workspace-tab="selected"] span {
+    display: none;
+  }
+  .workspace .project-identity .workspace-nav button[data-workspace-tab="selected"] {
+    padding: 4px 8px;
+    margin-left: 4px;
+  }
+  .workspace .project-identity .workspace-nav button[data-workspace-tab="selected"] svg {
+    display: block;
+    width: 20px;
+    height: 20px;
+  }
+  .workspace .header-actions .primary-action,
+  .workspace .header-actions .secondary-action {
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+}
+/* the intro already lists the steps in the header */
+.workspace .journey-welcome .welcome-explanation {
+  display: none;
+}
+@media (max-width: 1279px) and (min-width: 761px) {
+  .journey-welcome {
+    grid-template-rows: auto auto;
+    align-content: center;
+    justify-content: center;
+  }
+}
+.workspace .boundary-toggle {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--paper);
+  font-weight: 600;
+}
+.workspace #viewer-controls button,
+.workspace #viewer-controls summary,
+.workspace #viewer-controls label {
+  white-space: nowrap;
+}

@@ -24,7 +24,7 @@ export const exteriorSchema=z.object({
     windows:z.array(z.object({side:z.enum(['front','back']),at:z.number().min(0).max(1)}).strict()).max(8),
     chimneys:z.array(z.number().min(0).max(1)).max(4),
   }).strict(),
-  carport:z.object({side:z.enum(['left','right']),width:metres(12),depth:metres(15),fromFront:metres(30),source:z.enum(['plan','render-estimate'])}).strict().nullable(),
+  carport:z.object({kind:z.enum(['carport','garage']).default('carport'),side:z.enum(['left','right']),width:metres(12),depth:metres(15),fromFront:metres(30),height:metres(5).default(2.7),door:hex.optional(),source:z.enum(['plan','render-estimate'])}).strict().nullable(),
   detailsSource:z.literal('render-estimate'),
 }).strict();
 export type CatalogExterior=z.infer<typeof exteriorSchema>;
