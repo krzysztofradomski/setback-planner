@@ -44,7 +44,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       language: 'Language', controls: 'Controls', addBuilding: 'Add building', house: 'House', garage: 'Garage', buildings: 'Buildings',
       plot: 'Plot', area: 'Area', perimeter: 'Perimeter', side: 'Side', cornersHint: 'Drag the corner points A–D on the plan, or type coordinates.',
       rectW: 'Rectangle width in metres', rectD: 'Rectangle depth in metres', makeRect: 'Make rectangle',
-      drawing: 'Drawing', snapTo: 'Snap to', off: 'Off', dimsFor: 'Dimensions for', allBuildings: 'All buildings', selectedOnly: 'Selected only',
+      drawing: 'Drawing', showGarden: 'Show garden objects and fences on the plan and in the report', deleteProject: 'Delete project', deleteConfirm: 'Delete this project from this browser and start again? Saved variants stay. This cannot be undone.', snapTo: 'Snap to', off: 'Off', dimsFor: 'Dimensions for', allBuildings: 'All buildings', selectedOnly: 'Selected only',
       showGaps: 'Show gaps between buildings', save: 'Save', copyLink: 'Copy share link', copyJson: 'Copy plan JSON', resetExample: 'Reset example',
       resetConfirm: 'Click again to reset', loadFromJson: 'Load plan from JSON', pastePlan: 'Paste a copied plan', loadPlan: 'Load plan',
       autosaveHint: 'Your plan autosaves in this browser and in the page address, so the link always opens this exact plan.',
@@ -84,7 +84,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       language: 'Język', controls: 'Sterowanie', addBuilding: 'Dodaj budynek', house: 'Dom', garage: 'Garaż', buildings: 'Budynki',
       plot: 'Działka', area: 'Powierzchnia', perimeter: 'Obwód', side: 'Bok', cornersHint: 'Przeciągnij narożniki A–D na planie lub wpisz współrzędne.',
       rectW: 'Szerokość prostokąta w metrach', rectD: 'Głębokość prostokąta w metrach', makeRect: 'Utwórz prostokąt',
-      drawing: 'Rysunek', snapTo: 'Przyciąganie', off: 'Wyłączone', dimsFor: 'Wymiary dla', allBuildings: 'Wszystkich budynków', selectedOnly: 'Tylko zaznaczonego',
+      drawing: 'Rysunek', showGarden: 'Pokazuj obiekty ogrodowe i ogrodzenia na planie i w raporcie', deleteProject: 'Usuń projekt', deleteConfirm: 'Usunąć ten projekt z tej przeglądarki i zacząć od nowa? Zapisane warianty zostaną. Tej operacji nie można cofnąć.', snapTo: 'Przyciąganie', off: 'Wyłączone', dimsFor: 'Wymiary dla', allBuildings: 'Wszystkich budynków', selectedOnly: 'Tylko zaznaczonego',
       showGaps: 'Pokaż odstępy między budynkami', save: 'Zapis', copyLink: 'Kopiuj link do udostępnienia', copyJson: 'Kopiuj plan (JSON)', resetExample: 'Przywróć przykład',
       resetConfirm: 'Kliknij ponownie, aby przywrócić', loadFromJson: 'Wczytaj plan z JSON', pastePlan: 'Wklej skopiowany plan', loadPlan: 'Wczytaj plan',
       autosaveHint: 'Plan zapisuje się automatycznie w tej przeglądarce i w adresie strony, więc link zawsze otwiera dokładnie ten plan.',
@@ -206,6 +206,11 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   const freshVisit=freshScene&&!entryDismissed;let entryPending=freshVisit,journey=null,workspace=null;
   let state = sharedScene || savedScene || parseScene(DEFAULT());
   let saveT, saveRevision = 0;
+  // View preference, not project data: garden objects and fences are hidden on the 2D plan, SVG and report unless switched on.
+  const GARDEN_LS='setback-planner-show-garden';
+  let showGarden=(()=>{try{return localStorage.getItem(GARDEN_LS)==='1';}catch{return false;}})();
+  const planItems=()=>state.items.filter(i=>i.visible&&(showGarden||i.type!=='landscape'));
+  const reportScene=()=>showGarden?state:{...state,items:state.items.filter(i=>i.type!=='landscape'),fences:[]};
   function save(){
     clearTimeout(saveT); const revision = ++saveRevision;
     if (persistencePaused || entryPending) return;
@@ -389,7 +394,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     out.push(`<path class="plot-edge" d="${pd}"/>`);
 
     // dimension lines
-    const scope = state.dimScope === 'selected' ? new Set(selected ? [selected] : []) : new Set(state.items.map(i => i.id));
+    const shown = new Set(planItems().map(i => i.id)), scope = state.dimScope === 'selected' ? new Set(selected && shown.has(selected) ? [selected] : []) : shown;
     for (const it of state.items){
       if (!scope.has(it.id)) continue;
       for (const s of C.res.get(it.id).sides){
@@ -401,12 +406,13 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     if (state.showPairs) for (const p of C.pairs){
       if (p.overlap || !p.P) continue;
       if (!scope.has(p.a) && !scope.has(p.b)) continue;
+      if (!shown.has(p.a) || !shown.has(p.b)) continue;
       const d = dim(S(p.P), S(p.Q), 'pair' + (p.perp ? '' : ' diag'), fmt(p.t));
       out.push(d.line); labels.push(d.label);
     }
 
     // buildings
-    for (const it of state.items.filter(i=>i.visible)){
+    for (const it of planItems()){
       const r = C.res.get(it.id), sp = r.c.map(S);
       const d = 'M' + sp.map(p => f(p.x) + ' ' + f(p.y)).join('L') + 'Z';
       const bad = !r.inside || r.overlap;
@@ -420,7 +426,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
         if (two) labels.push(`<text class="bsize" x="${f(c.x)}" y="${f(c.y + 13)}" text-anchor="middle">${fmtD(it.w)} × ${fmtD(it.d)} m</text>`);
       }
     }
-    for(const fence of state.fences)for(const segment of fenceSegments(fence)){
+    for(const fence of showGarden?state.fences:[])for(const segment of fenceSegments(fence)){
       if(segment.gate&&fence.gate?.open)continue;const a=S(segment.a),b=S(segment.b);out.push(`<path d="M${a.x} ${a.y}L${b.x} ${b.y}" fill="none" stroke="${segment.gate?'#39799b':fence.color}" stroke-width="${fence.type.startsWith('hedge')?fence.width*k:3}"/>`);
     }
     out.push(...labels);
@@ -1012,6 +1018,17 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   dimSel.onchange = () => { snapshot(); state.dimScope = dimSel.value; render(); };
   const pairChk = $('#o-pairs'); pairChk.checked = state.showPairs;
   pairChk.onchange = () => { snapshot(); state.showPairs = pairChk.checked; render(); };
+  const gardenChk = $('#o-garden'); gardenChk.checked = showGarden;
+  gardenChk.onchange = () => { showGarden = gardenChk.checked; try{localStorage.setItem(GARDEN_LS,showGarden?'1':'0');}catch{/* private mode */} renderSheet(); };
+  // Delete the current project: clear the autosave and the address, then start over with the parcel search.
+  const deleteButton=document.createElement('button');deleteButton.id='b-delete';deleteButton.className='danger';deleteButton.dataset.t='deleteProject';deleteButton.textContent=t('deleteProject');
+  $('#b-reset').after(deleteButton);
+  deleteButton.onclick=()=>{
+    if(!confirm(t('deleteConfirm')))return;
+    persistencePaused=true;clearTimeout(saveT);
+    try{localStorage.removeItem(LS);sessionStorage.removeItem('setback-entry-dismissed');}catch{/* storage unavailable */}
+    location.replace(location.origin+location.pathname+location.search); // full load without the project link
+  };
 
   $('#b-copy').onclick = () => {
     let txt; try { txt = serializeScene(state); } catch { toast(t('notAPlan')); return; }
@@ -1048,14 +1065,14 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     const url = URL.createObjectURL(new Blob([text],{type}));
     const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
-  $('#b-svg').onclick=async()=>{try{const {projectSvg}=await import('./core/reports.ts');downloadFile(projectSvg(state,lang),'setback-plan.svg','image/svg+xml');}catch{toast(t('notAPlan'));}};
+  $('#b-svg').onclick=async()=>{try{const {projectSvg}=await import('./core/reports.ts');downloadFile(projectSvg(reportScene(),lang),'setback-plan.svg','image/svg+xml');}catch{toast(t('notAPlan'));}};
   // Full report in one click: 3D views with surroundings, terrain slope and all checks are gathered automatically.
   $('#b-report').onclick=async()=>{
     const button=$('#b-report');if(button.disabled)return;button.disabled=true;toast(bi('Preparing the full report…','Przygotowuję pełny raport…'));
     const wait=ms=>new Promise(r=>setTimeout(r,ms)),frames=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     try{
       const {projectReport}=await import('./core/reports.ts'),previous=view3d?'3d':mapActive?'map':'2d';
-      let shots=[],scene=state;
+      let shots=[],scene=reportScene();
       if(!view3d)await $('#view-3d').onclick();
       if(viewer&&view3d){
         await Promise.race([contextJob,wait(15000)]);await Promise.race([viewer.ready(),wait(8000)]);await frames();
@@ -1063,7 +1080,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
         shots=viewer.snapshots(house).map(s=>({label:s.kind==='house'?bi('House close-up','Zbliżenie domu'):bi('Parcel and surroundings','Działka i otoczenie'),src:s.src}));
       }
       if(previous==='2d')setStageMode('2d');else if(previous==='map')await $('#view-map').onclick();
-      if(state.coordinates.projected&&!state.terrain){try{const {sampleTerrain}=await import('./core/terrain.ts');scene={...state,terrain:await sampleTerrain(state)};}catch{/* report without terrain */}}
+      if(state.coordinates.projected&&!state.terrain){try{const {sampleTerrain}=await import('./core/terrain.ts');scene={...scene,terrain:await sampleTerrain(state)};}catch{/* report without terrain */}}
       await Promise.race([siteJob,wait(25000)]);
       $('#report-frame').srcdoc=projectReport(scene,lang,new Date().toISOString(),{screenshots:shots,neighbours:lastContext?.buildings.length?lastContext.buildings:undefined,exteriorFor,site:siteData??undefined});$('#report-dialog').showModal();
     }catch{toast(t('notAPlan'));}

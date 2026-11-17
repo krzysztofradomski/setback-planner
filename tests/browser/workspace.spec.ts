@@ -147,3 +147,29 @@ test("using a catalog design replaces the selected house and adding another find
   await expect(page.locator(".obj")).toHaveCount(3);
   await expect(page.locator(".bld.sel")).not.toHaveClass(/bad/);
 });
+
+test("garden objects stay off the plan until switched on, and deleting the project starts over", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator("[data-workspace-tab=garden]").click();
+  await page.locator("#garden-kind").evaluate((el: HTMLSelectElement) => (el.closest("details")!.open = true));
+  await page.locator("#garden-add").click();
+  await expect(page.locator(".obj")).toHaveCount(3);
+  await expect(page.locator("#sheet .bld.landscape")).toHaveCount(0);
+  await page.locator("[data-workspace-tab=project]").click();
+  await page.locator("#o-garden").check();
+  await expect(page.locator("#sheet .bld.landscape")).toHaveCount(1);
+  // wait for the 300 ms autosave before reloading
+  await expect.poll(() => page.evaluate(() => Object.values(localStorage).some((v) => v.includes('"landscape"')))).toBe(true);
+  await page.reload();
+  await expect(page.locator(".obj")).toHaveCount(3);
+  await expect(page.locator("#o-garden")).toBeChecked();
+  await expect(page.locator("#sheet .bld.landscape")).toHaveCount(1);
+  await page.locator("[data-workspace-tab=project]").click();
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#b-delete").click();
+  // The editor fixture dismisses the welcome screen on every load, so the deleted project gives way to the fresh example.
+  await expect(page.locator(".obj")).toHaveCount(2);
+  expect(await page.evaluate(() => Object.values(localStorage).some((v) => v.includes('"landscape"')))).toBe(false);
+});
