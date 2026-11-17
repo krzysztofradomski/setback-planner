@@ -3420,7 +3420,7 @@ body {
   box-shadow: none;
   transform: none;
 }
-.workspace :is(.workspace-nav, .view-switch, .tools, .camera-group, .env-seg, .search-modes, .viewer-more-menu, .objs, .garden-styles) button:hover:not(:disabled) {
+.workspace :is(.workspace-nav, .view-switch, .tools, .camera-group, .env-seg, .search-modes, .viewer-more-menu, .objs, .garden-styles) button:hover:not(:disabled, [aria-pressed="true"], [aria-selected="true"], .on) {
   background: rgba(255, 255, 255, 0.6);
 }
 /* the selected segment pops out of its track */
@@ -3471,4 +3471,24 @@ body {
 .workspace .catalog-actions :is(.catalog-add, .catalog-plan, .catalog-place) {
   background: linear-gradient(180deg, #fff, #f2f6fd);
   box-shadow: var(--raise-white);
+}
+
+/* ---------- glass: toolbars floating over the plan, 3D scene and map let the drawing show through.
+   Panels, cards and buttons stay clay; the selected segment is still a clay pill inside the glass. ---------- */
+.workspace :is(.stage > .view-switch, .tools, .chipbar span, .legend, #viewer-controls > *, #map-controls, .chipbar .issues-pop) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.34));
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  backdrop-filter: blur(16px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+    0 10px 30px -12px rgba(30, 60, 130, 0.35);
+}
+.workspace .chipbar .issues-pop {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.6));
+}
+.workspace .chipbar .issues-pop button {
+  background: rgba(255, 240, 240, 0.85);
+}
+.workspace :is(.view-switch, .tools, .camera-group, .env-seg, .viewer-more-menu) button:hover:not(:disabled, [aria-pressed="true"], [aria-selected="true"], .on) {
+  background: rgba(255, 255, 255, 0.55);
 }
