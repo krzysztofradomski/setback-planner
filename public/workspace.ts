@@ -172,7 +172,7 @@ export function mountWorkspace({
   const intro = document.createElement("div");
   intro.className = "library-heading";
   intro.innerHTML =
-    '<button class="library-close" aria-label="Close panel" type="button">×</button><span class="panel-eyebrow" data-ui="library"></span><h2></h2><p></p>';
+    '<button class="library-close" type="button">×</button><span class="panel-eyebrow" data-ui="library"></span><h2></h2><p></p>';
   rail.prepend(intro);
   intro.querySelector("button")!.onclick = () => {
     app.classList.add("library-collapsed");
@@ -274,6 +274,8 @@ export function mountWorkspace({
   document.documentElement.dataset.theme = "light";
   const localize = () => {
     const l = copy[lang()];
+    intro.querySelector("button")!.setAttribute("aria-label", l.close);
+    document.querySelector(".view-switch")?.setAttribute("aria-label", lang() === "pl" ? "Widok" : "View");
     app.querySelectorAll<HTMLElement>("[data-ui]").forEach((e) => {
       const key = e.dataset.ui as keyof typeof l;
       if (l[key]) e.textContent = l[key];

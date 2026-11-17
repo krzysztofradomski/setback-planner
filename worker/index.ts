@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {assistantRequestSchema,registeredCatalogSources,groundedAnswerSchema,layoutAnswerSchema,validateGroundedAnswer,validateLayoutAnswer,assistantInstructions} from '../public/core/assistant.ts';
 import {objectLibrary} from '../public/core/objects.ts';
+import { fetchSiteData, parseSiteQuery } from '../public/core/site-data.ts';
 import type { Env, User, Lead, Tenant } from './types.ts';
 import { rulesSchema, evidenceSchema, statuses, transition, csvCell, extractionSchema, validateExtraction } from './domain.ts';
 import { HttpError, fail, randomToken, digest, tokenHash, passwordHash, equal, authenticate, owner, tenantScope, rate, jsonBody } from './security.ts';
@@ -88,6 +89,21 @@ async function gardenFromChat(req: Request, env: Env): Promise<Response> {
         fail(502, 'The wish could not be interpreted');
     return response({ answer: result.data, model: '@cf/meta/llama-3.1-8b-instruct-fast' });
 }
+// Official registry layers for a located parcel, fetched server-side because the GUGiK/PIG/GDOŚ/ISOK WMS servers send no CORS headers.
+// Only fixed .gov.pl endpoints are queried; the client supplies nothing but a validated EPSG:2180 frame.
+async function siteData(req: Request, env: Env, url: URL): Promise<Response> {
+    let frame: ReturnType<typeof parseSiteQuery>;
+    try { frame = parseSiteQuery(url.searchParams); }
+    catch { fail(400, 'Invalid parcel frame'); }
+    const key = new Request('https://site.cache/v1?bbox=' + frame!.bbox.join(',') + '&p=' + frame!.point.join(','));
+    const cache = (caches as unknown as { default: Cache }).default, hit = await cache.match(key);
+    if (hit)
+        return hit;
+    await rate(env, 'site:' + req.headers.get('CF-Connecting-IP'), 60, 3600000);
+    const res = new Response(JSON.stringify(await fetchSiteData(frame!)), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' } });
+    await cache.put(key, res.clone());
+    return res;
+}
 export async function handleApi(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url), path = url.pathname, method = req.method;
     if (method !== 'GET' && req.headers.get('Origin') !== url.origin)
@@ -96,6 +112,8 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
         return gardenFromChat(req, env);
     if (path === '/api/ai/house' && method === 'POST')
         return houseFromDescription(req, env);
+    if (path === '/api/site-data' && method === 'GET')
+        return siteData(req, env, url);
     if (path === '/api/health')
         return response({ ok: true, backend: 'd1', ai: env.AI_ENABLED === 'true' && !!env.AI });
     if (path === '/api/recipients' && method === 'GET') {

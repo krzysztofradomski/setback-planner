@@ -65,9 +65,10 @@ export function mountBusiness({ container, getScene, getAttribution = () => null
     };
     const api = async (path: string, body?: unknown, method = body ? 'POST' : 'GET') => {
         const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...(body ? { body: JSON.stringify(body) } : {}) });
-        const data = await r.json();
-        if (!r.ok)
-            throw Error(data.error ?? 'Błąd serwera');
+        const data = await r.json().catch(() => null);
+        // Server messages are English API text; the interface shows Polish.
+        if (!r.ok || !data)
+            throw Error(({ 400: 'Sprawdź wpisane dane.', 401: 'Nieprawidłowy e-mail lub hasło.', 403: 'Brak uprawnień.', 404: 'Nie znaleziono.', 409: 'Dane się zmieniły. Odśwież formularz.', 413: 'Za dużo danych.', 429: 'Za dużo prób. Spróbuj później.' } as Record<number, string>)[r.status] ?? 'Usługa jest chwilowo niedostępna.');
         return data;
     };
     async function publicForm() {
@@ -77,7 +78,7 @@ export function mountBusiness({ container, getScene, getAttribution = () => null
         text('p', 'Kontakt zbieramy dopiero przy wysłaniu zapytania. Projekt i dane kontaktowe zostaną zapisane w prywatnym panelu wybranego odbiorcy. Nie oznacza to partnerstwa z producentem.', block);
         const data = await api('/api/recipients');
         if (!data.recipients.length) {
-            text('p', data.reason ?? 'Brak aktywnych odbiorców. Planowanie działa bez wysyłania danych kontaktowych.', block);
+            text('p', 'Brak aktywnych odbiorców. Planowanie działa bez wysyłania danych kontaktowych.', block);
             return;
         }
         const select = document.createElement('select');

@@ -7,7 +7,7 @@ import { projectOverlay } from './overlay.ts';
 import type { Scene } from '../core/scene.ts';
 export function createParcelMap(container:HTMLElement,onError:(source?:string)=>void){
   const canvas=document.createElement('canvas'),context=canvas.getContext('webgl2');if(!context)throw new Error('Map WebGL unavailable');context.getExtension('WEBGL_lose_context')?.loseContext();
-  const map=new Map({container,center:[19,52],zoom:5,minZoom:4,maxZoom:20,maxBounds:[[13,48],[25,56]],attributionControl:false,style:{version:8,sources:{},layers:[{id:'background',type:'background',paint:{'background-color':'#e5e8df'}}]}});
+  const map=new Map({container,locale:{'NavigationControl.ZoomIn':'Przybliż','NavigationControl.ZoomOut':'Oddal','NavigationControl.ResetBearing':'Przywróć północ','NavigationControl.ResetBearingToNorth':'Przywróć północ','Map.Title':'Mapa','AttributionControl.ToggleAttribution':'Pokaż źródła','AttributionControl.MapFeedback':'Zgłoś uwagę do mapy'},center:[19,52],zoom:5,minZoom:4,maxZoom:20,maxBounds:[[13,48],[25,56]],attributionControl:false,style:{version:8,sources:{},layers:[{id:'background',type:'background',paint:{'background-color':'#e5e8df'}}]}});
   map.addControl(new NavigationControl(),'top-right');map.addControl(new AttributionControl({compact:false}),'bottom-right');
   let loaded=false,current:Scene|null=null,base:'osm'|'ortho'|'none'='osm',cadastre=false,signature='',fittedOrigin='';const overlays=new Set<string>();let locationMarker:Marker|null=null;
   map.on('error',event=>onError('sourceId' in event&&typeof event.sourceId==='string'?event.sourceId:undefined));
