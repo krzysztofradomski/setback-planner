@@ -89,7 +89,7 @@ export function buildExterior(item: SceneItem, spec: CatalogExterior, appearance
   for (const c of spec.claddings) {
     const f = wallFrame(item, c.wall), top = h - (spec.band?.height ?? 0), width = Math.max(0, Math.min(c.to, f.length) - c.from);
     if (!width) continue;
-    const preset = materialPresets[c.material], tex = c.material === 'wood' ? planks(preset.color) : textures?.(c.material, appearance) ?? null;
+    const preset = materialPresets[c.material], tex = c.material === 'wood' || c.material === 'wood-larch' ? planks(preset.color) : textures?.(c.material, appearance) ?? null;
     tex?.repeat.set(width / 1.2, top / 2.4);
     group.add(onWall(f, c.from + width / 2, top / 2, .025, width, top, .04, mat(tex ? '#ffffff' : preset.color, preset.roughness, { map: tex })));
   }

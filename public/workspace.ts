@@ -36,7 +36,7 @@ const copy = {
     workspace: "Concept project",
     saved: "Saved on this device",
     share: "Share project",
-    report: "Export report",
+    report: "Full report",
     inspect: "Selected object",
     help: "Drag to move · Scroll to zoom",
     advanced: "Advanced geometry",
@@ -82,7 +82,7 @@ const copy = {
     workspace: "Projekt koncepcyjny",
     saved: "Zapis na tym urządzeniu",
     share: "Udostępnij projekt",
-    report: "Eksportuj raport",
+    report: "Pełny raport",
     inspect: "Wybrany obiekt",
     help: "Przeciągnij, aby przesunąć · Przewiń, aby przybliżyć",
     advanced: "Zaawansowana geometria",
@@ -362,6 +362,10 @@ export function mountWorkspace({
   window.dispatchEvent(new Event("resize"));
   return {
     activate,
+    /** Folds away the library and inspector sheets so the stage gets the whole screen. */
+    collapse() {
+      setInspector(false);
+    },
     destroy() {
       observer.disconnect();
     },

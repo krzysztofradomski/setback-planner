@@ -821,6 +821,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     else if (e.key === 'Escape'){ selected = null; buildPanel(); render(); }
   });
 
+  let quietTimer=0;
   function setStageMode(mode){
     view3d=mode==='3d';mapActive=mode==='map';
     if(!mapActive){mapPick=false;$('#map-pick').setAttribute('aria-pressed','false');}
@@ -828,6 +829,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     $('#parcel-map').hidden=!mapActive;$('#map-controls').hidden=!mapActive;$('#map-status').hidden=!mapActive;
     $('.tools').hidden=mode!=='2d';if(mode!=='3d')document.getElementById('context-hint')?.setAttribute('hidden','');document.querySelector('.canvas-hint')?.toggleAttribute('hidden',mode!=='2d');$('.legend').hidden=mode!=='2d';$('#chipbar').hidden=mode!=='2d';$('#viewer-note').hidden=!view3d;
     $('#view-2d').setAttribute('aria-pressed',String(mode==='2d'));$('#view-3d').setAttribute('aria-pressed',String(view3d));$('#view-map').setAttribute('aria-pressed',String(mapActive));
+    // Entering 3D on a phone folds the bottom sheets away; the first touch on the scene also hides the notes.
+    $('.stage').classList.remove('viewer-quiet');clearTimeout(quietTimer);if(view3d)quietTimer=setTimeout(()=>$('.stage').classList.add('viewer-quiet'),5000);if(view3d&&matchMedia('(max-width:760px)').matches)workspace?.collapse();
     if(viewer){viewer.setActive(view3d);if(view3d)viewer.update(state,originalAppearance,exteriorFor);}
     if(parcelMap){parcelMap.setActive(mapActive);if(mapActive)parcelMap.update(state);}
     if(mode==='2d')renderSheet();
@@ -1208,6 +1211,17 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');business=mountBusiness({container:businessHost,getScene:()=>structuredClone(state),getAttribution:()=>(attribution?structuredClone(attribution):null)});
 
   workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
+  $('#viewer').addEventListener('pointerdown',()=>$('.stage').classList.add('viewer-quiet'));
+  // Phone: a "Więcej" tab opens the most used actions, so nothing depends on the desktop header.
+  const quickActions=[['📄',bi('Full report','Pełny raport'),'#b-report'],['🔗',bi('Share link','Udostępnij link'),'#b-link'],['🧊',bi('3D view','Widok 3D'),'#view-3d'],['🗺️',bi('Map','Mapa'),'#view-map'],['↶',bi('Undo','Cofnij'),'#t-undo'],['↷',bi('Redo','Ponów'),'#t-redo'],['📐',bi('Plan as SVG','Plan SVG'),'#b-svg'],['💾',bi('Save project file','Zapisz projekt'),'#b-download']];
+  const quick=document.createElement('div');quick.className='quick-sheet';quick.hidden=true;
+  quick.innerHTML=`<div class="quick-panel" role="dialog" aria-label="${bi('Quick actions','Szybkie akcje')}"><h3>${bi('Quick actions','Szybkie akcje')}</h3><div class="quick-grid">${quickActions.map(([icon,label,target])=>`<button type="button" data-quick="${target}"><span aria-hidden="true">${icon}</span>${esc(label)}</button>`).join('')}</div></div>`;
+  const quickTab=document.createElement('button');quickTab.type='button';quickTab.className='quick-tab';quickTab.setAttribute('aria-pressed','false');
+  quickTab.innerHTML=`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="5" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="19" cy="12" r="2" fill="currentColor"/></svg><span>${bi('More','Więcej')}</span>`;
+  const showQuick=open=>{quick.hidden=!open;quickTab.setAttribute('aria-pressed',String(open));};
+  quickTab.onclick=()=>showQuick(quick.hidden);
+  quick.onclick=e=>{const b=e.target.closest('[data-quick]');if(!b&&e.target.closest('.quick-panel'))return;showQuick(false);if(b)$(b.dataset.quick).click();};
+  document.querySelector('.app').append(quick);document.querySelector('.project-identity .workspace-nav')?.append(quickTab);
   document.querySelector('[data-panel=houses]')?.prepend($('#house-brief'));
   document.querySelector('[data-panel=garden]')?.prepend(boundaryToggle,gardenCard);
   $('#chipbar').onclick=e=>{const pill=e.target.closest('[data-issues]'),row=e.target.closest('[data-issue]');if(pill)issuesOpen=!issuesOpen;else if(row){selected=row.dataset.issue;issuesOpen=false;buildPanel();}else return;render();};

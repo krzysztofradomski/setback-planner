@@ -26,6 +26,8 @@ export const exteriorSchema=z.object({
   }).strict(),
   carport:z.object({kind:z.enum(['carport','garage']).default('carport'),side:z.enum(['left','right']),width:metres(12),depth:metres(15),fromFront:metres(30),height:metres(5).default(2.7),door:hex.optional(),source:z.enum(['plan','render-estimate'])}).strict().nullable(),
   detailsSource:z.literal('render-estimate'),
+  /** Ground-floor plan drawing and the fractions of the image (0–1, from the top-left) covered by the footprint rectangle. */
+  floorPlan:z.object({src:z.string().regex(/^\/assets\/[\w/.-]+$/),x0:z.number().min(0).max(1),y0:z.number().min(0).max(1),x1:z.number().min(0).max(1),y1:z.number().min(0).max(1)}).strict().optional(),
 }).strict();
 export type CatalogExterior=z.infer<typeof exteriorSchema>;
 export const catalogModelSchema=z.object({

@@ -35,23 +35,23 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   const scene=new THREE.Scene(),content=new THREE.Group();scene.add(content);
   // Sky gradient and a neutral meadow around the parcel so the plot sits in a landscape, fading into the horizon fog.
   const sky=(top:string,horizon:string)=>{const c=document.createElement('canvas');c.width=2;c.height=256;const g=c.getContext('2d');if(g){const grad=g.createLinearGradient(0,0,0,256);grad.addColorStop(0,top);grad.addColorStop(1,horizon);g.fillStyle=grad;g.fillRect(0,0,2,256);}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;};
-  const daySky=sky('#5ea8ff','#e8f2ff'),nightSky=sky('#070d16','#1b2838'),greySky=sky('#8e989f','#d3d8da');
+  const daySky=sky('#5ea8ff','#e8f2ff'),nightSky=sky('#070d16','#1b2838'),greySky=sky('#7f8b95','#cdd3d6'),rainSky=sky('#4a5560','#8d979d'),snowSky=sky('#aab4bd','#eef1f3');
   // Rain and snow particles around the parcel; animated only while visible.
   let weatherFx:THREE.LineSegments|THREE.Points|null=null,weatherKind='clear',weatherBox=new THREE.Box3(),frame=0,last=0;
   function setWeather(kind:string,center:THREE.Vector3,range:number){
     if(weatherFx){scene.remove(weatherFx);weatherFx.geometry.dispose();(weatherFx.material as THREE.Material).dispose();weatherFx=null;}
     weatherKind=kind;if(kind!=='rain'&&kind!=='snow')return;
-    const half=Math.min(range*1.4,120),count=kind==='rain'?5000:3500,top=30,pos=new Float32Array(count*(kind==='rain'?6:3));
+    const half=Math.min(range*1.4,120),count=kind==='rain'?9000:7000,top=30,pos=new Float32Array(count*(kind==='rain'?6:3));
     weatherBox=new THREE.Box3(new THREE.Vector3(center.x-half,0,center.z-half),new THREE.Vector3(center.x+half,top,center.z+half));
-    for(let i=0;i<count;i++){const x=center.x+(Math.random()*2-1)*half,y=Math.random()*top,z=center.z+(Math.random()*2-1)*half;if(kind==='rain'){pos.set([x,y,z,x+.05,y+.6,z],i*6);}else pos.set([x,y,z],i*3);}
+    for(let i=0;i<count;i++){const x=center.x+(Math.random()*2-1)*half,y=Math.random()*top,z=center.z+(Math.random()*2-1)*half;if(kind==='rain'){pos.set([x,y,z,x+.18,y+1.1,z],i*6);}else pos.set([x,y,z],i*3);}
     const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));
-    weatherFx=kind==='rain'?new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:'#aebccb',transparent:true,opacity:.5})):new THREE.Points(geometry,new THREE.PointsMaterial({color:'#ffffff',size:.14,transparent:true,opacity:.9,depthWrite:false}));
+    weatherFx=kind==='rain'?new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:'#d6e2ef',transparent:true,opacity:.8})):new THREE.Points(geometry,new THREE.PointsMaterial({color:'#ffffff',size:.26,transparent:true,opacity:.95,depthWrite:false}));
     weatherFx.frustumCulled=false;scene.add(weatherFx);if(!frame)frame=requestAnimationFrame(tick);
   }
   function tick(now:number){
     frame=0;if(disposed||!weatherFx)return;if(!active){frame=requestAnimationFrame(tick);return;}
     const dt=Math.min(.05,(now-(last||now))/1000),attr=weatherFx.geometry.getAttribute('position') as THREE.BufferAttribute,a=attr.array as Float32Array,rain=weatherKind==='rain',step=rain?6:3,fall=(rain?18:1.1)*dt,{min,max}=weatherBox;last=now;
-    for(let i=0;i<a.length;i+=step){a[i+1]-=fall;if(rain)a[i+4]-=fall;else{a[i]+=Math.sin(now/900+i)*.004;}if(a[i+1]<0){const y=max.y;a[i+1]=y;if(rain)a[i+4]=y+.6;}if(a[i]<min.x||a[i]>max.x)a[i]=min.x+Math.random()*(max.x-min.x);}
+    for(let i=0;i<a.length;i+=step){a[i+1]-=fall;if(rain){a[i+4]-=fall;a[i]-=fall*.16;a[i+3]-=fall*.16;}else{a[i]+=Math.sin(now/900+i)*.006;}if(a[i+1]<0){const y=max.y;a[i+1]=y;if(rain)a[i+4]=y+1.1;}if(a[i]<min.x||a[i]>max.x){a[i]=min.x+Math.random()*(max.x-min.x);if(rain)a[i+3]=a[i]+.18;}}// rain falls along its wind slant
     attr.needsUpdate=true;renderer.render(scene,camera);frame=requestAnimationFrame(tick);
   }
   const contextGroup=new THREE.Group();scene.add(contextGroup);let contextActive=false,contextReady:Promise<void>=Promise.resolve();
@@ -67,8 +67,17 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   const resize=()=>{const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();render();};
   const observer=new ResizeObserver(resize);observer.observe(container);
   const failure=(event:Event)=>{event.preventDefault();active=false;onFailure();};renderer.domElement.addEventListener('webglcontextlost',failure);
+  /** Manufacturer floor plan on the floor of a catalogue house, shown in the top view with the roof lifted off. */
+  let cutaway=false;
+  function floorPlan(item:{w:number;d:number},plan:{src:string;x0:number;y0:number;x1:number;y1:number}){
+    const material=new THREE.MeshBasicMaterial({color:'#ffffff',toneMapped:false}),mesh=new THREE.Mesh(new THREE.PlaneGeometry(item.w,item.d),material);
+    mesh.rotation.x=-Math.PI/2;mesh.position.y=.04;mesh.userData.floorPlan=true;mesh.visible=cutaway;
+    new THREE.TextureLoader().load(plan.src,texture=>{if(disposed||!mesh.parent){texture.dispose();return;}texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();texture.repeat.set(plan.x1-plan.x0,plan.y1-plan.y0);texture.offset.set(plan.x0,1-plan.y1);material.map=texture;material.needsUpdate=true;render();});
+    return mesh;
+  }
+  function applyCutaway(){content.traverse(o=>{if(o.userData.floorPlan)o.visible=cutaway;else if(o.name==='exterior')o.visible=!cutaway;});}
   function view(mode:'top'|'axonometric'|'orbit'|'walk'){
-    walkMode=mode==='walk';camera.up.set(0,1,0);controls.target.copy(center);
+    walkMode=mode==='walk';cutaway=mode==='top';applyCutaway();camera.up.set(0,1,0);controls.target.copy(center);
     if(mode==='walk'){camera.position.set(center.x,1.65,center.z+extent*.4);controls.target.copy(camera.position).add(new THREE.Vector3(0,0,-5));controls.maxPolarAngle=Math.PI*.95;controls.update();render();return;}controls.maxPolarAngle=Math.PI*.49;
     const offset=mode==='top'?new THREE.Vector3(0,extent*1.6,0.001):new THREE.Vector3(extent*0.8,extent*1.05,extent*1.15);
     camera.position.copy(center).add(offset);camera.lookAt(center);controls.update();render();
@@ -93,7 +102,8 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     if(validRing(project.plot)){const houses=project.items.filter(i=>i.type==='house'),distance=houses.length?Math.max(...houses.map(i=>i.setback)):4;
       try{const dash=new THREE.BoxGeometry(1,.03,.25),paint=new THREE.MeshStandardMaterial({color:'#f2c230',roughness:.6,emissive:'#3d2f00'});for(const [outer] of setbackArea(project,distance).parts)outer.forEach((a,i)=>{const b=outer[(i+1)%outer.length],length=Math.hypot(b.x-a.x,b.y-a.y),angle=Math.atan2(b.y-a.y,b.x-a.x);for(let t=0;t<length;t+=1.4){const l=Math.min(.9,length-t),m=new THREE.Mesh(dash,paint);m.scale.x=l;const c=t+l/2;m.position.set(a.x+(b.x-a.x)*c/length,.04,a.y+(b.y-a.y)*c/length);m.rotation.y=-angle;m.userData.buildableZone=true;content.add(m);}});}catch{/* invalid setback geometry: skip the guide */}
     }
-    for(const item of project.items.filter(i=>i.visible)){const object=buildBuilding(item,original,makeTexture,project.environment.season,exteriorFor(item));if(project.terrain)object.position.y=terrainHeight(project.terrain.samples,item.x,item.y)-project.terrain.samples[0].z;content.add(object);}
+    for(const item of project.items.filter(i=>i.visible)){const exterior=exteriorFor(item),object=buildBuilding(item,original,makeTexture,project.environment.season,exterior);if(project.terrain)object.position.y=terrainHeight(project.terrain.samples,item.x,item.y)-project.terrain.samples[0].z;if(exterior?.floorPlan&&item.shape==='rectangle')object.add(floorPlan(item,exterior.floorPlan));content.add(object);}
+    applyCutaway();
     for(const fence of project.fences)content.add(buildFence(fence,project.environment.season));
     // The boundary fence follows the main ring; extra parcel parts and inner rings get a matching fence without a gate.
     if(project.fences.some(f=>f.id===BOUNDARY_FENCE_ID))for(const ring of parcelPolygons(project).flat().slice(1)){const f=boundaryFence(ring,-1,'');if(f)content.add(buildFence(f,project.environment.season));}
@@ -102,9 +112,13 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     center=bounds.getCenter(new THREE.Vector3());extent=Math.max(size.x,size.z,20);controls.maxDistance=extent*3;// ponytail: zoom-out stops a few parcel widths away, the surroundings tile ends soon after
     const range=extent,env=project.environment,origin=project.coordinates.projected?.origin;
     const [lon,lat]=origin?geographicPoint([origin.x,origin.y]):[env.longitude,env.latitude];
-    const position=sunPosition(env.date,lat,lon);sun.target.position.copy(center);sun.position.copy(center).add(new THREE.Vector3(position.direction.x,position.direction.y,position.direction.z).multiplyScalar(range*2));sun.intensity=position.daylight?(env.weather==='clear'?3:1.2):0;ambient.intensity=position.daylight?1.15:.18;
-    renderer.setClearColor(position.daylight?'#dce4e7':'#15212f');scene.background=!position.daylight?nightSky:env.weather==='clear'?daySky:greySky;setWeather(env.weather,center,range);scene.fog=env.weather==='clear'?new THREE.Fog(position.daylight?'#e8f2ff':'#1b2838',range*7,range*16):new THREE.Fog('#b7c1c4',range*1.5,range*4);
-    land.scale.setScalar(range*18);land.position.set(center.x,-0.08,center.z);(land.material as THREE.MeshStandardMaterial).color.set(seasonalGround[env.season]).lerp(new THREE.Color('#bfe3b0'),.45);
+    const position=sunPosition(env.date,lat,lon);sun.target.position.copy(center);sun.position.copy(center).add(new THREE.Vector3(position.direction.x,position.direction.y,position.direction.z).multiplyScalar(range*2));sun.intensity=position.daylight?({clear:3,clouds:1,rain:.45,snow:1.3}[env.weather]??3):0;ambient.intensity=position.daylight?(env.weather==='rain'?.75:1.15):.18;
+    renderer.setClearColor(position.daylight?'#dce4e7':'#15212f');scene.background=!position.daylight?nightSky:({clear:daySky,clouds:greySky,rain:rainSky,snow:snowSky}[env.weather]??greySky);setWeather(env.weather,center,range);
+    // Weather reads at a glance: rain darkens and wets the ground under a low sky, snow whitens it, clouds flatten the light.
+    scene.fog=env.weather==='clear'?new THREE.Fog(position.daylight?'#e8f2ff':'#1b2838',range*7,range*16):new THREE.Fog({clear:'#c3cacd',clouds:'#c3cacd',rain:'#8d979d',snow:'#e6ebee'}[env.weather]??'#c3cacd',range*1.2,range*(env.weather==='clouds'?6:3.2));
+    const weatherGround=(c:THREE.Color)=>env.weather==='rain'?c.multiplyScalar(.68):env.weather==='snow'?c.lerp(new THREE.Color('#f3f6f8'),.8):c;
+    content.traverse(o=>{if(o.userData.parcelGround)weatherGround(((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.set(seasonalGround[env.season]));});
+    land.scale.setScalar(range*18);land.position.set(center.x,-0.08,center.z);weatherGround((land.material as THREE.MeshStandardMaterial).color.set(seasonalGround[env.season]).lerp(new THREE.Color('#bfe3b0'),.45));
     Object.assign(sun.shadow.camera,{left:-range,right:range,top:range,bottom:-range,near:0.1,far:range*5});sun.shadow.camera.updateProjectionMatrix();
     if(camera.position.length()===0)view('axonometric');render();
     return content.children.some(c=>c.userData.approximateRoof);
@@ -155,7 +169,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   }
   /** Frame one building from its front-left, at eye-catching height. */
   function focus(item:{x:number;y:number;w:number;d:number;rot:number}){
-    walkMode=false;const r=item.rot*Math.PI/180,size=Math.max(item.w,item.d),front=new THREE.Vector3(-Math.sin(r),0,Math.cos(r)),side=new THREE.Vector3(Math.cos(r),0,Math.sin(r));
+    walkMode=false;cutaway=false;applyCutaway();const r=item.rot*Math.PI/180,size=Math.max(item.w,item.d),front=new THREE.Vector3(-Math.sin(r),0,Math.cos(r)),side=new THREE.Vector3(Math.cos(r),0,Math.sin(r));
     const target=new THREE.Vector3(item.x,2.2,item.y);controls.maxPolarAngle=Math.PI*.49;controls.target.copy(target);
     // Prefer the front corners; skip viewpoints whose line of sight is blocked by a neighbouring building.
     const ray=new THREE.Raycaster(),candidates=[[1,-1],[1,1],[-1,-1],[-1,1]].map(([f,sd])=>target.clone().addScaledVector(front,f*size*1.9).addScaledVector(side,sd*size*.7).add(new THREE.Vector3(0,size*.55,0)));
@@ -165,16 +179,16 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   }
   /** Overview plus an optional close-up of one building, without disturbing the user's camera. */
   function snapshots(item?:{x:number;y:number;w:number;d:number;rot:number}){
-    const position=camera.position.clone(),target=controls.target.clone(),walking=walkMode,shots:{kind:'overview'|'house';src:string}[]=[];
+    const position=camera.position.clone(),target=controls.target.clone(),walking=walkMode,cut=cutaway,shots:{kind:'overview'|'house';src:string}[]=[];
     view('axonometric');shots.push({kind:'overview',src:renderer.domElement.toDataURL('image/png')});
     if(item){focus(item);shots.push({kind:'house',src:renderer.domElement.toDataURL('image/png')});}
-    walkMode=walking;camera.position.copy(position);controls.target.copy(target);controls.update();render();return shots;
+    walkMode=walking;cutaway=cut;applyCutaway();camera.position.copy(position);controls.target.copy(target);controls.update();render();return shots;
   }
   return {update,view,setContext,focus,snapshots,ready:()=>contextReady,
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},
     screenshot(){render();return renderer.domElement.toDataURL('image/png');},
-    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();disposeObject(contextGroup);roofMat.dispose();land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
+    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();rainSky.dispose();snowSky.dispose();disposeObject(contextGroup);roofMat.dispose();land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
     memory(){return {...renderer.info.memory};},
   };
 }
