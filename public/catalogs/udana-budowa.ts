@@ -25,12 +25,13 @@ const exteriors:Record<string,CatalogExterior>={
     claddings:[],canopy:{wall:'front',center:7.5,width:2.6,depth:1},roof:{pv:{side:'front',from:.45,to:.97},windows:[{side:'front',at:.2},{side:'front',at:.25},{side:'front',at:.42}],chimneys:[]},
     carport:{kind:'garage',side:'left',width:3.4,depth:6,fromFront:0,height:2.7,door:'#3d3f42',source:'render-estimate'}},
 };
-/** Outer wall corners of the footprint on each bundled plan image, as fractions of the image (measured on the drawings). */
-const planCrops:Record<string,{x0:number;y0:number;x1:number;y1:number}>={
-  '75':{x0:0.2985,y0:0.3098,x1:0.7015,y1:0.6895},
-  '105':{x0:0.339,y0:0.3239,x1:0.7885,y1:0.8084},
-  '135':{x0:0.205,y0:0.2405,x1:0.795,y1:0.7581},
-  '165':{x0:0.0883,y0:0.1437,x1:0.9543,y1:0.8592},
+/** Ground-floor walls transcribed by hand from each manufacturer plan (dimension lines, 5–10 cm reading accuracy):
+ *  centrelines [x0, y0, x1, y1, thickness?] in metres from the footprint's top-left; partitions default to 14 cm. */
+const interiors:Record<string,[number,number,number,number,...number[]][]>={
+  '75':[[0,0.17,11.76,0.17,0.34],[0.17,0,0.17,7.84,0.34],[11.59,0,11.59,7.84,0.34],[0,7.65,11.76,7.65,0.39],[3.82,0.34,3.82,4],[3.82,3.98,4.95,3.98],[5.78,3.98,6.66,3.98],[6.66,0.34,6.66,4],[0.34,3.39,1.8,3.39],[2.99,3.39,3.82,3.39],[3.03,2.53,3.03,3.39],[1.9,3.39,1.9,3.55],[1.9,4.37,1.9,5.27],[0.34,5.08,1.9,5.08],[3.03,5.27,3.03,7.45],[2.84,5.27,3.68,5.27],[4.56,5.27,5.64,5.27],[6.91,5.27,7.47,5.27],[5.36,5.27,5.36,7.45],[7.47,5.27,7.47,7.45]],
+  '105':[[0,0.19,13.1,0.19,0.38],[12.91,0,12.91,9.98,0.38],[0.19,0,0.19,8.1,0.38],[0,7.95,3.5,7.95,0.3],[3.35,7.95,3.35,9.98,0.3],[3.35,9.79,13.1,9.79,0.38],[6.58,0.38,6.58,4.97],[6.58,4.95,8.4,4.95],[9.65,0.38,9.65,4.97],[10.95,4.4,12.72,4.4],[10.9,4.4,10.9,5.2],[10.9,5.95,10.9,6.33],[10.64,6.33,12.72,6.33],[9,6.38,9.8,6.38],[9,6.33,9,9.6],[7.5,6.33,9,6.33],[6.51,6.33,6.51,7.83],[6.51,7.83,9,7.83],[5.97,7.83,5.97,8.6],[3.42,4.9,3.42,7.85],[4.4,4.9,4.4,7.85],[3.42,4.9,4.4,4.9],[3.42,7.85,4.45,7.85]],
+  '135':[[0,0.19,16.1,0.19,0.38],[15.91,0,15.91,9.98,0.38],[0.19,0,0.19,8.05,0.38],[0,7.87,2.85,7.87,0.34],[2.85,7.87,2.85,9.98,0.34],[2.85,9.79,16.1,9.79,0.38],[7.94,0.38,7.94,4.95],[7.94,4.3,10.2,4.3],[10.25,4.3,10.25,4.95],[11.38,0.38,11.38,4.95],[12.55,3.72,15.72,3.72],[12.6,3.72,12.6,4.95],[12.6,6.17,15.72,6.17],[4.83,6.15,6.04,6.15],[6.98,6.15,9.66,6.15],[10.8,6.15,11.6,6.15],[2.9,4.94,2.9,7.78],[3.89,4.94,3.89,7.78],[2.9,4.94,3.89,4.94],[6,6.15,6,7.78],[5.2,7.78,8.37,7.78],[5.2,7.78,5.2,8.72],[8.37,6.15,8.37,9.6],[10.8,6.15,10.8,9.6],[14.15,6.17,14.15,7.3],[14.15,8.2,14.15,9.6]],
+  '165':[[0,0.17,18.08,0.17,0.34],[0.17,0,0.17,10.8,0.34],[17.91,0,17.91,10.8,0.34],[0,10.6,18.08,10.6,0.4],[5.9,0.33,5.9,4.58],[5.9,4.58,6.6,4.58],[7.45,4.58,10.6,4.58],[11.45,4.58,13.15,4.58],[8.42,0.33,8.42,4.58],[11.5,0.33,11.5,4.58],[14.6,0.33,14.6,2.9],[13.3,2.9,14.6,2.9],[13.3,2.9,13.3,4.58],[15,3.9,17.74,3.9],[14.6,3.9,14.6,5],[14.6,5.9,14.6,6.45],[14.6,6.45,17.74,6.45],[4.75,6.48,6.6,6.48],[7.99,6.5,9.8,6.5],[10.6,6.5,11.9,6.5],[12.73,6.5,14.6,6.5],[10.97,6.5,10.97,10.4],[8.86,6.5,8.86,10.4],[15.45,6.5,15.45,7.9],[15.45,8.9,15.45,10.4],[6.75,6.5,6.75,8],[6.75,9,6.75,10.4],[8.05,7,8.05,10.4],[5.47,6.5,5.47,8.1],[4.75,8.15,6.75,8.15],[4.8,8.15,4.8,9.8],[4.8,6.5,4.8,7.6]],
 };
 const base='https://udanabudowa.pl/';
 const models:[string,number,number,number,number|null,number|null][]=[
@@ -48,7 +49,7 @@ export default {
       id:`de-${size}`,version:'plan-1',name:`DE ${size}`,source:base,
       footprint:{width,depth,kind:'bounding-envelope',source:planOriginal},
       floorArea,floorAreaKind:floorArea===null?null:size==='75'?'usable':'total',footprintArea,price:null,height:null,
-      roof:{type:'gable',pitch:null,source:photoOriginal},geometryStatus:'verified-envelope',exterior:{...exteriors[size],floorPlan:{src:`/assets/udana-budowa/de-${size}-plan.webp`,...planCrops[size]}},
+      roof:{type:'gable',pitch:null,source:photoOriginal},geometryStatus:'verified-envelope',exterior:{...exteriors[size],interior:{walls:interiors[size]}},
       thumbnail:`/assets/udana-budowa/de-${size}-photo.webp`,plan:`/assets/udana-budowa/de-${size}-plan.webp`,
       assets:{photoOriginal,planOriginal,attribution:'Udana Budowa — udanabudowa.pl'},
       notes:[

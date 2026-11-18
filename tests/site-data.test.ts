@@ -52,3 +52,15 @@ test('each source fails independently and redirects off gov.pl are refused',asyn
   assert.equal(d.layers.wells.status,'found');
   assert.match(d.layers.wells.image!,/^data:image\/png;base64,/);
 });
+test('plan building lines: distance from each parcel edge, snapped to the half metres plans use',async()=>{
+  const {buildingLineSetbacks}=await import('../public/core/site-data.ts');
+  const plot=[{x:0,y:0},{x:30,y:0},{x:30,y:30},{x:0,y:30}],inside=(p:{x:number;y:number})=>p.x>=0&&p.x<=30&&p.y>=0&&p.y<=30;
+  // A line 5.9 m inside the first edge (y=0), drawn as one pixel row every 0.2 m, plus a few marker pixels.
+  const points=[...Array.from({length:150},(_,i)=>({x:i*0.2,y:5.9})),{x:3,y:6.3},{x:9,y:6.3},{x:15,y:6.4}];
+  assert.deepEqual(buildingLineSetbacks(plot,points,0.2,inside),[6,null,null,null]);
+});
+test('Web Mercator round trip stays within millimetres in Poland',async()=>{
+  const {toMercator,fromMercator}=await import('../public/core/site-data.ts');
+  const p:[number,number]=[610933.41,481494.53],[e,n]=fromMercator(toMercator(p));
+  assert.ok(Math.abs(e-p[0])<0.01&&Math.abs(n-p[1])<0.01);
+});

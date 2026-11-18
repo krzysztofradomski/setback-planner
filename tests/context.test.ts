@@ -30,3 +30,12 @@ test('street-facing edge is the one nearest a road; footpaths do not count',asyn
   assert.equal(streetEdge(plot,[[{x:36,y:-5},{x:36,y:50}]]),1,'road east of edge B–C');
   assert.equal(streetEdge(plot,[[{x:200,y:0},{x:200,y:40}]]),null,'no road nearby');
 });
+test('neighbour fences skip lines already fenced by our parcel or another neighbour',async()=>{
+  const {neighbourFenceSegments}=await import('../public/core/context.ts');
+  const plot=[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10}];
+  // East neighbour shares our east edge; north neighbour shares its south edge with our north edge.
+  const east=[{x:10,y:0},{x:20,y:0},{x:20,y:10},{x:10,y:10}],north=[{x:0,y:-10},{x:10,y:-10},{x:10,y:0},{x:0,y:0}];
+  const segs=neighbourFenceSegments(plot,[east,north]);
+  assert.equal(segs.length,6);// 3 new edges each; the shared edges are not fenced twice
+  assert.ok(segs.every(([a,b])=>!(a.x===10&&b.x===10&&Math.min(a.y,b.y)===0&&Math.max(a.y,b.y)===10)));
+});

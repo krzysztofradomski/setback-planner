@@ -21,6 +21,7 @@ export interface Env {
     };
     AI?: {
         run(model: string, input: Record<string, unknown>): Promise<unknown>;
+        toMarkdown?(documents: { name: string; blob: Blob }[]): Promise<{ data?: string; format?: string }[]>;
     };
     SESSION_SECRET?: string;
     BOOTSTRAP_SECRET?: string;

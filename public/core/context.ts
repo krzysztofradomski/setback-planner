@@ -10,6 +10,8 @@ export interface SceneContext {
   ortho: string;
   buildings: ContextBuilding[];
   retrievedAt: string;
+  /** Fence lines on neighbouring parcels' boundaries, filled in after the ULDK lookups. */
+  fences?: [Point, Point][];
 }
 
 const MARGIN = 70, MAX_HALF = 260, METRES_PER_LEVEL = 3, DEFAULT_LEVELS = 2;
@@ -45,7 +47,7 @@ export const tileOf = (lon: number, lat: number) => {
   const n = 2 ** TILE_ZOOM, r = lat * Math.PI / 180;
   return { x: Math.floor((lon + 180) / 360 * n), y: Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n) };
 };
-const tileLonLat = (x: number, y: number): [number, number] => {
+export const tileLonLat = (x: number, y: number): [number, number] => {
   const n = 2 ** TILE_ZOOM;
   return [x / n * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI];
 };
@@ -139,4 +141,43 @@ export async function loadContext(scene: Scene, fetcher: typeof fetch = fetch): 
     return buildingsFromTile(buffer, t.x, t.y, scene, center, half);
   }));
   return { ...frame, buildings: parts.flat() };
+}
+
+/** Parcels touching ours, found by asking ULDK for the parcel 2.5 m outside the middle of each edge (one request at a time). */
+export async function loadNeighbourParcels(scene: Scene, fetcher: typeof fetch = fetch, gap = 150): Promise<Point[][]> {
+  const origin = scene.coordinates.projected?.origin;
+  if (!origin || !validRing(scene.plot)) return [];
+  const { lookupParcelAt } = await import('./uldk.ts');
+  const own = scene.parcel?.identifier, seen = new Set<string>(own ? [own] : []), rings: Point[][] = [];
+  const probes = scene.plot.flatMap((a, i) => {
+    const b = scene.plot[(i + 1) % scene.plot.length], len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 2) return [];
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, n = { x: (b.y - a.y) / len, y: -(b.x - a.x) / len };
+    const out = (s: number) => ({ x: mid.x + n.x * s, y: mid.y + n.y * s });
+    return [pointLocation(out(2.5), scene.plot) === 'outside' ? out(2.5) : out(-2.5)];
+  }).slice(0, 12); // ponytail: one probe per edge finds the adjacent parcels, not the whole block
+  for (const p of probes) {
+    try {
+      const [lon, lat] = geographicPoint([origin.x + p.x, origin.y - p.y]);
+      const found = await lookupParcelAt(lon, lat, fetcher), id = found.parcel.identifier ?? '';
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const o = found.coordinates.projected!.origin, dx = o.x - origin.x, dy = origin.y - o.y;
+      for (const [outer] of [[found.plot], ...found.plotParts ?? []]) rings.push(outer.map(q => ({ x: q.x + dx, y: q.y + dy })));
+    } catch { /* roads and unregistered land have no parcel here */ }
+    if (gap) await new Promise(r => setTimeout(r, gap));
+  }
+  return rings;
+}
+
+/** Fence lines along neighbouring parcels, minus lines already fenced by our own boundary or by another neighbour. */
+export function neighbourFenceSegments(plot: Point[], rings: Point[][], tolerance = 0.5): [Point, Point][] {
+  const taken: [Point, Point][] = plot.map((a, i) => [a, plot[(i + 1) % plot.length]]), out: [Point, Point][] = [];
+  const near = (p: Point) => taken.some(([a, b]) => segmentDistance(p, a, b) < tolerance);
+  for (const ring of rings) ring.forEach((a, i) => {
+    const b = ring[(i + 1) % ring.length];
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 0.5 || near({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })) return;
+    out.push([a, b]); taken.push([a, b]);
+  });
+  return out;
 }

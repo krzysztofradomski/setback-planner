@@ -3,7 +3,7 @@ import {fitItemsToParcel, parcelAxis} from './core/placement.ts';
 import {planFromBrief} from './core/brief.ts';
 import {designGarden} from './core/garden.ts';
 import {sourceDirectory,mapOverlayIds} from './map/sources.ts';
-import {siteFrame,siteLayerIds,siteSummary} from './core/site-data.ts';
+import {siteFrame,siteLayerIds,siteSummary,mercatorPixel,buildingLineSetbacks} from './core/site-data.ts';
 import {mountWorkspace} from './workspace.ts';
 import {mountParcelJourney} from './parcel-journey.ts';
 import {ATTRIBUTION_KEY,readAttribution,validateAttribution} from './core/attribution.ts';
@@ -17,7 +17,7 @@ import { materialPresets, resolveAppearance, resetAppearance } from './core/mate
 import { worldFootprint, boundingCorners, fitOpenings } from './core/footprints.ts';
 import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
 import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
-import { polygonRelation, validRing, polygonArea, perpendicularClearance } from './core/geometry.ts';
+import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointLocation } from './core/geometry.ts';
 
 (async () => {
   const $ = s => document.querySelector(s);
@@ -289,6 +289,9 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     return best;
   }
 
+  // Building lines (nieprzekraczalne linie zabudowy) read from the local plan: metres from each parcel edge, null where none.
+  let planSetbacks=[];
+  const edgeOf=q=>{let best=-1,d=0.1;state.plot.forEach((a,i)=>{const b=state.plot[(i+1)%state.plot.length],dd=len(sub(closestOnSeg(q,a,b),q));if(dd<d){d=dd;best=i;}});return best;};
   function compute(){
     const plotValid = validRing(state.plot), res = new Map();
     for (const it of state.items){
@@ -297,7 +300,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       for (let i = 0; i < c.length; i++){
         const A = c[i], B = c[(i+1)%c.length], n = outwardNormal(A,B);
         const hits=parcelPolygons(state).flat().map(ring=>perpendicularClearance(A,B,n,ring)).filter(Boolean);const r=hits.sort((a,b)=>a.t-b.t)[0]||null;
-        sides.push({name: sideName(n), P: r && r.P, Q: r && r.Q, t: r ? r.t : null, warn: r ? r.t < it.setback - 1e-9 : false});
+        const edge=r?edgeOf(r.Q):-1,line=it.type!=='landscape'&&edge>=0?planSetbacks[edge]??0:0,req=Math.max(it.setback,line);
+        sides.push({name: sideName(n), P: r && r.P, Q: r && r.Q, t: r ? r.t : null, req, line: line>it.setback?line:0, edge, warn: r ? r.t < req - 1e-9 : false});
       }
       const ts = sides.filter(s => s.t != null).map(s => s.t);
       res.set(it.id, {c, inside, sides, min: ts.length ? Math.min(...ts) : null});
@@ -355,11 +359,27 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
   let originalAppearance = false;
   let C = compute();
   let siteData=null,siteJob=Promise.resolve(),siteKey='',siteTimer=0,siteState='idle',sitePanel=null;
+  /** Decodes the plan's building-line image and measures each edge's line distance (see buildingLineSetbacks). */
+  async function readPlanLines(d,key){
+    if(!d.planLines)return;
+    try{
+      const img=await window.createImageBitmap(await (await window.fetch(d.planLines.image)).blob());// decodes in background tabs too
+      const c=document.createElement('canvas');c.width=c.height=d.size;const g=c.getContext('2d');g.drawImage(img,0,0);const px=g.getImageData(0,0,d.size,d.size).data,origin=state.coordinates.projected.origin,points=[];
+      for(let v=0;v<d.size;v++)for(let u=0;u<d.size;u++)if(px[(v*d.size+u)*4+3]>100){const [e,n]=mercatorPixel(d.planLines.mercator,d.size,u+.5,v+.5);points.push({x:e-origin.x,y:origin.y-n});}
+      if(siteKey!==key)return;
+      planSetbacks=buildingLineSetbacks(state.plot,points,(d.bbox[2]-d.bbox[0])/d.size,p=>pointLocation(p,state.plot)!=='outside');siteData.planSetbacks=planSetbacks;render();renderSitePanel();
+    }catch{/* no plan lines: user setbacks only */}
+  }
+  /** The local plan's text from the official journal, chosen and summarised by the worker (quotes kept verbatim). */
+  async function readPlanRules(d,key){
+    const id=state.parcel?.identifier;if(!id)return;
+    try{const r=await window.fetch(`/api/plan-rules?parcel=${encodeURIComponent(id)}&x=${d.point[0]}&y=${d.point[1]}`);if(!r.ok)return;const rules=await r.json();if(siteKey!==key)return;siteData.planRules=rules;renderSitePanel();}catch{/* plan text unavailable: the report lists the journal */}
+  }
   function syncSiteData(){
     const frame=siteFrame(state),key=frame?.query??'';if(key===siteKey)return;
-    siteKey=key;siteData=null;clearTimeout(siteTimer);siteState=frame?'loading':'idle';renderSitePanel();if(!frame){siteJob=Promise.resolve();return;}
+    siteKey=key;siteData=null;planSetbacks=[];clearTimeout(siteTimer);siteState=frame?'loading':'idle';renderSitePanel();if(!frame){siteJob=Promise.resolve();return;}
     // ponytail: 1.2 s debounce so dragging a corner does not query every registry on every frame
-    siteJob=new Promise(resolve=>{siteTimer=setTimeout(async()=>{try{const r=await fetch('/api/site-data?'+key);if(!r.ok)throw new Error('site data');const d=await r.json();if(siteKey===key){siteData=d;siteState='ready';}}catch{if(siteKey===key)siteState='error';}if(siteKey===key)renderSitePanel();resolve();},1200);});
+    siteJob=new Promise(resolve=>{siteTimer=setTimeout(async()=>{try{const r=await fetch('/api/site-data?'+key);if(!r.ok)throw new Error('site data');const d=await r.json();if(siteKey===key){siteData=d;siteState='ready';void readPlanLines(d,key);void readPlanRules(d,key);}}catch{if(siteKey===key)siteState='error';}if(siteKey===key)renderSitePanel();resolve();},1200);});
   }
   // The boundary fence follows the parcel: corner edits move it, the gate stays on its edge where possible.
   function syncBoundaryFence(){
@@ -608,7 +628,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       if (!r.inside) h += `<div class="ro bad"><span>${t('outside')}</span><b></b><span class="chip bad">${t('check')}</span></div>`;
       for (const s of r.sides){
         if (s.t == null){ h += `<div class="ro"><span>${t(s.name)}</span><b>–</b><span class="chip info">${t('noBoundary')}</span></div>`; continue; }
-        h += `<div class="ro${s.warn ? ' bad' : ''}"><span>${t('wall', {side: t(s.name)})}</span><b>${fmt(s.t)}</b><span class="chip ${s.warn ? 'bad' : 'ok'}">${s.warn ? t('under', {v: fmtD(it.setback)}) : t('ok')}</span></div>`;
+        h += `<div class="ro${s.warn ? ' bad' : ''}"><span>${t('wall', {side: t(s.name)})}</span><b>${fmt(s.t)}</b><span class="chip ${s.warn ? 'bad' : 'ok'}">${s.warn ? t('under', {v: fmtD(s.req)}) : t('ok')}</span></div>`;
       }
       const cl = $('#f-clear'); if (cl) cl.innerHTML = h;
       let g = '';
@@ -659,7 +679,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     return state.items.filter(i=>C.res.get(i.id).warn).map(i=>{const r=C.res.get(i.id),why=[
       !r.inside?(pl?'Wychodzi poza granicę działki':'Outside the parcel boundary'):null,
       r.overlap?(pl?'Koliduje z innym obiektem':'Overlaps another object'):null,
-      ...r.sides.filter(s=>s.warn).map(s=>`${t('wall',{side:t(s.name)})}: ${m(s.t)} ${pl?'zamiast':'instead of'} ${m(i.setback)}`)].filter(Boolean);
+      ...r.sides.filter(s=>s.warn).map(s=>`${t('wall',{side:t(s.name)})}: ${m(s.t)} ${pl?'zamiast':'instead of'} ${m(s.req)}${s.line?(pl?' (linia zabudowy z planu miejscowego)':' (local plan building line)'):''}`)].filter(Boolean);
       return `<button type="button" role="listitem" data-issue="${esc(i.id)}"><b>${esc(i.name)}</b>${why.map(w=>`<small>${esc(w)}</small>`).join('')}</button>`;}).join('');
   }
 
@@ -890,6 +910,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
       const context=await loadContext(state);
       if(contextKey!==key||!viewer)return;lastContext=context;
       if($('#view-context').checked)viewer.setContext(context);
+      // Neighbouring parcels arrive later (one ULDK request per edge); their property lines get fences too.
+      void import('./core/context.ts').then(async({loadNeighbourParcels,neighbourFenceSegments})=>{const rings=await loadNeighbourParcels(state);if(contextKey!==key||!viewer||!lastContext)return;const fences=neighbourFenceSegments(state.plot,rings);lastContext={...lastContext,fences};if($('#view-context').checked)viewer.addContextFences(fences);}).catch(()=>{/* registry unavailable: own fence only */});
       $('#viewer-note').textContent=t('viewerHint')+' '+bi(`Surroundings: GUGiK orthophoto and ${context.buildings.length} building footprints © OpenStreetMap contributors. Neighbour heights are estimated (2 storeys), not measured.`,`Otoczenie: ortofotomapa GUGiK i ${context.buildings.length} obrysów budynków © OpenStreetMap. Wysokości sąsiadów są szacowane (2 kondygnacje), nie mierzone.`);
     }catch{if(contextKey===key){contextKey='';toast(bi('Surroundings could not be loaded. The plan is unchanged.','Nie udało się wczytać otoczenia. Plan bez zmian.'));}}
     finally{finish();}
@@ -1249,7 +1271,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance } from 
     if(!sitePanel)return;if(!siteKey){sitePanel.hidden=true;return;}sitePanel.hidden=false;
     const name=id=>{const s=sourceDirectory.find(d=>d.id===(id==='cadastre'?'parcels':id));return s?(lang==='pl'?s.plName:s.name).split(' · ')[0]:id;};
     const head=siteState==='loading'?bi('Fetching official registry data…','Pobieram dane z rejestrów publicznych…'):siteState==='error'?bi('Registry data could not be fetched. The report lists the sources to check.','Nie udało się pobrać danych z rejestrów. Raport wskaże źródła do sprawdzenia.'):bi('Fetched automatically from official registries. Results apply to a point inside the parcel; the full report shows a map for each source.','Pobrane automatycznie z rejestrów urzędowych. Wyniki dotyczą punktu w środku działki; pełny raport zawiera mapę dla każdego źródła.');
-    const rows=siteData?siteLayerIds.map(id=>{const layer=siteData.layers[id];return `<li class="${id==='cadastre'?'none':layer.status}"><b>${esc(name(id))}</b><span>${esc(siteSummary(id,layer))}</span></li>`;}).join('')+(siteData.ortho.captures[0]?`<li class="none"><b>${esc(bi('Orthophoto','Ortofotomapa'))}</b><span>${esc(bi('Latest capture','Najnowsze zdjęcie'))}: ${esc(siteData.ortho.captures[0].date)}</span></li>`:''):'';
+    const rows=siteData?siteLayerIds.map(id=>{const layer=siteData.layers[id];return `<li class="${id==='cadastre'?'none':layer.status}"><b>${esc(name(id))}</b><span>${esc(siteSummary(id,layer))}</span></li>`;}).join('')+(siteData.planRules?.status==='found'?`<li class="found plan-doc"><b>${esc(bi('Local plan text','Tekst planu miejscowego'))}</b><span><a href="${esc(siteData.planRules.plan.url)}" target="_blank" rel="noopener noreferrer">${esc(siteData.planRules.plan.title)} ↗</a>${(siteData.planRules.extraction?.claims??[]).slice(0,8).map(c=>`<br>• ${esc(c.parameter)}: <i>${esc(c.value)}</i>`).join('')}</span></li>`:siteData.planRules?.note?`<li class="none"><b>${esc(bi('Local plan text','Tekst planu miejscowego'))}</b><span>${esc(siteData.planRules.note)}</span></li>`:'')+(planSetbacks.some(v=>v)?`<li class="found"><b>${esc(bi('Building lines (local plan)','Linie zabudowy (MPZP)'))}</b><span>${planSetbacks.map((v,i)=>v?`${cornerName(i)}${cornerName((i+1)%state.plot.length)}: ${dec(v.toFixed(1))} m`:'').filter(Boolean).join(' · ')} ${esc(bi('from the boundary; checked against every building.','od granicy; uwzględnione w sprawdzeniu budynków.'))}</span></li>`:'')+(siteData.ortho.captures[0]?`<li class="none"><b>${esc(bi('Orthophoto','Ortofotomapa'))}</b><span>${esc(bi('Latest capture','Najnowsze zdjęcie'))}: ${esc(siteData.ortho.captures[0].date)}</span></li>`:''):'';
     sitePanel.innerHTML=`<h3>${bi('Public registry data','Dane z rejestrów publicznych')}</h3><p class="hint" role="status" aria-busy="${siteState==='loading'}">${head}</p>${rows?`<ul>${rows}</ul>`:''}`;
   }
   renderSitePanel();

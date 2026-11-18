@@ -67,15 +67,18 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   const resize=()=>{const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();render();};
   const observer=new ResizeObserver(resize);observer.observe(container);
   const failure=(event:Event)=>{event.preventDefault();active=false;onFailure();};renderer.domElement.addEventListener('webglcontextlost',failure);
-  /** Manufacturer floor plan on the floor of a catalogue house, shown in the top view with the roof lifted off. */
+  /** Ground-floor walls of a catalogue house as real 3D walls on a floor slab, shown in the top view with the roof lifted off. */
   let cutaway=false;
-  function floorPlan(item:{w:number;d:number},plan:{src:string;x0:number;y0:number;x1:number;y1:number}){
-    const material=new THREE.MeshBasicMaterial({color:'#ffffff',toneMapped:false}),mesh=new THREE.Mesh(new THREE.PlaneGeometry(item.w,item.d),material);
-    mesh.rotation.x=-Math.PI/2;mesh.position.y=.04;mesh.userData.floorPlan=true;mesh.visible=cutaway;
-    new THREE.TextureLoader().load(plan.src,texture=>{if(disposed||!mesh.parent){texture.dispose();return;}texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();texture.repeat.set(plan.x1-plan.x0,plan.y1-plan.y0);texture.offset.set(plan.x0,1-plan.y1);material.map=texture;material.needsUpdate=true;render();});
-    return mesh;
+  const interiorWall=new THREE.MeshStandardMaterial({color:'#f6f3ee',roughness:.9}),interiorFloor=new THREE.MeshStandardMaterial({color:'#e9dcc8',roughness:.95});
+  function interiorWalls(item:{w:number;d:number},walls:number[][]){
+    const group=new THREE.Group(),height=2.7;group.userData.floorPlan=true;group.visible=cutaway;
+    const floor=new THREE.Mesh(new THREE.BoxGeometry(item.w,.06,item.d),interiorFloor);floor.position.y=.03;group.add(floor);
+    for(const [x0,y0,x1,y1,t=.14] of walls){const len=Math.hypot(x1-x0,y1-y0),along=Math.abs(x1-x0)>=Math.abs(y1-y0);
+      const wall=new THREE.Mesh(new THREE.BoxGeometry(along?len+t:t,height,along?t:len+t),interiorWall);
+      wall.position.set((x0+x1)/2-item.w/2,height/2,(y0+y1)/2-item.d/2);group.add(wall);}// no shadows: rooms stay readable from above
+    return group;
   }
-  function applyCutaway(){content.traverse(o=>{if(o.userData.floorPlan)o.visible=cutaway;else if(o.name==='exterior')o.visible=!cutaway;});}
+  function applyCutaway(){content.traverse(o=>{if(o.userData.floorPlan)o.visible=cutaway;else if(o.name==='exterior'||(o.name.startsWith('wall-')&&o.parent?.children.some(c=>c.userData.floorPlan)))o.visible=!cutaway;});}
   function view(mode:'top'|'axonometric'|'orbit'|'walk'){
     walkMode=mode==='walk';cutaway=mode==='top';applyCutaway();camera.up.set(0,1,0);controls.target.copy(center);
     if(mode==='walk'){camera.position.set(center.x,1.65,center.z+extent*.4);controls.target.copy(camera.position).add(new THREE.Vector3(0,0,-5));controls.maxPolarAngle=Math.PI*.95;controls.update();render();return;}controls.maxPolarAngle=Math.PI*.49;
@@ -102,7 +105,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     if(validRing(project.plot)){const houses=project.items.filter(i=>i.type==='house'),distance=houses.length?Math.max(...houses.map(i=>i.setback)):4;
       try{const dash=new THREE.BoxGeometry(1,.03,.25),paint=new THREE.MeshStandardMaterial({color:'#f2c230',roughness:.6,emissive:'#3d2f00'});for(const [outer] of setbackArea(project,distance).parts)outer.forEach((a,i)=>{const b=outer[(i+1)%outer.length],length=Math.hypot(b.x-a.x,b.y-a.y),angle=Math.atan2(b.y-a.y,b.x-a.x);for(let t=0;t<length;t+=1.4){const l=Math.min(.9,length-t),m=new THREE.Mesh(dash,paint);m.scale.x=l;const c=t+l/2;m.position.set(a.x+(b.x-a.x)*c/length,.04,a.y+(b.y-a.y)*c/length);m.rotation.y=-angle;m.userData.buildableZone=true;content.add(m);}});}catch{/* invalid setback geometry: skip the guide */}
     }
-    for(const item of project.items.filter(i=>i.visible)){const exterior=exteriorFor(item),object=buildBuilding(item,original,makeTexture,project.environment.season,exterior);if(project.terrain)object.position.y=terrainHeight(project.terrain.samples,item.x,item.y)-project.terrain.samples[0].z;if(exterior?.floorPlan&&item.shape==='rectangle')object.add(floorPlan(item,exterior.floorPlan));content.add(object);}
+    for(const item of project.items.filter(i=>i.visible)){const exterior=exteriorFor(item),object=buildBuilding(item,original,makeTexture,project.environment.season,exterior);if(project.terrain)object.position.y=terrainHeight(project.terrain.samples,item.x,item.y)-project.terrain.samples[0].z;if(exterior?.interior&&item.shape==='rectangle')object.add(interiorWalls(item,exterior.interior.walls));content.add(object);}
     applyCutaway();
     for(const fence of project.fences)content.add(buildFence(fence,project.environment.season));
     // The boundary fence follows the main ring; extra parcel parts and inner rings get a matching fence without a gate.
@@ -165,6 +168,11 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     for(const b of ctx.buildings.filter(b=>b.onParcel)){const line=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(b.ring.map(p=>new THREE.Vector3(p.x,.05,p.y))),new THREE.LineDashedMaterial({color:'#b8392a',dashSize:.6,gapSize:.4}));line.computeLineDistances();contextGroup.add(line);}
     ctx.buildings.filter(b=>!b.onParcel).forEach((b,i)=>{const geometry=new THREE.ExtrudeGeometry(groundShape(b.ring),{depth:b.height,bevelEnabled:false,UVGenerator:orthoUV as unknown as THREE.UVGenerator}),mesh=new THREE.Mesh(geometry,[roofMat,walls[i%walls.length]]);mesh.rotation.x=-Math.PI/2;mesh.castShadow=mesh.receiveShadow=true;mesh.userData.contextBuilding=true;
       const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geometry,30),edge);mesh.add(edges);contextGroup.add(mesh);});
+    addContextFences(ctx.fences??[]);
+  }
+  /** Neighbours' property lines get the same panel fence as ours (estimated: the registry shows lines, not fences). */
+  function addContextFences(segments:[{x:number;y:number},{x:number;y:number}][]){
+    if(contextActive)segments.forEach(([a,b],i)=>contextGroup.add(buildFence({id:'neighbour-'+i,name:'',type:'metal-panel',path:[a,b],height:1.5,width:.08,spacing:2.5,color:'#3a3d41',foundation:.3,maturity:1,gate:null},contextSeason)));
     render();
   }
   /** Frame one building from its front-left, at eye-catching height. */
@@ -184,11 +192,11 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     if(item){focus(item);shots.push({kind:'house',src:renderer.domElement.toDataURL('image/png')});}
     walkMode=walking;cutaway=cut;applyCutaway();camera.position.copy(position);controls.target.copy(target);controls.update();render();return shots;
   }
-  return {update,view,setContext,focus,snapshots,ready:()=>contextReady,
+  return {update,view,setContext,addContextFences,focus,snapshots,ready:()=>contextReady,
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},
     screenshot(){render();return renderer.domElement.toDataURL('image/png');},
-    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();rainSky.dispose();snowSky.dispose();disposeObject(contextGroup);roofMat.dispose();land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
+    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();rainSky.dispose();interiorWall.dispose();interiorFloor.dispose();snowSky.dispose();disposeObject(contextGroup);roofMat.dispose();land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
     memory(){return {...renderer.info.memory};},
   };
 }

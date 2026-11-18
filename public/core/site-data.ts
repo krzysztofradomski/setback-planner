@@ -2,20 +2,73 @@
 // Shared by the worker (which fetches, avoiding CORS) and the browser/report (which display it).
 import { mapSources } from '../map/sources.ts';
 import type { Scene } from './scene.ts';
+import { geographicPoint, projectPoint } from './geospatial.ts';
 
 export const siteLayerIds = ['cadastre', 'planning', 'utilities', 'environment', 'flood', 'groundwater', 'landslides', 'mining', 'wells'] as const;
 export type SiteLayerId = typeof siteLayerIds[number];
 export type SiteStatus = 'found' | 'none' | 'unavailable' | 'error';
 export interface SiteFeature { layer?: string; attrs: Record<string, string> }
-export interface SiteLayer { status: SiteStatus; features: SiteFeature[]; note?: string; image?: string }
+/** `mercator`: the image was requested in EPSG:3857 over this box (services that refuse EPSG:2180) and must be warped onto the frame. */
+export interface SiteLayer { status: SiteStatus; features: SiteFeature[]; note?: string; image?: string; mercator?: Box }
+type Box = [number, number, number, number];
 export interface SiteData {
   retrievedAt: string; bbox: [number, number, number, number]; point: [number, number]; size: number;
   layers: Record<SiteLayerId, SiteLayer>;
   ortho: { image?: string; captures: { date: string; series: string }[] };
+  /** Building lines (nieprzekraczalne linie zabudowy) from the local plan, alone on a transparent EPSG:3857 image. */
+  planLines?: { image: string; mercator: Box };
+  /** Filled in the browser from planLines: building line distance per parcel edge in metres. */
+  planSetbacks?: (number | null)[];
+  /** Filled in the browser from /api/plan-rules: the plan resolution and its rules quoted verbatim. */
+  planRules?: { status: string; note?: string; reason?: string; aiUsed?: boolean; plan?: { title: string; url: string; pdf: string; scope: string; source: string }; extraction?: { claims: { parameter: string; value: string; quote: string }[]; unknowns: string[] } | null; alternatives?: { title: string; url: string }[] };
 }
 export const SITE_SIZE = 512;
 /** INFO_FORMAT each server answers usefully (checked against the live services on 2026-11-17). */
 const infoFormat: Record<SiteLayerId, string> = { cadastre: 'text/xml', planning: 'text/html', utilities: 'text/xml', environment: 'application/json', flood: 'application/json', groundwater: 'text/xml', landslides: 'text/xml', mining: 'text/xml', wells: 'text/xml' };
+
+/** The national local-plan integration redirects EPSG:2180 requests; it answers in Web Mercator. */
+const mercatorOnly: Partial<Record<SiteLayerId, true>> = { planning: true };
+const R = 6378137;
+export const toMercator = ([e, n]: [number, number]): [number, number] => { const [lon, lat] = geographicPoint([e, n]); return [R * lon * Math.PI / 180, R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360))]; };
+export const fromMercator = ([x, y]: [number, number]): [number, number] => projectPoint([x / R * 180 / Math.PI, (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI]);
+/** Web Mercator box covering an EPSG:2180 frame (its four corners). */
+export function mercatorBox(bbox: Box): Box {
+  const c = [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[0], bbox[3]], [bbox[2], bbox[3]]].map(p => toMercator(p as [number, number]));
+  return [Math.min(...c.map(p => p[0])), Math.min(...c.map(p => p[1])), Math.max(...c.map(p => p[0])), Math.max(...c.map(p => p[1]))];
+}
+/** EPSG:2180 point of a pixel on a size×size image of a Web Mercator box. */
+export const mercatorPixel = (box: Box, size: number, u: number, v: number) => fromMercator([box[0] + u / size * (box[2] - box[0]), box[3] - v / size * (box[3] - box[1])]);
+/** SVG matrix that lays a Web Mercator image onto the EPSG:2180 frame image (affine; exact enough over a parcel). */
+export function mercatorMatrix(data: Pick<SiteData, 'bbox' | 'size'>, box: Box) {
+  const S = data.size, at = (u: number, v: number) => sitePixel(data, ...mercatorPixel(box, S, u, v));
+  const [o, x, y] = [at(0, 0), at(S, 0), at(0, S)];
+  return [(x[0] - o[0]) / S, (x[1] - o[1]) / S, (y[0] - o[0]) / S, (y[1] - o[1]) / S, o[0], o[1]].map(v => +v.toFixed(5)).join(' ');
+}
+
+/** Distance from each parcel edge to the plan's building line inside the parcel, in metres (null where the plan draws none).
+ *  `points` are building-line pixels in local parcel coordinates; a line parallel to an edge shows up as a peak in the
+ *  distances of the pixels nearest that edge. */
+export function buildingLineSetbacks(plot: { x: number; y: number }[], points: { x: number; y: number }[], pixel: number, inside: (p: { x: number; y: number }) => boolean): (number | null)[] {
+  const edges = plot.map((a, i) => { const b = plot[(i + 1) % plot.length], len = Math.hypot(b.x - a.x, b.y - a.y); return { a, b, len, ux: (b.x - a.x) / len, uy: (b.y - a.y) / len }; });
+  const near = edges.map(() => [] as number[]);
+  for (const p of points) {
+    if (!inside(p)) continue;
+    let best = -1, bestD = Infinity;
+    edges.forEach((e, i) => { const t = (p.x - e.a.x) * e.ux + (p.y - e.a.y) * e.uy; if (t < 0 || t > e.len) return; const d = Math.abs((p.x - e.a.x) * e.uy - (p.y - e.a.y) * e.ux); if (d < bestD) { bestD = d; best = i; } });
+    if (best >= 0 && bestD > 0.3 && bestD < 25) near[best].push(bestD);
+  }
+  return near.map((ds, i) => {
+    // ponytail: 0.25 m histogram; enough samples to cover ~30% of the edge as a line, else no plan line on that side
+    const bins = new Map<number, number>();
+    for (const d of ds) { const k = Math.round(d * 4); bins.set(k, (bins.get(k) ?? 0) + 1); }
+    let peak = -1, count = 0;
+    for (const [k, c] of bins) if (c > count) { count = c; peak = k; }
+    const window = ds.filter(d => Math.abs(d * 4 - peak) <= 1.5);
+    if (peak < 0 || window.length * pixel < edges[i].len * 0.3) return null;
+    const mean = window.reduce((a, b) => a + b, 0) / window.length, half = Math.round(mean * 2) / 2;
+    return Math.abs(mean - half) <= 0.25 ? half : Math.round(mean * 10) / 10; // plans draw lines at whole or half metres; the stroke shifts the reading
+  });
+}
 
 export function wmsOf(id: SiteLayerId | 'ortho') {
   const url = new URL(mapSources[id].tiles[0]);
@@ -140,21 +193,26 @@ export async function fetchSiteData(frame: { bbox: SiteData['bbox']; point: Site
     return `data:${type.startsWith('image/png') ? 'image/png' : 'image/jpeg'};base64,${btoa(bin)}`;
   };
   const text = async (url: string) => { const body = await (await get(url)).text(); if (body.length > 3_000_000) throw new Error('Response too large'); return body; };
-  const info = (layers: string, format: string) => `&REQUEST=GetFeatureInfo&QUERY_LAYERS=${layers}&X=${px}&Y=${py}&INFO_FORMAT=${encodeURIComponent(format)}&FEATURE_COUNT=5`;
+  const info = (layers: string, format: string, [x, y] = [px, py]) => `&REQUEST=GetFeatureInfo&QUERY_LAYERS=${layers}&X=${x}&Y=${y}&INFO_FORMAT=${encodeURIComponent(format)}&FEATURE_COUNT=5`;
+  const merc = mercatorBox(frame.bbox), M = merc.join(','), mp = toMercator(frame.point), mxy: [number, number] = [Math.round((mp[0] - merc[0]) / (merc[2] - merc[0]) * size), Math.round((merc[3] - mp[1]) / (merc[3] - merc[1]) * size)];
+  const commonM = (layers: string) => `SERVICE=WMS&VERSION=1.1.1&LAYERS=${layers}&STYLES=&SRS=EPSG:3857&WIDTH=${size}&HEIGHT=${size}&BBOX=${M}`;
   const layers = Object.fromEntries(await Promise.all(siteLayerIds.map(async id => {
-    const { base, layers } = wmsOf(id), q = common(layers);
-    const [img, fi] = await Promise.allSettled([image(`${base}?${q}&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=TRUE`), text(`${base}?${q}${info(layers, infoFormat[id])}`)]);
+    const { base, layers } = wmsOf(id), q = mercatorOnly[id] ? commonM(layers) : common(layers);
+    const [img, fi] = await Promise.allSettled([image(`${base}?${q}&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=TRUE`), text(`${base}?${q}${mercatorOnly[id] ? info(layers, infoFormat[id], mxy) : info(layers, infoFormat[id])}`)]);
     const parsed = fi.status === 'fulfilled' ? parseFeatureInfo(fi.value) : { features: [], error: true };
     const layer: SiteLayer = { status: layerStatus(parsed), features: parsed.features };
     if ('note' in parsed && parsed.note) layer.note = parsed.note;
     if (img.status === 'fulfilled') layer.image = img.value;
+    if (mercatorOnly[id]) layer.mercator = merc;
     return [id, layer] as const;
   }))) as Record<SiteLayerId, SiteLayer>;
+  const planLines = await image(`${wmsOf('planning').base}?${commonM('wektor-lzb')}&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=TRUE`).catch(() => undefined);
   const o = wmsOf('ortho'), oq = common(o.layers);
   const [orthoImage, orthoInfo] = await Promise.allSettled([image(`${o.base}?${oq}&REQUEST=GetMap&FORMAT=image/jpeg`), text(`${o.base}?${oq}${info(o.layers, 'text/plain')}`)]);
   return {
     retrievedAt: new Date().toISOString(), bbox: frame.bbox, point: frame.point, size, layers,
     ortho: { ...(orthoImage.status === 'fulfilled' ? { image: orthoImage.value } : {}), captures: orthoInfo.status === 'fulfilled' ? parseOrthoCaptures(orthoInfo.value) : [] },
+    ...(planLines ? { planLines: { image: planLines, mercator: merc } } : {}),
   };
 }
 
@@ -162,6 +220,8 @@ export async function fetchSiteData(frame: { bbox: SiteData['bbox']; point: Site
 export function siteSummary(id: SiteLayerId, layer: SiteLayer): string {
   if (layer.status === 'unavailable') return 'Gmina lub powiat nie publikuje tej usługi.';
   if (layer.status === 'error') return 'Usługa nie odpowiedziała. Sprawdź na mapie źródłowej.';
+  // Some municipal services draw the plan but answer feature queries with nothing; a drawn map still means a plan applies.
+  if (id === 'planning' && layer.status === 'none' && (layer.image?.length ?? 0) > 4000) return 'Działka w granicach miejscowego planu (rysunek planu na mapie). Gmina nie udostępnia opisu terenu w usłudze — przeznaczenie i ustalenia odczytaj z rysunku i tekstu planu.';
   if (layer.status === 'none') return ({ flood: 'Punkt działki poza obszarami zagrożenia powodziowego na mapach MZP/MRP.', planning: 'Brak planu miejscowego w punkcie działki. Sprawdź w gminie plan ogólny lub warunki zabudowy.', utilities: 'Powiat nie zwrócił sieci w tym miejscu. Sprawdź mapę zasadniczą w starostwie.' } as Partial<Record<SiteLayerId, string>>)[id] ?? 'Brak obiektów w punkcie działki.';
   const a = layer.features[0].attrs, pick = (re: RegExp) => Object.entries(a).find(([k]) => re.test(k))?.[1];
   if (id === 'cadastre') return [pick(/^numer działki/i) && 'dz. ' + pick(/^numer działki/i), pick(/obrębu/i) && 'obręb ' + pick(/obrębu/i), pick(/^pole/i) && pick(/^pole/i)!.replace('.', ',') + ' ha', pick(/oznaczenie (konturu|użytku)/i) && 'użytki: ' + pick(/oznaczenie (konturu|użytku)/i)].filter(Boolean).join(' · ');

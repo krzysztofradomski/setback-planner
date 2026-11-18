@@ -7,7 +7,7 @@ import { setbackArea } from './placement.ts';
 import { sourceDirectory } from '../map/sources.ts';
 import type { ContextBuilding } from './context.ts';
 import type { CatalogExterior } from './catalogs.ts';
-import { siteLayerIds, siteParcelPath, siteSummary, siteKeyLabel, siteLayerLabel, siteValue, type SiteData } from './site-data.ts';
+import { siteLayerIds, siteParcelPath, mercatorMatrix, siteSummary, siteKeyLabel, siteLayerLabel, siteValue, type SiteData } from './site-data.ts';
 type Lang = 'en' | 'pl';
 export interface ReportExtras { screenshots?: { label: string; src: string }[]; neighbours?: ContextBuilding[]; exteriorFor?: (item: SceneItem) => CatalogExterior | undefined; site?: SiteData }
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -53,11 +53,24 @@ export function projectSvg(input: Scene, lang: Lang = 'en', neighbours: ContextB
 }
 
 const dataImage = (src?: string) => src && src.length < 4e6 && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(src) ? src : '';
+/** The local plan resolution found in the official journal, with its rules quoted verbatim. */
+function planDocument(site: SiteData, lang: Lang) {
+  const p = site.planRules, pl = lang === 'pl';
+  if (!p) return '';
+  if (p.status !== 'found' || !p.plan) return `<article class="site"><h3>${pl ? 'Tekst planu miejscowego' : 'Local plan text'}</h3><p>${esc(p.note ?? '')}</p></article>`;
+  const claims = p.extraction?.claims ?? [];
+  return `<article class="site plan-doc"><h3>${pl ? 'Tekst planu miejscowego' : 'Local plan text'}</h3>
+  <p><a href="${esc(p.plan.url)}">${esc(p.plan.title)}</a></p>
+  <p><small>${pl ? 'Wybór planu' : 'Why this plan'}: ${esc(p.reason ?? '')}${p.aiUsed ? (pl ? ' (Cloudflare Workers AI)' : ' (Cloudflare Workers AI)') : ''}. ${pl ? 'Obszar planu' : 'Plan area'}: ${esc(p.plan.scope)}</small></p>
+  ${claims.length ? `<table><tr><th>${pl ? 'Ustalenie' : 'Rule'}</th><th>${pl ? 'Wartość' : 'Value'}</th><th>${pl ? 'Cytat z planu' : 'Quote'}</th></tr>${claims.map(c => `<tr><td>${esc(c.parameter)}</td><td>${esc(c.value)}</td><td><small>${esc(c.quote)}</small></td></tr>`).join('')}</table>` : `<p>${pl ? 'Nie udało się automatycznie odczytać ustaleń. Otwórz uchwałę.' : 'Rules could not be read automatically. Open the resolution.'}</p>`}
+  ${p.alternatives?.length ? `<p><small>${pl ? 'Inne możliwe plany' : 'Other possible plans'}: ${p.alternatives.map(a => `<a href="${esc(a.url)}">${esc(a.title)}</a>`).join('; ')}</small></p>` : ''}
+  <p><small>${pl ? 'Ustalenia odczytane automatycznie z tekstu uchwały w Dzienniku Urzędowym. Zawsze sprawdź je z uchwałą i rysunkiem planu.' : 'Read automatically from the resolution in the official journal. Always check against the resolution and plan drawing.'}</small></p></article>`;
+}
 function siteSection(scene: Scene, site: SiteData | undefined, lang: Lang, l: typeof labels.en, fmtDate: (iso: string) => string) {
   if (!scene.coordinates.projected) return `<h2>${l.siteTitle}</h2><p>${l.siteUnlocated}</p>`;
   if (!site) return `<h2>${l.siteTitle}</h2><p>${l.siteMissing}</p>`;
   const S = site.size, outline = esc(siteParcelPath(scene, site)), ortho = dataImage(site.ortho.image);
-  const map = (overlay?: string) => `<svg class="sitemap" viewBox="0 0 ${S} ${S}" role="img">${ortho ? `<image href="${ortho}" width="${S}" height="${S}"/>` : ''}${dataImage(overlay) ? `<image href="${dataImage(overlay)}" width="${S}" height="${S}" opacity=".9"/>` : ''}<path d="${outline}" fill="none" stroke="#13211c" stroke-width="5"/><path d="${outline}" fill="none" stroke="#ffd400" stroke-width="2.5"/></svg>`;
+  const map = (overlay?: string, mercator?: [number, number, number, number]) => `<svg class="sitemap" viewBox="0 0 ${S} ${S}" role="img">${ortho ? `<image href="${ortho}" width="${S}" height="${S}"/>` : ''}${dataImage(overlay) ? `<image href="${dataImage(overlay)}" width="${S}" height="${S}" opacity=".9"${mercator ? ` transform="matrix(${mercatorMatrix(site, mercator)})"` : ''}/>` : ''}<path d="${outline}" fill="none" stroke="#13211c" stroke-width="5"/><path d="${outline}" fill="none" stroke="#ffd400" stroke-width="2.5"/></svg>`;
   const name = (id: string) => { const s = sourceDirectory.find(d => d.id === (id === 'cadastre' ? 'parcels' : id))!; return { name: lang === 'pl' ? s.plName : s.name, url: s.url }; };
   const pill = { found: `<span class="pill found">${l.found}</span>`, none: `<span class="pill ok">${l.notFound}</span>`, unavailable: `<span class="pill">${l.unavailable}</span>`, error: `<span class="pill">${l.failed}</span>` };
   const capture = site.ortho.captures[0];
@@ -65,11 +78,12 @@ function siteSection(scene: Scene, site: SiteData | undefined, lang: Lang, l: ty
   const cards = siteLayerIds.filter(id => id !== 'cadastre').map(id => {
     const layer = site.layers[id], n = name(id);
     const table = layer.features.slice(0, 3).map(f => `<table>${f.layer ? `<tr><th colspan="2">${esc(lang === 'pl' ? siteLayerLabel(f.layer) : f.layer)}</th></tr>` : ''}${rows(f.attrs)}</table>`).join('');
-    return `<article class="site"><h3>${esc(n.name)} ${pill[layer.status]}</h3><p>${esc(siteSummary(id, layer))}</p>${layer.status === 'found' || (layer.image?.length ?? 0) > 4000 ? `<figure>${map(layer.image)}</figure>` : ''}${table}<small><a href="${esc(n.url)}">${esc(n.url)}</a></small></article>`;
+    return `<article class="site"><h3>${esc(n.name)} ${pill[layer.status]}</h3><p>${esc(siteSummary(id, layer))}</p>${layer.status === 'found' || (layer.image?.length ?? 0) > 4000 ? `<figure>${map(layer.image, layer.mercator)}</figure>` : ''}${id === 'planning' && site.planSetbacks?.some(v => v) ? `<p><b>${lang === 'pl' ? 'Nieprzekraczalne linie zabudowy odczytane z rysunku planu' : 'Building lines read from the plan drawing'}:</b> ${site.planSetbacks.map((v, i) => v ? `${String.fromCharCode(65 + i)}${String.fromCharCode(65 + (i + 1) % scene.plot.length)} ${v.toFixed(1).replace('.', lang === 'pl' ? ',' : '.')} m` : '').filter(Boolean).join(' · ')}</p>` : ''}${table}<small><a href="${esc(n.url)}">${esc(n.url)}</a></small></article>`;
   }).join('');
   const cadastre = site.layers.cadastre;
   return `<h2>${l.siteTitle}</h2><p>${l.siteIntro}</p><small>${l.siteRetrieved}: ${esc(fmtDate(site.retrievedAt))}</small>
   <article class="site"><h3>${l.siteOverview}</h3><p>${esc(siteSummary('cadastre', cadastre))}</p><figure>${map(cadastre.image)}${capture ? `<figcaption>${l.siteCapture}: ${esc(capture.date)} · ${esc(capture.series)} · GUGiK</figcaption>` : ''}</figure>${cadastre.features.slice(0, 1).map(f => `<table>${rows(f.attrs)}</table>`).join('')}</article>
+  ${planDocument(site, lang)}
   <div class="sitegrid">${cards}</div>`;
 }
 export function projectReport(input: Scene, lang: Lang = 'en', generatedAt = new Date().toISOString(), extras: string | ReportExtras = {}): string {
