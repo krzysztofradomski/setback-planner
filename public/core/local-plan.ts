@@ -7,7 +7,7 @@ import { TILE_ZOOM, tileOf, tileLonLat } from './context.ts';
 // ponytail: Masovia only; other provinces run different journal software, add their search adapters when needed
 export const journals: Record<string, string> = { '14': 'https://edziennik.mazowieckie.pl' };
 
-export interface PlanCandidate { oid: number; year: number; position: number; title: string; url: string }
+export interface PlanCandidate { oid: number; year: number; position: number; title: string; url: string; pdf: string }
 export interface Street { name: string; distance: number; side: string }
 
 const plain = (html: string) => html.replace(/<\/p>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\u00a0/g, ' ')
@@ -17,15 +17,15 @@ const plain = (html: string) => html.replace(/<\/p>|<br\s*\/?>/gi, '\n').replace
  *  gmina's village plans ("gminy X dla wsi Y") do not crowd out the town's own. */
 export async function searchPlans(base: string, city: string, commune: string, fetcher: typeof fetch = fetch): Promise<PlanCandidate[]> {
   const found = new Map<number, PlanCandidate>(), place = city || commune, kinds = city && city === commune ? 'miasta' : 'miasta|gminy|gm\\.|wsi|obrębu|dla';
-  {
-    const r = await fetcher(`${base}/api/SearchLegalAct`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ Title: `zagospodarowania przestrzennego ${place}`, PageNumber: 1, ResultCount: 60, SortColumnName: 'ActDate', SortAscending: false }), signal: AbortSignal.timeout(15000) });
+  for (const query of [`zagospodarowania przestrzennego ${place}`, place]) {
+    const r = await fetcher(`${base}/api/SearchLegalAct`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ Title: query, PageNumber: 1, ResultCount: 200, SortColumnName: 'ActDate', SortAscending: false }), signal: AbortSignal.timeout(20000) });
     if (!r.ok) throw new Error('Journal search unavailable');
-    const j = await r.json() as { LegalActs?: { Oid: number; Year: number; Position: number; Title?: string; Subject?: string }[] };
+    const j = await r.json() as { LegalActs?: { Oid: number; Year: number; Position: number; Title?: string; Subject?: string; PdfUrl?: string }[] };
     for (const a of j.LegalActs ?? []) {
       const title = String(a.Title || a.Subject || '').replace(/\s+/g, ' ').trim();
       // The title search is a substring match; keep only plans of this town or gmina (another gmina may have an area called the same).
-      const ours = new RegExp(`(${kinds})\\s+(?:części\\s+)?${place.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'iu').test(title);
-      if (ours && /zagospodarowania przestrzennego/i.test(title) && Number.isInteger(a.Oid)) found.set(a.Oid, { oid: a.Oid, year: a.Year, position: a.Position, title: title.slice(0, 400), url: `${base}/legalact/${a.Year}/${a.Position}/` });
+      const ours = new RegExp(`(?<![\\p{L}])(${kinds}|m\\.)\\s*(?:części\\s+)?${place.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'iu').test(title);
+      if (ours && /zagospodarowania przestrzennego/i.test(title) && Number.isInteger(a.Oid)) found.set(a.Oid, { oid: a.Oid, year: a.Year, position: a.Position, title: title.slice(0, 400), url: `${base}/legalact/${a.Year}/${a.Position}/`, pdf: /^GetActPdf\.ashx\?[\w=&]+$/.test(a.PdfUrl ?? '') ? `${base}/${a.PdfUrl}` : `${base}/GetActPdf.ashx?year=${a.Year}&book=0&position=${a.Position}` });
     }
   }
   return [...found.values()].sort((a, b) => b.year - a.year || b.position - a.position);
@@ -83,3 +83,40 @@ export async function streetLines(e: number, n: number, fetcher: typeof fetch = 
   }
   return out;
 }
+
+/** Scanned plan pages as JPEG images (for OCR); `pages` are 1-based page numbers, missing ones are skipped. */
+export async function pdfPages(data: ArrayBuffer, pages: number[], width = 1400): Promise<Blob[]> {
+  const pdfjs = await import('pdfjs-dist');
+  pdfjs.GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+  // Copy: pdf.js takes over the buffer. No font-face loading or browser image decoder: both stall in background tabs.
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(data.slice(0)), disableFontFace: true, isImageDecoderSupported: false, isOffscreenCanvasSupported: false }).promise, out: Blob[] = [];
+  for (const n of pages) {
+    if (n > doc.numPages) break;
+    const page = await doc.getPage(n), base = page.getViewport({ scale: 1 }), viewport = page.getViewport({ scale: width / base.width });
+    const canvas = document.createElement('canvas'); canvas.width = Math.round(viewport.width); canvas.height = Math.round(viewport.height);
+    await page.render({ canvasContext: canvas.getContext('2d')!, viewport, intent: 'print' }).promise;
+    const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.82));
+    if (blob) out.push(blob);
+  }
+  await doc.destroy();
+  return out;
+}
+/** True when converted PDF text is too thin to be the act itself (a scan without a text layer). */
+export const looksScanned = (text: string, bytes: number) => (text.match(/\p{L}/gu)?.length ?? 0) < Math.max(1500, bytes / 2000);
+
+/** Older journals publish a whole issue as one PDF. From the OCR of its first two pages (table of contents and the page
+ *  header "– 20126 –" on page 2) find the PDF pages of the act at `position`; null for a single-act PDF. */
+export function actPages(firstPages: string, position: number): { start: number; end: number } | null {
+  const entry = (pos: number) => firstPages.match(new RegExp(`(?:^|\\n)\\s*${pos}\\s*[–-][^\\n]*?\\.{3,}\\s*(\\d{4,6})`))?.[1];
+  const page2 = firstPages.split(/\n/).find(l => /Nr \d+\s*[–-]\s*\d{4,6}\s*[–-]/.test(l))?.match(/[–-]\s*(\d{4,6})\s*[–-]/)?.[1];
+  const start = Number(entry(position)), next = Number(entry(position + 1));
+  if (!start || !page2) return null;
+  const toPdf = (journalPage: number) => journalPage - Number(page2) + 2;
+  return { start: toPdf(start), end: next > start ? toPdf(next) - 1 : toPdf(start) + 30 };
+}
+
+/** Zone symbols (e.g. "21MN", "KDZ") from OCR of the plan drawing around the parcel. */
+export const planSymbols = (ocr: string) => [...new Set([...ocr.toUpperCase().matchAll(/(?<![A-Z0-9])(\d{0,3})\s?([A-Z]{1,4}(?:-[A-Z]{1,3})?)(?![A-Z0-9])/g)]
+  .filter(m => /^(MN|MW|MNU|U|UP|ZP|ZL|R|KD[A-Z]?|KDW|KS|P|PU|ZE|WS|E|K|W|G|IT|UK|US|UO|UZ|MU|RM|ZN|ZD)(-[A-Z]{1,3})?$/.test(m[2])).filter(m => m[1] || m[2].length > 1).map(m => m[1] + m[2]))].slice(0, 20);
+/** How many of the drawing's symbols the plan text defines ("21MN" also counts inside a list "1MN, … 21MN"). */
+export const symbolHits = (text: string, symbols: string[]) => symbols.filter(s => new RegExp(`(?<![\\p{L}\\d])${s.replace(/^(\d+)/, '$1\\s?')}(?![\\p{L}\\d])`, 'u').test(text)).length;

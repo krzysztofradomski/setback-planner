@@ -372,6 +372,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   }
   /** The local plan from the official journal. The browser reads the journal (it refuses server requests); the worker's
    *  Workers AI picks the plan covering the parcel and quotes its building rules verbatim. */
+  async function ocr(data,pages){const lp=await import('./core/local-plan.ts'),out=[];for(const img of await lp.pdfPages(data,pages)){const r=await window.fetch('/api/ocr-page',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:img});if(r.ok)out.push((await r.json()).text);}return out.join('\n');}
   async function readPlanRules(d,key){
     const id=state.parcel?.identifier;if(!id)return;
     const lp=await import('./core/local-plan.ts'),base=lp.journals[id.slice(0,2)],[e,n]=d.point,done=rules=>{if(siteKey!==key)return;siteData.planRules=rules;renderSitePanel();};
@@ -382,22 +383,36 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       let address={};try{address=JSON.parse(uug).results?.['1']??{};}catch{/* no nearby address */}
       const commune=uldk.split('\n')[1]?.trim()??'',streets=lp.streetsNear(lines,e,n);
       const candidates=(await lp.searchPlans(base,address.city??'',commune)).slice(0,14);
+      // Zone symbols on the plan drawing at the parcel (OCR of the national plan map) identify the plan that defines them.
+      let symbols=[];
+      try{const img=d.layers.planning?.image;if(img&&img.length>4000){const bmp=await window.createImageBitmap(await (await window.fetch(img)).blob()),c=document.createElement('canvas');c.width=c.height=1024;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,1024,1024);g.drawImage(bmp,0,0,1024,1024);
+        const jpeg=await new Promise(r=>c.toBlob(r,'image/jpeg',.9)),r=await window.fetch('/api/ocr-page?kind=map',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:jpeg});if(r.ok)symbols=lp.planSymbols((await r.json()).text);}}catch{/* no drawing: streets only */}
       if(!candidates.length){done({status:'none',note:bi('The official journal lists no local plans for this place.','W dzienniku urzędowym nie ma planów miejscowych dla tej miejscowości.')});return;}
-      // HTML text for most acts; PDF-only acts (the three newest) are converted by the worker.
+      // HTML text for most acts; PDF-only acts (up to six) are converted by the worker.
       let pdfs=0;
       const texts=await Promise.all(candidates.map(async c=>{
         const html=await lp.actText(base,c.oid).catch(()=>null);if(html)return {c,text:html,source:'html'};
-        if(pdfs++>=3)return {c,text:'',source:'none'};
-        try{const blob=await (await window.fetch(`${base}/GetActPdf.ashx?year=${c.year}&book=0&position=${c.position}`)).blob();if(blob.size>20e6)return {c,text:'',source:'none'};
-          const r=await window.fetch('/api/pdf-text',{method:'POST',headers:{'Content-Type':'application/pdf'},body:blob});return {c,text:r.ok?(await r.json()).text:'',source:'pdf'};}catch{return {c,text:'',source:'none'};}
+        if(pdfs++>=6)return {c,text:'',source:'none'};
+        try{const blob=await (await window.fetch(c.pdf)).blob();
+          if(blob.size<=20e6){const r=await window.fetch('/api/pdf-text',{method:'POST',headers:{'Content-Type':'application/pdf'},body:blob});const text=r.ok?(await r.json()).text:'';if(!lp.looksScanned(text,blob.size))return {c,text,source:'pdf'};}
+          // Scanned act: OCR the first two pages now (they say which area the plan covers); the rest only if it is chosen.
+          const data=await blob.arrayBuffer(),head=await ocr(data,[1,2]),pages=lp.actPages(head,c.position);
+          return {c,text:pages?await ocr(data,[pages.start,pages.start+1]):head,source:'ocr',data,pages:pages??{start:1,end:40}};}catch{return {c,text:'',source:'none'};}
       }));
-      const opposite={'północ':'południe','północny wschód':'południowy zachód','wschód':'zachód','południowy wschód':'północny zachód','południe':'północ','południowy zachód':'północny wschód','zachód':'wschód','północny zachód':'południowy wschód'},stem=name=>name.split(' ').at(-1).slice(0,-2),named=streets.filter(s=>stem(s.name).length>=5),scored=texts.filter(t=>t.text).map(t=>({...t,hits:named.filter(s=>t.text.includes(stem(s.name))).length})).sort((a,b)=>b.hits-a.hits||b.c.year-a.c.year);
-      const shortlist=(scored.some(t=>t.hits)?scored.filter(t=>t.hits):scored).slice(0,5);
+      const opposite={'północ':'południe','północny wschód':'południowy zachód','wschód':'zachód','południowy wschód':'północny zachód','południe':'północ','południowy zachód':'północny wschód','zachód':'wschód','północny zachód':'południowy wschód'},stem=name=>name.split(' ').at(-1).slice(0,-2),named=streets.filter(s=>stem(s.name).length>=5),scored=texts.filter(t=>t.text).map(t=>({...t,sym:lp.symbolHits(t.text,symbols),hits:3*lp.symbolHits(t.text,symbols)+named.filter(s=>t.text.includes(stem(s.name))).length})).sort((a,b)=>b.hits-a.hits||b.c.year-a.c.year);
+      let shortlist=(scored.some(t=>t.hits)?scored.filter(t=>t.hits):scored).slice(0,5);
+      // The drawing's zone symbols decide when one plan defines clearly more of them than any other; the AI only breaks ties.
+      const bySym=[...shortlist].sort((a,b)=>b.sym-a.sym),decided=bySym[0]?.sym>0&&bySym[0].sym>(bySym[1]?.sym??0)?bySym[0]:null,alternatives=shortlist;
+      if(decided)shortlist=[decided];
       if(!shortlist.length){done({status:'none',note:bi('Plan texts are not available in the journal.','Teksty planów są niedostępne w dzienniku.')});return;}
-      const r=await window.fetch('/api/plan-pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:[address.street,address.number,address.city].filter(Boolean).join(' '),streets:streets.map(s=>`działka leży na ${opposite[s.side]} od ul. ${s.name} (${s.distance} m)`),plans:shortlist.map(t=>({title:t.c.title,scope:lp.planScope(t.text).slice(0,800),rules:lp.ruleExcerpt(t.text,12000)}))})});
+      const r=await window.fetch('/api/plan-pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:[address.street,address.number,address.city].filter(Boolean).join(' '),streets:[...streets.slice(0,7).map(s=>`działka leży na ${opposite[s.side]} od ul. ${s.name} (${s.distance} m)`),...(symbols.length?[`symbole na rysunku planu przy działce: ${symbols.join(', ')}`.slice(0,160)]:[])],plans:shortlist.map(t=>({title:t.c.title,scope:lp.planScope(t.text).slice(0,800),rules:lp.ruleExcerpt(t.text,12000)}))})});
       const ai=r.ok?await r.json():{best:0,reason:bi('Most mentions of the streets next to the parcel (AI unavailable).','Najwięcej wzmianek o ulicach przy działce (AI niedostępne).'),aiUsed:false,extraction:null};
-      const pick=shortlist[ai.best]??shortlist[0];
-      done({status:'found',plan:{title:pick.c.title,url:pick.c.url,pdf:`${base}/GetActPdf.ashx?year=${pick.c.year}&book=0&position=${pick.c.position}`,scope:lp.planScope(pick.text).slice(0,600),source:pick.source},reason:ai.reason,aiUsed:ai.aiUsed,extraction:ai.extraction,alternatives:shortlist.filter(t=>t!==pick).slice(0,4).map(t=>({title:t.c.title,url:t.c.url}))});
+      const pick=shortlist[ai.best]??shortlist[0];if(decided)ai.reason=bi(`The plan text defines the zone symbols drawn at the parcel: ${symbols.join(', ')}.`,`Tekst planu definiuje symbole terenów z rysunku planu przy działce: ${symbols.join(', ')}.`);
+      // A scanned winner: OCR the remaining pages and read its rules from the full text.
+      if(pick.source==='ocr'&&pick.data){const {start,end}=pick.pages;pick.text+='\n'+await ocr(pick.data,Array.from({length:Math.max(0,Math.min(end,start+11)-start-1)},(_,i)=>start+2+i));
+        const r2=await window.fetch('/api/plan-pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:'',streets:[],plans:[{title:pick.c.title,scope:lp.planScope(pick.text).slice(0,800),rules:lp.ruleExcerpt(pick.text,12000)}]})});
+        if(r2.ok)ai.extraction=(await r2.json()).extraction;}
+      done({status:'found',plan:{title:pick.c.title,url:pick.c.url,pdf:pick.c.pdf,scope:lp.planScope(pick.text).slice(0,600),source:pick.source},reason:ai.reason,aiUsed:ai.aiUsed,extraction:ai.extraction,alternatives:alternatives.filter(t=>t!==pick).slice(0,4).map(t=>({title:t.c.title,url:t.c.url}))});
     }catch{done({status:'error',note:bi('The official journal did not respond.','Dziennik urzędowy nie odpowiedział.')});}
   }
   function syncSiteData(){
