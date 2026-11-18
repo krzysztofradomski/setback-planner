@@ -13,17 +13,18 @@ export interface Street { name: string; distance: number; side: string }
 const plain = (html: string) => html.replace(/<\/p>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\u00a0/g, ' ')
   .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/[ \t\r]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{2,}/g, '\n').trim();
 
-/** Plan resolutions whose title names any of `places`, newest first. */
-export async function searchPlans(base: string, places: string[], fetcher: typeof fetch = fetch): Promise<PlanCandidate[]> {
-  const found = new Map<number, PlanCandidate>();
-  for (const place of [...new Set(places)].slice(0, 3)) {
+/** Plan resolutions for a place, newest first. A town that shares its gmina's name keeps only "miasta X" plans, so the
+ *  gmina's village plans ("gminy X dla wsi Y") do not crowd out the town's own. */
+export async function searchPlans(base: string, city: string, commune: string, fetcher: typeof fetch = fetch): Promise<PlanCandidate[]> {
+  const found = new Map<number, PlanCandidate>(), place = city || commune, kinds = city && city === commune ? 'miasta' : 'miasta|gminy|gm\\.|wsi|obrębu|dla';
+  {
     const r = await fetcher(`${base}/api/SearchLegalAct`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ Title: `zagospodarowania przestrzennego ${place}`, PageNumber: 1, ResultCount: 60, SortColumnName: 'ActDate', SortAscending: false }), signal: AbortSignal.timeout(15000) });
     if (!r.ok) throw new Error('Journal search unavailable');
     const j = await r.json() as { LegalActs?: { Oid: number; Year: number; Position: number; Title?: string; Subject?: string }[] };
     for (const a of j.LegalActs ?? []) {
       const title = String(a.Title || a.Subject || '').replace(/\s+/g, ' ').trim();
       // The title search is a substring match; keep only plans of this town or gmina (another gmina may have an area called the same).
-      const ours = new RegExp(`(miasta|gminy|gm\\.|wsi|obrębu)\\s+${place.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'iu').test(title);
+      const ours = new RegExp(`(${kinds})\\s+(?:części\\s+)?${place.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'iu').test(title);
       if (ours && /zagospodarowania przestrzennego/i.test(title) && Number.isInteger(a.Oid)) found.set(a.Oid, { oid: a.Oid, year: a.Year, position: a.Position, title: title.slice(0, 400), url: `${base}/legalact/${a.Year}/${a.Position}/` });
     }
   }

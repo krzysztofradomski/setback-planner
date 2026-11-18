@@ -380,8 +380,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       const get=u=>window.fetch(u).then(r=>r.ok?r.text():'').catch(()=>'');
       const [uldk,uug,lines]=await Promise.all([get(`https://uldk.gugik.gov.pl/?request=GetParcelById&id=${encodeURIComponent(id)}&result=commune`),get(`https://services.gugik.gov.pl/uug/?request=GetAddressReverse&location=POINT(${e}%20${n})&srid=2180`),lp.streetLines(e,n).catch(()=>[])]);
       let address={};try{address=JSON.parse(uug).results?.['1']??{};}catch{/* no nearby address */}
-      const commune=uldk.split('\n')[1]?.trim(),streets=lp.streetsNear(lines,e,n),places=[address.city,commune].filter(Boolean);
-      const candidates=(await lp.searchPlans(base,places)).slice(0,14);
+      const commune=uldk.split('\n')[1]?.trim()??'',streets=lp.streetsNear(lines,e,n);
+      const candidates=(await lp.searchPlans(base,address.city??'',commune)).slice(0,14);
       if(!candidates.length){done({status:'none',note:bi('The official journal lists no local plans for this place.','W dzienniku urzędowym nie ma planów miejscowych dla tej miejscowości.')});return;}
       // HTML text for most acts; PDF-only acts (the three newest) are converted by the worker.
       let pdfs=0;
@@ -391,10 +391,10 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
         try{const blob=await (await window.fetch(`${base}/GetActPdf.ashx?year=${c.year}&book=0&position=${c.position}`)).blob();if(blob.size>20e6)return {c,text:'',source:'none'};
           const r=await window.fetch('/api/pdf-text',{method:'POST',headers:{'Content-Type':'application/pdf'},body:blob});return {c,text:r.ok?(await r.json()).text:'',source:'pdf'};}catch{return {c,text:'',source:'none'};}
       }));
-      const stem=name=>name.split(' ').at(-1).slice(0,-2),scored=texts.filter(t=>t.text).map(t=>({...t,hits:streets.filter(s=>t.text.includes(stem(s.name))).length})).sort((a,b)=>b.hits-a.hits||b.c.year-a.c.year);
+      const opposite={'północ':'południe','północny wschód':'południowy zachód','wschód':'zachód','południowy wschód':'północny zachód','południe':'północ','południowy zachód':'północny wschód','zachód':'wschód','północny zachód':'południowy wschód'},const stem=name=>name.split(' ').at(-1).slice(0,-2),named=streets.filter(s=>stem(s.name).length>=5),scored=texts.filter(t=>t.text).map(t=>({...t,hits:named.filter(s=>t.text.includes(stem(s.name))).length})).sort((a,b)=>b.hits-a.hits||b.c.year-a.c.year);
       const shortlist=(scored.some(t=>t.hits)?scored.filter(t=>t.hits):scored).slice(0,5);
       if(!shortlist.length){done({status:'none',note:bi('Plan texts are not available in the journal.','Teksty planów są niedostępne w dzienniku.')});return;}
-      const r=await window.fetch('/api/plan-pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:[address.street,address.number,address.city].filter(Boolean).join(' '),streets:streets.map(s=>`${s.name}: ${s.distance} m, na ${s.side} od działki`),plans:shortlist.map(t=>({title:t.c.title,scope:lp.planScope(t.text).slice(0,800),rules:lp.ruleExcerpt(t.text,12000)}))})});
+      const r=await window.fetch('/api/plan-pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:[address.street,address.number,address.city].filter(Boolean).join(' '),streets:streets.map(s=>`działka leży na ${opposite[s.side]} od ul. ${s.name} (${s.distance} m)`),plans:shortlist.map(t=>({title:t.c.title,scope:lp.planScope(t.text).slice(0,800),rules:lp.ruleExcerpt(t.text,12000)}))})});
       const ai=r.ok?await r.json():{best:0,reason:bi('Most mentions of the streets next to the parcel (AI unavailable).','Najwięcej wzmianek o ulicach przy działce (AI niedostępne).'),aiUsed:false,extraction:null};
       const pick=shortlist[ai.best]??shortlist[0];
       done({status:'found',plan:{title:pick.c.title,url:pick.c.url,pdf:`${base}/GetActPdf.ashx?year=${pick.c.year}&book=0&position=${pick.c.position}`,scope:lp.planScope(pick.text).slice(0,600),source:pick.source},reason:ai.reason,aiUsed:ai.aiUsed,extraction:ai.extraction,alternatives:shortlist.filter(t=>t!==pick).slice(0,4).map(t=>({title:t.c.title,url:t.c.url}))});
