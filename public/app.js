@@ -370,10 +370,35 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       planSetbacks=buildingLineSetbacks(state.plot,points,(d.bbox[2]-d.bbox[0])/d.size,p=>pointLocation(p,state.plot)!=='outside');siteData.planSetbacks=planSetbacks;render();renderSitePanel();
     }catch{/* no plan lines: user setbacks only */}
   }
-  /** The local plan's text from the official journal, chosen and summarised by the worker (quotes kept verbatim). */
+  /** The local plan from the official journal. The browser reads the journal (it refuses server requests); the worker's
+   *  Workers AI picks the plan covering the parcel and quotes its building rules verbatim. */
   async function readPlanRules(d,key){
     const id=state.parcel?.identifier;if(!id)return;
-    try{const r=await window.fetch(`/api/plan-rules?parcel=${encodeURIComponent(id)}&x=${d.point[0]}&y=${d.point[1]}`);if(!r.ok)return;const rules=await r.json();if(siteKey!==key)return;siteData.planRules=rules;renderSitePanel();}catch{/* plan text unavailable: the report lists the journal */}
+    const lp=await import('./core/local-plan.ts'),base=lp.journals[id.slice(0,2)],[e,n]=d.point,done=rules=>{if(siteKey!==key)return;siteData.planRules=rules;renderSitePanel();};
+    if(!base){done({status:'unsupported',note:bi('Plan lookup currently covers the Masovian voivodeship.','Wyszukiwanie planów działa na razie dla województwa mazowieckiego.')});return;}
+    try{
+      const get=u=>window.fetch(u).then(r=>r.ok?r.text():'').catch(()=>'');
+      const [uldk,uug,lines]=await Promise.all([get(`https://uldk.gugik.gov.pl/?request=GetParcelById&id=${encodeURIComponent(id)}&result=commune`),get(`https://services.gugik.gov.pl/uug/?request=GetAddressReverse&location=POINT(${e}%20${n})&srid=2180`),lp.streetLines(e,n).catch(()=>[])]);
+      let address={};try{address=JSON.parse(uug).results?.['1']??{};}catch{/* no nearby address */}
+      const commune=uldk.split('\n')[1]?.trim(),streets=lp.streetsNear(lines,e,n),places=[address.city,commune].filter(Boolean);
+      const candidates=(await lp.searchPlans(base,places)).slice(0,14);
+      if(!candidates.length){done({status:'none',note:bi('The official journal lists no local plans for this place.','W dzienniku urzędowym nie ma planów miejscowych dla tej miejscowości.')});return;}
+      // HTML text for most acts; PDF-only acts (the three newest) are converted by the worker.
+      let pdfs=0;
+      const texts=await Promise.all(candidates.map(async c=>{
+        const html=await lp.actText(base,c.oid).catch(()=>null);if(html)return {c,text:html,source:'html'};
+        if(pdfs++>=3)return {c,text:'',source:'none'};
+        try{const blob=await (await window.fetch(`${base}/GetActPdf.ashx?year=${c.year}&book=0&position=${c.position}`)).blob();if(blob.size>20e6)return {c,text:'',source:'none'};
+          const r=await window.fetch('/api/pdf-text',{method:'POST',headers:{'Content-Type':'application/pdf'},body:blob});return {c,text:r.ok?(await r.json()).text:'',source:'pdf'};}catch{return {c,text:'',source:'none'};}
+      }));
+      const stem=name=>name.split(' ').at(-1).slice(0,-2),scored=texts.filter(t=>t.text).map(t=>({...t,hits:streets.filter(s=>t.text.includes(stem(s.name))).length})).sort((a,b)=>b.hits-a.hits||b.c.year-a.c.year);
+      const shortlist=(scored.some(t=>t.hits)?scored.filter(t=>t.hits):scored).slice(0,5);
+      if(!shortlist.length){done({status:'none',note:bi('Plan texts are not available in the journal.','Teksty planów są niedostępne w dzienniku.')});return;}
+      const r=await window.fetch('/api/plan-pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:[address.street,address.number,address.city].filter(Boolean).join(' '),streets:streets.map(s=>`${s.name}: ${s.distance} m, na ${s.side} od działki`),plans:shortlist.map(t=>({title:t.c.title,scope:lp.planScope(t.text).slice(0,800),rules:lp.ruleExcerpt(t.text,12000)}))})});
+      const ai=r.ok?await r.json():{best:0,reason:bi('Most mentions of the streets next to the parcel (AI unavailable).','Najwięcej wzmianek o ulicach przy działce (AI niedostępne).'),aiUsed:false,extraction:null};
+      const pick=shortlist[ai.best]??shortlist[0];
+      done({status:'found',plan:{title:pick.c.title,url:pick.c.url,pdf:`${base}/GetActPdf.ashx?year=${pick.c.year}&book=0&position=${pick.c.position}`,scope:lp.planScope(pick.text).slice(0,600),source:pick.source},reason:ai.reason,aiUsed:ai.aiUsed,extraction:ai.extraction,alternatives:shortlist.filter(t=>t!==pick).slice(0,4).map(t=>({title:t.c.title,url:t.c.url}))});
+    }catch{done({status:'error',note:bi('The official journal did not respond.','Dziennik urzędowy nie odpowiedział.')});}
   }
   function syncSiteData(){
     const frame=siteFrame(state),key=frame?.query??'';if(key===siteKey)return;
