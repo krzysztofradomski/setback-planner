@@ -22,7 +22,9 @@ export async function searchPlans(base: string, places: string[], fetcher: typeo
     const j = await r.json() as { LegalActs?: { Oid: number; Year: number; Position: number; Title?: string; Subject?: string }[] };
     for (const a of j.LegalActs ?? []) {
       const title = String(a.Title || a.Subject || '').replace(/\s+/g, ' ').trim();
-      if (/zagospodarowania przestrzennego/i.test(title) && Number.isInteger(a.Oid)) found.set(a.Oid, { oid: a.Oid, year: a.Year, position: a.Position, title: title.slice(0, 400), url: `${base}/legalact/${a.Year}/${a.Position}/` });
+      // The title search is a substring match; keep only plans of this town or gmina (another gmina may have an area called the same).
+      const ours = new RegExp(`(miasta|gminy|gm\\.|wsi|obrębu)\\s+${place.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'iu').test(title);
+      if (ours && /zagospodarowania przestrzennego/i.test(title) && Number.isInteger(a.Oid)) found.set(a.Oid, { oid: a.Oid, year: a.Year, position: a.Position, title: title.slice(0, 400), url: `${base}/legalact/${a.Year}/${a.Position}/` });
     }
   }
   return [...found.values()].sort((a, b) => b.year - a.year || b.position - a.position);
