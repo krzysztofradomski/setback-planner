@@ -1,6 +1,6 @@
 <!doctype html><html lang="pl"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Setback Planner</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><path d='M5 6 L33 4 L36 35 L3 33 Z' fill='%23dde8d1' stroke='%2326332c' stroke-width='3' stroke-linejoin='round'/><rect x='12' y='12' width='13' height='11' fill='%23efdccb' stroke='%23b06a3a' stroke-width='2.5'/><path d='M25 17.5 H34.6' stroke='%232350c2' stroke-width='2'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23e6e9ef'/><path d='M6 7.5 L32.5 5.5 L35 34 L4.5 32 Z' fill='%23f9fafc' stroke='%23232b3a' stroke-width='2.4' stroke-linejoin='round'/><rect x='14' y='15' width='11' height='9' rx='2' fill='%233b6cf6'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..700&family=Nunito:wght@500..900&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -181,9 +181,9 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
   <aside class="rail" data-t-aria="controls" aria-label="Controls">
     <header class="brand">
       <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
-        <path d="M5 6 L33 4 L36 35 L3 33 Z" style="fill:var(--plot);stroke:var(--plot-edge);stroke-width:2;stroke-linejoin:round"/>
-        <rect x="12" y="12" width="13" height="11" style="fill:var(--house-fill);stroke:var(--house);stroke-width:1.75"/>
-        <path d="M25 17.5 H34.6" style="stroke:var(--dim);stroke-width:1.2"/>
+        <path d="M6 7.5 L32.5 5.5 L35 34 L4.5 32 Z" style="fill:#f9fafc;stroke:#232b3a;stroke-width:2.4;stroke-linejoin:round"/>
+        <path d="M10.5 11.5 L28.5 10.2 L30.2 29.4 L9.6 28 Z" style="fill:none;stroke:#3b6cf6;stroke-width:1.4;stroke-dasharray:2.6 2.2;stroke-linejoin:round"/>
+        <rect x="14" y="15" width="11" height="9" rx="2" style="fill:#3b6cf6"/>
       </svg>
       <div>
         <h1 data-t="title">Setback Planner</h1>
@@ -298,7 +298,7 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
   </aside>
 
   <main class="stage">
-    <div class="view-switch" role="group" aria-label="View"><button id="view-2d" aria-pressed="true">2D</button><button id="view-3d" aria-pressed="false">3D</button><button id="view-map" aria-pressed="false" data-t="mapView">Map</button></div>
+    <div class="view-switch" role="group" aria-label="View"><button id="view-2d" aria-pressed="true">2D</button><button id="view-3d" aria-pressed="false">3D</button><button id="view-map" aria-pressed="false" data-t="mapView">Map</button><label class="colour-switch"><input type="checkbox" id="view-colour" role="switch"><span data-bi="Colours|Kolory">Colours</span></label></div>
     <div id="parcel-map" hidden></div>
     <div id="map-controls" hidden><label><span data-t="mapLayer">Map layer</span><select id="map-base"><option value="osm">OpenStreetMap</option><option value="ortho" data-t="ortho">Orthophoto · GUGiK</option><option value="none" data-t="off">Off</option></select></label><label class="check"><input id="map-cadastre" type="checkbox"><span data-t="cadastre">Cadastre · GUGiK</span></label><button id="map-fit" data-t="fit">Fit</button><button id="map-pick" aria-pressed="false" data-t="pickParcel">Select parcel</button></div>
     <p id="map-status" class="hint" role="status" hidden></p>

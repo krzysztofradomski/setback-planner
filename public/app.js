@@ -391,7 +391,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
         try{const blob=await (await window.fetch(`${base}/GetActPdf.ashx?year=${c.year}&book=0&position=${c.position}`)).blob();if(blob.size>20e6)return {c,text:'',source:'none'};
           const r=await window.fetch('/api/pdf-text',{method:'POST',headers:{'Content-Type':'application/pdf'},body:blob});return {c,text:r.ok?(await r.json()).text:'',source:'pdf'};}catch{return {c,text:'',source:'none'};}
       }));
-      const opposite={'północ':'południe','północny wschód':'południowy zachód','wschód':'zachód','południowy wschód':'północny zachód','południe':'północ','południowy zachód':'północny wschód','zachód':'wschód','północny zachód':'południowy wschód'},const stem=name=>name.split(' ').at(-1).slice(0,-2),named=streets.filter(s=>stem(s.name).length>=5),scored=texts.filter(t=>t.text).map(t=>({...t,hits:named.filter(s=>t.text.includes(stem(s.name))).length})).sort((a,b)=>b.hits-a.hits||b.c.year-a.c.year);
+      const opposite={'północ':'południe','północny wschód':'południowy zachód','wschód':'zachód','południowy wschód':'północny zachód','południe':'północ','południowy zachód':'północny wschód','zachód':'wschód','północny zachód':'południowy wschód'},stem=name=>name.split(' ').at(-1).slice(0,-2),named=streets.filter(s=>stem(s.name).length>=5),scored=texts.filter(t=>t.text).map(t=>({...t,hits:named.filter(s=>t.text.includes(stem(s.name))).length})).sort((a,b)=>b.hits-a.hits||b.c.year-a.c.year);
       const shortlist=(scored.some(t=>t.hits)?scored.filter(t=>t.hits):scored).slice(0,5);
       if(!shortlist.length){done({status:'none',note:bi('Plan texts are not available in the journal.','Teksty planów są niedostępne w dzienniku.')});return;}
       const r=await window.fetch('/api/plan-pick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:[address.street,address.number,address.city].filter(Boolean).join(' '),streets:streets.map(s=>`działka leży na ${opposite[s.side]} od ul. ${s.name} (${s.distance} m)`),plans:shortlist.map(t=>({title:t.c.title,scope:lp.planScope(t.text).slice(0,800),rules:lp.ruleExcerpt(t.text,12000)}))})});
@@ -913,12 +913,16 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     try {
       if(!viewer){
         const {createViewer}=await import('./viewer/viewer.ts');
-        viewer=createViewer($('#viewer'),()=>{viewer?.dispose();viewer=null;setViewerMode(false);toast(t('viewerFailure'));});
+        viewer=createViewer($('#viewer'),()=>{viewer?.dispose();viewer=null;setViewerMode(false);toast(t('viewerFailure'));});viewer.setPlain(!$('#view-colour').checked);
       }
       $('#viewer-note').textContent=t('viewerHint');setViewerMode(true);void refreshContext();
     } catch {viewer?.dispose();viewer=null;setViewerMode(false);toast(t('viewerFailure'));}
     finally {$('#view-3d').disabled=false;}
   };
+  // Views start as a white model; the switch brings back colours and textures in the plan, map and 3D scene.
+  const setColour=on=>{document.documentElement.dataset.colour=on?'on':'plain';viewer?.setPlain(!on);try{localStorage.setItem('setback-colour',on?'1':'0');}catch{/* private mode */}};
+  $('#view-colour').checked=(()=>{try{return localStorage.getItem('setback-colour')==='1';}catch{return false;}})();setColour($('#view-colour').checked);
+  $('#view-colour').onchange=e=>setColour(e.target.checked);
   // Surroundings (orthophoto + neighbouring buildings) for georeferenced parcels; derived data, never saved.
   let contextKey='',lastContext=null,contextJob=Promise.resolve();
   const contextToggle=document.createElement('label');contextToggle.className='check';contextToggle.innerHTML='<input type="checkbox" id="view-context" checked><span data-bi="Surroundings|Otoczenie">'+bi('Surroundings','Otoczenie')+'</span>';$('#viewer-controls').append(contextToggle);
@@ -1262,7 +1266,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   // Phone: a "Więcej" tab opens the most used actions, so nothing depends on the desktop header.
   const quickActions=[['📄',bi('Full report','Pełny raport'),'#b-report'],['🔗',bi('Share link','Udostępnij link'),'#b-link'],['🧊',bi('3D view','Widok 3D'),'#view-3d'],['🗺️',bi('Map','Mapa'),'#view-map'],['↶',bi('Undo','Cofnij'),'#t-undo'],['↷',bi('Redo','Ponów'),'#t-redo'],['📐',bi('Plan as SVG','Plan SVG'),'#b-svg'],['💾',bi('Save project file','Zapisz projekt'),'#b-download']];
   const quick=document.createElement('div');quick.className='quick-sheet';quick.hidden=true;
-  quick.innerHTML=`<div class="quick-panel" role="dialog" aria-label="${bi('Quick actions','Szybkie akcje')}"><h3>${bi('Quick actions','Szybkie akcje')}</h3><div class="quick-grid">${quickActions.map(([icon,label,target])=>`<button type="button" data-quick="${target}"><span aria-hidden="true">${icon}</span>${esc(label)}</button>`).join('')}</div></div>`;
+  quick.innerHTML=`<div class="quick-panel" role="dialog" aria-label="${bi('Quick actions','Szybkie akcje')}"><h3>${bi('Quick actions','Szybkie akcje')}</h3><div class="quick-grid">${quickActions.map(([icon,label,target])=>`<button type="button" data-quick="${target}"><span aria-hidden="true">${icon}</span>${esc(label)}</button>`).join('')}</div><div class="quick-advanced"><p class="hint">${bi('Shows manual drawing, parcel import and coordinates, materials, openings and expert garden tools.','Pokazuje ręczne rysowanie, import działki i współrzędne, materiały, otwory i narzędzia eksperckie ogrodu.')}</p></div></div>`;
   const quickTab=document.createElement('button');quickTab.type='button';quickTab.className='quick-tab';quickTab.setAttribute('aria-pressed','false');
   quickTab.innerHTML=`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="5" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="19" cy="12" r="2" fill="currentColor"/></svg><span>${bi('More','Więcej')}</span>`;
   const showQuick=open=>{quick.hidden=!open;quickTab.setAttribute('aria-pressed',String(open));};
@@ -1276,7 +1280,9 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   // Simple mode hides manual, expert setup; the header switch reveals it and remembers the choice.
   const ADV_LS='setback-planner-advanced',advanced=document.createElement('label');advanced.className='advanced-switch';
   advanced.innerHTML='<input type="checkbox" id="advanced-mode" role="switch"><span data-bi="Advanced|Zaawansowane">'+bi('Advanced','Zaawansowane')+'</span>';
-  document.querySelector('.header-actions')?.prepend(advanced);
+  // Phones have no room for its label in the header, so there it lives, labelled, in the "Więcej" sheet.
+  const phone=matchMedia('(max-width:760px)'),placeAdvanced=()=>{if(phone.matches)quick.querySelector('.quick-advanced')?.prepend(advanced);else document.querySelector('.header-actions')?.prepend(advanced);};
+  placeAdvanced();phone.addEventListener('change',placeAdvanced);
   const setAdvanced=on=>{document.querySelector('.app').classList.toggle('simple',!on);$('#advanced-mode').checked=on;try{localStorage.setItem(ADV_LS,on?'1':'0');}catch{/* private mode */}};
   $('#advanced-mode').onchange=e=>setAdvanced(e.target.checked);
   setAdvanced((()=>{try{return localStorage.getItem(ADV_LS)==='1';}catch{return false;}})());

@@ -52,16 +52,35 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     frame=0;if(disposed||!weatherFx)return;if(!active){frame=requestAnimationFrame(tick);return;}
     const dt=Math.min(.05,(now-(last||now))/1000),attr=weatherFx.geometry.getAttribute('position') as THREE.BufferAttribute,a=attr.array as Float32Array,rain=weatherKind==='rain',step=rain?6:3,fall=(rain?18:1.1)*dt,{min,max}=weatherBox;last=now;
     for(let i=0;i<a.length;i+=step){a[i+1]-=fall;if(rain){a[i+4]-=fall;a[i]-=fall*.16;a[i+3]-=fall*.16;}else{a[i]+=Math.sin(now/900+i)*.006;}if(a[i+1]<0){const y=max.y;a[i+1]=y;if(rain)a[i+4]=y+1.1;}if(a[i]<min.x||a[i]>max.x){a[i]=min.x+Math.random()*(max.x-min.x);if(rain)a[i+3]=a[i]+.18;}}// rain falls along its wind slant
-    attr.needsUpdate=true;renderer.render(scene,camera);frame=requestAnimationFrame(tick);
+    attr.needsUpdate=true;draw();frame=requestAnimationFrame(tick);
   }
   const contextGroup=new THREE.Group();scene.add(contextGroup);let contextActive=false,contextReady:Promise<void>=Promise.resolve();
-  const land=new THREE.Mesh(new THREE.CircleGeometry(1,72),new THREE.MeshStandardMaterial({color:'#9aae86',roughness:1}));land.rotation.x=-Math.PI/2;land.receiveShadow=true;scene.add(land);
+  const land=new THREE.Mesh(new THREE.CircleGeometry(1,72),new THREE.MeshStandardMaterial({color:'#9aae86',roughness:1}));land.userData.ground=true;land.rotation.x=-Math.PI/2;land.receiveShadow=true;scene.add(land);
   const camera=new THREE.PerspectiveCamera(42,1,0.1,10000),controls=new OrbitControls(camera,renderer.domElement);
   controls.maxPolarAngle=Math.PI*0.49;controls.enableDamping=false;controls.minDistance=2;controls.maxDistance=150;
   const ambient=new THREE.HemisphereLight('#e6f2ff','#6e775f',2);scene.add(ambient);
   const sun=new THREE.DirectionalLight('#fff2d8',3);sun.position.set(-30,60,-35);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.radius=3;sun.shadow.bias=-0.0005;scene.add(sun,sun.target);
   let walkMode=false;let active=true,signature='',extent=50,center=new THREE.Vector3(),disposed=false;
-  const render=()=>{if(active&&!disposed)renderer.render(scene,camera);};
+  // White model by default: every mesh is swapped to a plain white material only for the draw call, so the scene's own
+  // materials are never touched. userData.plainColour keeps an accent (setback line, boundary, tree crowns).
+  let plain=true;const plainMats=new Map<string,THREE.Material>(),plainSky=sky('#ffffff','#e9edf4'),plainFog=new THREE.Fog('#eef1f6',1,2);
+  const plainFor=(m:THREE.Material,o:THREE.Object3D)=>{
+    const tint=o.userData.plainColour as string|undefined,line=(o as THREE.Line).isLine,dashed=m instanceof THREE.LineDashedMaterial;
+    if(line&&!tint)return m;
+    const colour=tint??(o.userData.ground?'#eceff5':'#ffffff'),key=`${colour}|${line}|${dashed}|${m.transparent}|${m.opacity}|${m.side}`;
+    let out=plainMats.get(key);
+    if(!out){out=line?(dashed?new THREE.LineDashedMaterial({color:colour,dashSize:.6,gapSize:.4}):new THREE.LineBasicMaterial({color:colour})):new THREE.MeshStandardMaterial({color:colour,roughness:.92,transparent:m.transparent,opacity:m.opacity,side:m.side,depthWrite:m.depthWrite});plainMats.set(key,out);}
+    return out;
+  };
+  function draw(){
+    if(!plain){renderer.render(scene,camera);return;}
+    const swapped:[THREE.Mesh,THREE.Material|THREE.Material[]][]=[],bg=scene.background,fog=scene.fog;
+    scene.traverse(o=>{const m=o as THREE.Mesh;if(!m.material||o===weatherFx)return;swapped.push([m,m.material]);m.material=Array.isArray(m.material)?m.material.map(x=>plainFor(x,o)):plainFor(m.material,o);});
+    scene.background=plainSky;if(fog instanceof THREE.Fog){plainFog.near=fog.near*2;plainFog.far=fog.far*2;}scene.fog=plainFog;renderer.toneMappingExposure=1.5;// ACES greys a white surface; lift it back to paper
+    renderer.render(scene,camera);
+    for(const [m,material] of swapped)m.material=material;scene.background=bg;scene.fog=fog;renderer.toneMappingExposure=1.1;
+  }
+  const render=()=>{if(active&&!disposed)draw();};
   controls.addEventListener('change',render);
   const walk=(e:KeyboardEvent)=>{if(!active||!walkMode||!['w','a','s','d'].includes(e.key.toLowerCase())||['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement)?.tagName))return;const forward=controls.target.clone().sub(camera.position);forward.y=0;forward.normalize();const right=new THREE.Vector3().crossVectors(forward,camera.up);const direction=e.key==='w'?forward:e.key==='s'?forward.negate():e.key==='d'?right:right.negate();camera.position.add(direction);controls.target.add(direction);render();};window.addEventListener('keydown',walk);
   const resize=()=>{const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();render();};
@@ -96,14 +115,14 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
       if(project.terrain){const samples=project.terrain.samples,base=samples[0].z,position=geometry.getAttribute('position'),index=geometry.index,vertices:number[]=[];
         const subdivide=(a:number[],b:number[],c:number[],depth:number)=>{if(depth){const mid=(u:number[],v:number[])=>[(u[0]+v[0])/2,(u[1]+v[1])/2],ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);subdivide(a,ab,ca,depth-1);subdivide(ab,b,bc,depth-1);subdivide(ca,bc,c,depth-1);subdivide(ab,bc,ca,depth-1);}else for(const p of [a,b,c])vertices.push(p[0],p[1],terrainHeight(samples,p[0],-p[1])-base);};
         const count=index?index.count:position.count;for(let i=0;i<count;i+=3){const p=[0,1,2].map(j=>{const k=index?index.getX(i+j):i+j;return[position.getX(k),position.getY(k)];});subdivide(p[0],p[1],p[2],2);}geometry.dispose();geometry=new THREE.ShapeGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.setIndex(null);geometry.computeVertexNormals();}
-      const ground=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1,transparent:true,opacity:contextActive?.3:1,depthWrite:!contextActive}));ground.userData.parcelGround=true;ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
-      const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(outer.map(p=>new THREE.Vector3(p.x,0.03,p.y))),new THREE.LineBasicMaterial({color:'#f4f1e6'}));content.add(boundary);
+      const ground=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:seasonalGround[project.environment.season],side:THREE.DoubleSide,roughness:1,transparent:true,opacity:contextActive?.3:1,depthWrite:!contextActive}));ground.userData.parcelGround=ground.userData.ground=true;ground.rotation.x=-Math.PI/2;ground.position.y=-0.015;ground.receiveShadow=true;content.add(ground);
+      const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(outer.map(p=>new THREE.Vector3(p.x,0.03,p.y))),new THREE.LineBasicMaterial({color:'#f4f1e6'}));boundary.userData.plainColour='#3b5bdb';content.add(boundary);
       // Survey stakes at the boundary corners.
       const stake=new THREE.CylinderGeometry(0.09,0.09,0.6,8),stakeMaterial=new THREE.MeshStandardMaterial({color:'#f2f0ea',roughness:.7});for(const p of outer){const m=new THREE.Mesh(stake,stakeMaterial);m.position.set(p.x,0.3,p.y);m.castShadow=true;content.add(m);}
     }
     // Buildable zone: parcel eroded by the largest house setback (4 m default), drawn as a dashed line.
     if(validRing(project.plot)){const houses=project.items.filter(i=>i.type==='house'),distance=houses.length?Math.max(...houses.map(i=>i.setback)):4;
-      try{const dash=new THREE.BoxGeometry(1,.03,.25),paint=new THREE.MeshStandardMaterial({color:'#f2c230',roughness:.6,emissive:'#3d2f00'});for(const [outer] of setbackArea(project,distance).parts)outer.forEach((a,i)=>{const b=outer[(i+1)%outer.length],length=Math.hypot(b.x-a.x,b.y-a.y),angle=Math.atan2(b.y-a.y,b.x-a.x);for(let t=0;t<length;t+=1.4){const l=Math.min(.9,length-t),m=new THREE.Mesh(dash,paint);m.scale.x=l;const c=t+l/2;m.position.set(a.x+(b.x-a.x)*c/length,.04,a.y+(b.y-a.y)*c/length);m.rotation.y=-angle;m.userData.buildableZone=true;content.add(m);}});}catch{/* invalid setback geometry: skip the guide */}
+      try{const dash=new THREE.BoxGeometry(1,.03,.25),paint=new THREE.MeshStandardMaterial({color:'#f2c230',roughness:.6,emissive:'#3d2f00'});for(const [outer] of setbackArea(project,distance).parts)outer.forEach((a,i)=>{const b=outer[(i+1)%outer.length],length=Math.hypot(b.x-a.x,b.y-a.y),angle=Math.atan2(b.y-a.y,b.x-a.x);for(let t=0;t<length;t+=1.4){const l=Math.min(.9,length-t),m=new THREE.Mesh(dash,paint);m.scale.x=l;const c=t+l/2;m.position.set(a.x+(b.x-a.x)*c/length,.04,a.y+(b.y-a.y)*c/length);m.rotation.y=-angle;m.userData.buildableZone=true;m.userData.plainColour='#4c6ef5';content.add(m);}});}catch{/* invalid setback geometry: skip the guide */}
     }
     for(const item of project.items.filter(i=>i.visible)){const exterior=exteriorFor(item),object=buildBuilding(item,original,makeTexture,project.environment.season,exterior);if(project.terrain)object.position.y=terrainHeight(project.terrain.samples,item.x,item.y)-project.terrain.samples[0].z;if(exterior?.interior&&item.shape==='rectangle')object.add(interiorWalls(item,exterior.interior.walls));content.add(object);}
     applyCutaway();
@@ -147,14 +166,14 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     const trunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(.12,.18,1,6),new THREE.MeshStandardMaterial({color:'#5b4632',roughness:1}),spots.length);
     const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
     spots.forEach((t,i)=>{const h=5.5*t.s+2;m.compose(v.set(t.x,h-1.6*t.s,t.y),q,new THREE.Vector3(2.1*t.s,2.4*t.s,2.1*t.s));crown.setMatrixAt(i,m);m.compose(v.set(t.x,(h-2*t.s)/2,t.y),q,new THREE.Vector3(1,h-2*t.s,1));trunk.setMatrixAt(i,m);});
-    crown.castShadow=trunk.castShadow=true;crown.userData.canopy=trunk.userData.canopy=true;contextGroup.add(crown,trunk);
+    crown.castShadow=trunk.castShadow=true;crown.userData.canopy=trunk.userData.canopy=true;crown.userData.plainColour='#6d8cf7';contextGroup.add(crown,trunk);
   }
   function setContext(ctx:SceneContext|null){
     disposeObject(contextGroup);contextActive=!!ctx;
     content.traverse(o=>{if(o.userData.parcelGround){const m=(o as THREE.Mesh).material as THREE.MeshStandardMaterial;m.opacity=ctx?.3:1;m.depthWrite=!ctx;}});
     if(!ctx){render();return;}
     const plane=new THREE.Mesh(new THREE.PlaneGeometry(ctx.half*2,ctx.half*2),new THREE.MeshStandardMaterial({color:'#ffffff',roughness:1}));
-    plane.rotation.x=-Math.PI/2;plane.position.set(ctx.center.x,-0.04,ctx.center.y);plane.receiveShadow=true;contextGroup.add(plane);
+    plane.rotation.x=-Math.PI/2;plane.position.set(ctx.center.x,-0.04,ctx.center.y);plane.receiveShadow=plane.userData.ground=true;contextGroup.add(plane);
     contextReady=new Promise<void>(done=>new THREE.TextureLoader().setCrossOrigin('anonymous').load(ctx.ortho,texture=>{if(disposed||!plane.parent){texture.dispose();done();return;}texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer.capabilities.getMaxAnisotropy();const m=plane.material as THREE.MeshStandardMaterial;m.map=texture;m.needsUpdate=true;roofMat.map=texture;roofMat.color.set('#ffffff');roofMat.needsUpdate=true;addCanopyTrees(texture.image as CanvasImageSource,ctx);render();done();},undefined,()=>{(plane.material as THREE.MeshStandardMaterial).color.set('#b9c2ad');render();done();}));
     // Neighbours: roofs show the orthophoto projected from above; walls get plaster with window rows in varied tones.
     const span=ctx.half*2,x0=ctx.center.x-ctx.half,y0=ctx.center.y-ctx.half;
@@ -193,10 +212,11 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     walkMode=walking;cutaway=cut;applyCutaway();camera.position.copy(position);controls.target.copy(target);controls.update();render();return shots;
   }
   return {update,view,setContext,addContextFences,focus,snapshots,ready:()=>contextReady,
+    setPlain(value:boolean){plain=value;render();},
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},
     screenshot(){render();return renderer.domElement.toDataURL('image/png');},
-    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();rainSky.dispose();interiorWall.dispose();interiorFloor.dispose();snowSky.dispose();disposeObject(contextGroup);roofMat.dispose();land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
+    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();rainSky.dispose();interiorWall.dispose();interiorFloor.dispose();snowSky.dispose();plainSky.dispose();plainMats.forEach(m=>m.dispose());disposeObject(contextGroup);roofMat.dispose();land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
     memory(){return {...renderer.info.memory};},
   };
 }
