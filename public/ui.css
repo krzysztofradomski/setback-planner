@@ -4134,3 +4134,40 @@ body,
   display: inline;
   order: -1;
 }
+/* start over: a quiet header action, an icon-only tile when the header gets tight, gone on phones (it is in Więcej) */
+.workspace .header-actions .restart-action {
+  color: var(--ink-2);
+}
+.workspace .header-actions .restart-action > span:first-child {
+  font-size: 16px;
+  line-height: 1;
+}
+@media (max-width: 1279px) {
+  .workspace .header-actions .restart-action > span:last-child {
+    display: none;
+  }
+  .workspace .header-actions .restart-action {
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+@media (max-width: 760px) {
+  .workspace .header-actions .restart-action {
+    display: none;
+  }
+}
+.workspace .quick-grid button[data-quick="#b-delete"] {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  font-size: 13.5px;
+  color: var(--warn);
+}
+.workspace .quick-grid button[data-quick="#b-delete"] span {
+  width: 30px;
+  height: 30px;
+  color: var(--warn);
+}

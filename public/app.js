@@ -1264,7 +1264,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
   $('#viewer').addEventListener('pointerdown',()=>$('.stage').classList.add('viewer-quiet'));
   // Phone: a "Więcej" tab opens the most used actions, so nothing depends on the desktop header.
-  const quickActions=[['📄',bi('Full report','Pełny raport'),'#b-report'],['🔗',bi('Share link','Udostępnij link'),'#b-link'],['🧊',bi('3D view','Widok 3D'),'#view-3d'],['🗺️',bi('Map','Mapa'),'#view-map'],['↶',bi('Undo','Cofnij'),'#t-undo'],['↷',bi('Redo','Ponów'),'#t-redo'],['📐',bi('Plan as SVG','Plan SVG'),'#b-svg'],['💾',bi('Save project file','Zapisz projekt'),'#b-download']];
+  const quickActions=[['📄',bi('Full report','Pełny raport'),'#b-report'],['🔗',bi('Share link','Udostępnij link'),'#b-link'],['🧊',bi('3D view','Widok 3D'),'#view-3d'],['🗺️',bi('Map','Mapa'),'#view-map'],['↶',bi('Undo','Cofnij'),'#t-undo'],['↷',bi('Redo','Ponów'),'#t-redo'],['📐',bi('Plan as SVG','Plan SVG'),'#b-svg'],['💾',bi('Save project file','Zapisz projekt'),'#b-download'],['↺',bi('Start over','Zacznij od nowa'),'#b-delete']];
   const quick=document.createElement('div');quick.className='quick-sheet';quick.hidden=true;
   quick.innerHTML=`<div class="quick-panel" role="dialog" aria-label="${bi('Quick actions','Szybkie akcje')}"><h3>${bi('Quick actions','Szybkie akcje')}</h3><div class="quick-grid">${quickActions.map(([icon,label,target])=>`<button type="button" data-quick="${target}"><span aria-hidden="true">${icon}</span>${esc(label)}</button>`).join('')}</div><div class="quick-advanced"><p class="hint">${bi('Shows manual drawing, parcel import and coordinates, materials, openings and expert garden tools.','Pokazuje ręczne rysowanie, import działki i współrzędne, materiały, otwory i narzędzia eksperckie ogrodu.')}</p></div></div>`;
   const quickTab=document.createElement('button');quickTab.type='button';quickTab.className='quick-tab';quickTab.setAttribute('aria-pressed','false');
@@ -1273,6 +1273,11 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   quickTab.onclick=()=>showQuick(quick.hidden);
   quick.onclick=e=>{const b=e.target.closest('[data-quick]');if(!b&&e.target.closest('.quick-panel'))return;showQuick(false);if(b)$(b.dataset.quick).click();};
   document.querySelector('.app').append(quick);document.querySelector('.project-identity .workspace-nav')?.append(quickTab);
+  // Choosing any other tab closes the sheet, so it never covers the panel the user just opened.
+  document.querySelector('.project-identity .workspace-nav')?.addEventListener('click',e=>{if(!e.target.closest('.quick-tab'))showQuick(false);});
+  // Starting over is one click from the header (it still asks first), not buried under Project > Save.
+  const restart=document.createElement('button');restart.type='button';restart.className='restart-action';restart.innerHTML=`<span aria-hidden="true">↺</span><span data-bi="Start over|Zacznij od nowa">${bi('Start over','Zacznij od nowa')}</span>`;restart.title=bi('Start over','Zacznij od nowa');restart.setAttribute('aria-label',restart.title);restart.onclick=()=>$('#b-delete').click();
+  $('#b-link').before(restart);
   document.querySelector('[data-panel=houses]')?.prepend($('#house-brief'));
   document.querySelector('[data-panel=garden]')?.prepend(boundaryToggle,gardenCard);
   $('#chipbar').onclick=e=>{const pill=e.target.closest('[data-issues]'),row=e.target.closest('[data-issue]');if(pill)issuesOpen=!issuesOpen;else if(row){selected=row.dataset.issue;issuesOpen=false;buildPanel();}else return;render();};
