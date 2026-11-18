@@ -257,7 +257,7 @@ export function mountWorkspace({
   stage.append(canvasHint);
   document.addEventListener("click", (e) => {
     if (
-      matchMedia("(max-width:760px)").matches &&
+      matchMedia("(max-width:1000px)").matches &&
       (e.target as Element)?.closest?.(".view-switch")
     )
       app.classList.add("library-collapsed");

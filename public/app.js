@@ -339,10 +339,11 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     const pad = W < 500 ? 36 : 64;
-    const top = matchMedia('(max-width:760px)').matches ? 74 : pad;
-    const k = Math.max(1, Math.min(200, Math.min((W - 2*pad) / Math.max(1, maxX - minX), (H - top - pad - 60) / Math.max(1, maxY - minY))));
+    // keep clear of the two toolbar rows at the top and of a panel floating over the right edge (--cover)
+    const top = matchMedia('(max-width:1000px)').matches ? 116 : 128, cover = parseFloat(getComputedStyle($('.stage')).getPropertyValue('--cover')) || 0, w = W - cover;
+    const k = Math.max(1, Math.min(200, Math.min((w - 2*pad) / Math.max(1, maxX - minX), (H - top - pad - 60) / Math.max(1, maxY - minY))));
     view.k = k;
-    view.ox = W/2 - (minX + maxX)/2 * k;
+    view.ox = w/2 - (minX + maxX)/2 * k;
     view.oy = (H + top - pad)/2 - (minY + maxY)/2 * k + 6;
     sheetW = W; sheetH = H;
     fitted = true;
@@ -890,7 +891,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     $('.tools').hidden=mode!=='2d';if(mode!=='3d')document.getElementById('context-hint')?.setAttribute('hidden','');document.querySelector('.canvas-hint')?.toggleAttribute('hidden',mode!=='2d');$('.legend').hidden=mode!=='2d';$('#chipbar').hidden=mode!=='2d';$('#viewer-note').hidden=!view3d;
     $('#view-2d').setAttribute('aria-pressed',String(mode==='2d'));$('#view-3d').setAttribute('aria-pressed',String(view3d));$('#view-map').setAttribute('aria-pressed',String(mapActive));
     // Entering 3D on a phone folds the bottom sheets away; the first touch on the scene also hides the notes.
-    $('.stage').classList.remove('viewer-quiet');clearTimeout(quietTimer);if(view3d)quietTimer=setTimeout(()=>$('.stage').classList.add('viewer-quiet'),5000);if(view3d&&matchMedia('(max-width:760px)').matches)workspace?.collapse();
+    $('.stage').classList.remove('viewer-quiet');clearTimeout(quietTimer);if(view3d)quietTimer=setTimeout(()=>$('.stage').classList.add('viewer-quiet'),5000);if(view3d&&matchMedia('(max-width:1000px)').matches)workspace?.collapse();
     if(viewer){viewer.setActive(view3d);if(view3d)viewer.update(state,originalAppearance,exteriorFor);}
     if(parcelMap){parcelMap.setActive(mapActive);if(mapActive)parcelMap.update(state);}
     if(mode==='2d')renderSheet();
@@ -1306,7 +1307,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   const ADV_LS='setback-planner-advanced',advanced=document.createElement('label');advanced.className='advanced-switch';
   advanced.innerHTML='<input type="checkbox" id="advanced-mode" role="switch"><span data-bi="Advanced|Zaawansowane">'+bi('Advanced','Zaawansowane')+'</span>';
   // Phones have no room for its label in the header, so there it lives, labelled, in the "Więcej" sheet.
-  const phone=matchMedia('(max-width:760px)'),placeAdvanced=()=>{if(phone.matches)quick.querySelector('.quick-advanced')?.prepend(advanced);else document.querySelector('.header-actions')?.prepend(advanced);};
+  const phone=matchMedia('(max-width:1000px)'),placeAdvanced=()=>{if(phone.matches)quick.querySelector('.quick-advanced')?.prepend(advanced);else document.querySelector('.header-actions')?.prepend(advanced);};
   placeAdvanced();phone.addEventListener('change',placeAdvanced);
   const setAdvanced=(on,save)=>{document.querySelector('.app').classList.toggle('simple',!on);$('#advanced-mode').checked=on;if(save)try{localStorage.setItem(ADV_LS,on?'1':'0');}catch{/* private mode */}};
   $('#advanced-mode').onchange=e=>setAdvanced(e.target.checked,true);
