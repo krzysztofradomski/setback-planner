@@ -4171,3 +4171,36 @@ body,
   height: 30px;
   color: var(--warn);
 }
+/* start over: a raised card in the top layer */
+.workspace dialog.start-over {
+  width: min(420px, calc(100vw - 32px));
+  padding: 24px;
+  border: 0;
+  border-radius: var(--r-xl);
+  color: var(--ink);
+  background: var(--nm);
+  box-shadow: var(--raised-lg);
+}
+.workspace dialog.start-over::backdrop {
+  background: rgba(150, 162, 185, 0.35);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.workspace dialog.start-over h3 {
+  margin: 0 0 10px;
+  font: 700 22px/1.15 var(--f-ui);
+  font-stretch: 80%;
+}
+.workspace dialog.start-over p {
+  margin: 0 0 22px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.workspace dialog.start-over .row {
+  justify-content: flex-end;
+  gap: 12px;
+}
+.workspace dialog.start-over .danger {
+  font-weight: 700;
+}

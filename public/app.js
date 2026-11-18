@@ -44,7 +44,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       language: 'Language', controls: 'Controls', addBuilding: 'Add building', house: 'House', garage: 'Garage', buildings: 'Buildings',
       plot: 'Plot', area: 'Area', perimeter: 'Perimeter', side: 'Side', cornersHint: 'Drag the corner points A–D on the plan, or type coordinates.',
       rectW: 'Rectangle width in metres', rectD: 'Rectangle depth in metres', makeRect: 'Make rectangle',
-      drawing: 'Drawing', showGarden: 'Show garden objects and fences on the plan and in the report', deleteProject: 'Delete project', deleteConfirm: 'Delete this project from this browser and start again? Saved variants stay. This cannot be undone.', snapTo: 'Snap to', off: 'Off', dimsFor: 'Dimensions for', allBuildings: 'All buildings', selectedOnly: 'Selected only',
+      drawing: 'Drawing', showGarden: 'Show garden objects and fences on the plan and in the report', deleteProject: 'Delete project', snapTo: 'Snap to', off: 'Off', dimsFor: 'Dimensions for', allBuildings: 'All buildings', selectedOnly: 'Selected only',
       showGaps: 'Show gaps between buildings', save: 'Save', copyLink: 'Copy share link', copyJson: 'Copy plan JSON', resetExample: 'Reset example',
       resetConfirm: 'Click again to reset', loadFromJson: 'Load plan from JSON', pastePlan: 'Paste a copied plan', loadPlan: 'Load plan',
       autosaveHint: 'Your plan autosaves in this browser and in the page address, so the link always opens this exact plan.',
@@ -84,7 +84,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       language: 'Język', controls: 'Sterowanie', addBuilding: 'Dodaj budynek', house: 'Dom', garage: 'Garaż', buildings: 'Budynki',
       plot: 'Działka', area: 'Powierzchnia', perimeter: 'Obwód', side: 'Bok', cornersHint: 'Przeciągnij narożniki A–D na planie lub wpisz współrzędne.',
       rectW: 'Szerokość prostokąta w metrach', rectD: 'Głębokość prostokąta w metrach', makeRect: 'Utwórz prostokąt',
-      drawing: 'Rysunek', showGarden: 'Pokazuj obiekty ogrodowe i ogrodzenia na planie i w raporcie', deleteProject: 'Usuń projekt', deleteConfirm: 'Usunąć ten projekt z tej przeglądarki i zacząć od nowa? Zapisane warianty zostaną. Tej operacji nie można cofnąć.', snapTo: 'Przyciąganie', off: 'Wyłączone', dimsFor: 'Wymiary dla', allBuildings: 'Wszystkich budynków', selectedOnly: 'Tylko zaznaczonego',
+      drawing: 'Rysunek', showGarden: 'Pokazuj obiekty ogrodowe i ogrodzenia na planie i w raporcie', deleteProject: 'Usuń projekt', snapTo: 'Przyciąganie', off: 'Wyłączone', dimsFor: 'Wymiary dla', allBuildings: 'Wszystkich budynków', selectedOnly: 'Tylko zaznaczonego',
       showGaps: 'Pokaż odstępy między budynkami', save: 'Zapis', copyLink: 'Kopiuj link do udostępnienia', copyJson: 'Kopiuj plan (JSON)', resetExample: 'Przywróć przykład',
       resetConfirm: 'Kliknij ponownie, aby przywrócić', loadFromJson: 'Wczytaj plan z JSON', pastePlan: 'Wklej skopiowany plan', loadPlan: 'Wczytaj plan',
       autosaveHint: 'Plan zapisuje się automatycznie w tej przeglądarce i w adresie strony, więc link zawsze otwiera dokładnie ten plan.',
@@ -935,9 +935,9 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     finally {$('#view-3d').disabled=false;}
   };
   // Views start as a white model; the switch brings back colours and textures in the plan, map and 3D scene.
-  const setColour=on=>{document.documentElement.dataset.colour=on?'on':'plain';viewer?.setPlain(!on);try{localStorage.setItem('setback-colour',on?'1':'0');}catch{/* private mode */}};
+  const setColour=(on,save)=>{document.documentElement.dataset.colour=on?'on':'plain';viewer?.setPlain(!on);if(save)try{localStorage.setItem('setback-colour',on?'1':'0');}catch{/* private mode */}};
   $('#view-colour').checked=(()=>{try{return localStorage.getItem('setback-colour')==='1';}catch{return false;}})();setColour($('#view-colour').checked);
-  $('#view-colour').onchange=e=>setColour(e.target.checked);
+  $('#view-colour').onchange=e=>setColour(e.target.checked,true);
   // Surroundings (orthophoto + neighbouring buildings) for georeferenced parcels; derived data, never saved.
   let contextKey='',lastContext=null,contextJob=Promise.resolve();
   const contextToggle=document.createElement('label');contextToggle.className='check';contextToggle.innerHTML='<input type="checkbox" id="view-context" checked><span data-bi="Surroundings|Otoczenie">'+bi('Surroundings','Otoczenie')+'</span>';$('#viewer-controls').append(contextToggle);
@@ -1130,12 +1130,17 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   // Delete the current project: clear the autosave and the address, then start over with the parcel search.
   const deleteButton=document.createElement('button');deleteButton.id='b-delete';deleteButton.className='danger';deleteButton.dataset.t='deleteProject';deleteButton.textContent=t('deleteProject');
   $('#b-reset').after(deleteButton);
-  deleteButton.onclick=()=>{
-    if(!confirm(t('deleteConfirm')))return;
+  // An in-app dialog, not confirm(): embedded browsers and some phones block native dialogs, which made this a silent no-op.
+  const startOver=document.createElement('dialog');startOver.className='start-over';
+  startOver.innerHTML=`<h3>${bi('Start over?','Zacząć od nowa?')}</h3><p>${bi('This clears your project, saved variants and settings from this browser and takes you back to the start page. Download the project file first if you want to keep it.','To usunie projekt, zapisane warianty i ustawienia z tej przeglądarki i wróci na stronę startową. Jeśli chcesz go zachować, najpierw pobierz plik projektu.')}</p><div class="row"><button type="button" value="cancel">${bi('Cancel','Anuluj')}</button><button type="button" class="danger" value="wipe">${bi('Clear everything','Wyczyść wszystko')}</button></div>`;
+  document.querySelector('.app').append(startOver);
+  startOver.onclick=e=>{const v=e.target.closest?.('button')?.value;if(v==='cancel'||e.target===startOver)startOver.close();if(v!=='wipe')return;
     persistencePaused=true;clearTimeout(saveT);
-    try{localStorage.removeItem(LS);sessionStorage.removeItem('setback-entry-dismissed');}catch{/* storage unavailable */}
+    // every key this app stores starts with "setback": project, variants, catalogs, language, view and mode switches, attribution, intro flag
+    try{for(const store of [localStorage,sessionStorage])for(const key of Object.keys(store))if(key.startsWith('setback'))store.removeItem(key);}catch{/* storage unavailable */}
     location.replace(location.origin+location.pathname+location.search); // full load without the project link
   };
+  deleteButton.onclick=()=>startOver.showModal();
 
   $('#b-copy').onclick = () => {
     let txt; try { txt = serializeScene(state); } catch { toast(t('notAPlan')); return; }
@@ -1303,8 +1308,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   // Phones have no room for its label in the header, so there it lives, labelled, in the "Więcej" sheet.
   const phone=matchMedia('(max-width:760px)'),placeAdvanced=()=>{if(phone.matches)quick.querySelector('.quick-advanced')?.prepend(advanced);else document.querySelector('.header-actions')?.prepend(advanced);};
   placeAdvanced();phone.addEventListener('change',placeAdvanced);
-  const setAdvanced=on=>{document.querySelector('.app').classList.toggle('simple',!on);$('#advanced-mode').checked=on;try{localStorage.setItem(ADV_LS,on?'1':'0');}catch{/* private mode */}};
-  $('#advanced-mode').onchange=e=>setAdvanced(e.target.checked);
+  const setAdvanced=(on,save)=>{document.querySelector('.app').classList.toggle('simple',!on);$('#advanced-mode').checked=on;if(save)try{localStorage.setItem(ADV_LS,on?'1':'0');}catch{/* private mode */}};
+  $('#advanced-mode').onchange=e=>setAdvanced(e.target.checked,true);
   setAdvanced((()=>{try{return localStorage.getItem(ADV_LS)==='1';}catch{return false;}})());
   const parcelPanel=document.querySelector('[data-panel=parcel]'),parcelAdvanced=document.createElement('details');parcelAdvanced.className='parcel-advanced';parcelAdvanced.innerHTML=`<summary>${lang==='pl'?'Rysowanie, import i współrzędne':'Drawing, import & coordinates'}</summary>`;parcelAdvanced.append($('#p-area').closest('section'));parcelPanel.append(parcelAdvanced);
   const review=document.createElement('section');review.id='review-layout';document.querySelector('[data-panel=project]').prepend(review);
