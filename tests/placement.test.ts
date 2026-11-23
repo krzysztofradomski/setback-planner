@@ -25,3 +25,15 @@ test('re-seating keeps grouped structures (house + carport) rigidly together',as
   assert.ok(Math.abs((c.rot-h.rot)-0)<1e-9,'relative rotation is preserved');
   assert.ok(parcelContains(scene,worldFootprint(h)));
 });
+test('a house and its carport are seated together, each keeping its own setback',async()=>{
+  const {placeGroup,setbackArea}=await import('../public/core/placement.ts');
+  // 24 m wide parcel: a 12 m house fits alone in the 16 m wide setback area, but house + 4 m carport only off-centre.
+  const scene=parseScene({plot:[{x:0,y:0},{x:24,y:0},{x:24,y:30},{x:0,y:30}],items:[
+    {id:'h',type:'house',name:'H',x:12,y:15,w:12,d:9,setback:4,group:'g1'},
+    {id:'c',type:'landscape',kind:'carport',name:'C',x:4,y:15,w:3.5,d:6,setback:3,group:'g1',attachedTo:'h'}]});
+  const [h,c]=placeGroup(scene,scene.items)!;
+  for(const it of [h,c])assert.ok(setbackArea(scene,it.setback).parts.some(([outer,...holes])=>parcelContains({plot:outer,plotHoles:holes},worldFootprint(it))),it.id+' keeps its setback');
+  assert.ok(Math.abs(Math.hypot(c.x-h.x,c.y-h.y)-8)<1e-6,'carport stays beside the house');
+  const tiny=parseScene({plot:[{x:0,y:0},{x:14,y:0},{x:14,y:14},{x:0,y:14}],items:scene.items});
+  assert.equal(placeGroup(tiny,tiny.items),null);
+});

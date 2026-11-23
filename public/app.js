@@ -1,8 +1,7 @@
 import {houseAnnex, houseParking, setHouseParking, resolveHouseOptions} from './core/house-options.ts';
 import {createCatalogItem} from './catalogs/placement.ts';
-import {fitItemsToParcel, parcelAxis} from './core/placement.ts';
-import {planFromBrief} from './core/brief.ts';
-import {designGarden} from './core/garden.ts';
+import {fitItemsToParcel, parcelAxis, placeGroup} from './core/placement.ts';
+import {designGarden, randomGarden} from './core/garden.ts';
 import {sourceDirectory,mapOverlayIds} from './map/sources.ts';
 import {siteFrame,siteLayerIds,siteSummary,mercatorPixel,buildingLineSetbacks,networkIds} from './core/site-data.ts';
 import {pointsToParcel} from './core/site-insights.ts';
@@ -42,7 +41,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       materials:'Materials', facade:'Façade finish', grout:'Grout color', roofColor:'Roof color', frameColor:'Window / door color', gutterColor:'Gutter color', trimColor:'Trim color', tileWidth:'Tile width (m)', tileHeight:'Tile height (m)', layout:'Tile direction', horizontal:'Horizontal', vertical:'Vertical', wallFinish:'Individual wall', allWalls:'All walls', inherit:'Use façade finish', resetMaterials:'Reset all finishes', resetFacade:'Reset façade', original:'Compare original', materialHint:'Conceptual finishes, not manufacturer-approved options. No price calculation. Patterns are schematic.',
       shape:'Footprint shape', rectangle:'Rectangular', wingRatio:'Wing proportion', height:'Wall height total (m)', storeys:'Storeys', roof:'Roof', flat:'Flat', gable:'Gable', pitch:'Roof pitch (°)', genericHint:'Generic conceptual house. Dimensions are user-defined; no manufacturer specifications or legal approval.',
       redo:'Redo', downloadProject:'Download JSON', openFile:'Open JSON file', variants:'Local variants', variantName:'Variant name', saveVariant:'Save as variant', openVariant:'Open variant', variantHint:'Stored only in this browser, up to 20 variants. Download JSON for a backup.', variantError:'Could not save or read variants. Check the name, storage space and 20-variant limit.',
-      docTitle: 'Setback Planner', title: 'Setback Planner', tagline: 'Plot outline on a 1 m grid, buildings, and every clearance.',
+      docTitle: 'House on your plot: will it fit?', title: 'House on your plot', tagline: 'Plot outline on a 1 m grid, buildings, and every clearance.',
       language: 'Language', controls: 'Controls', addBuilding: 'Add building', house: 'House', garage: 'Garage', buildings: 'Buildings',
       plot: 'Plot', area: 'Area', perimeter: 'Perimeter', side: 'Side', cornersHint: 'Drag the corner points A–D on the plan, or type coordinates.',
       rectW: 'Rectangle width in metres', rectD: 'Rectangle depth in metres', makeRect: 'Make rectangle',
@@ -82,7 +81,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       materials:'Materiały', facade:'Wykończenie elewacji', grout:'Kolor fugi', roofColor:'Kolor dachu', frameColor:'Kolor okien / drzwi', gutterColor:'Kolor rynien', trimColor:'Kolor detali', tileWidth:'Szerokość płytki (m)', tileHeight:'Wysokość płytki (m)', layout:'Kierunek płytek', horizontal:'Poziomo', vertical:'Pionowo', wallFinish:'Pojedyncza ściana', allWalls:'Wszystkie ściany', inherit:'Wykończenie elewacji', resetMaterials:'Resetuj wykończenia', resetFacade:'Resetuj elewację', original:'Porównaj oryginał', materialHint:'Wykończenia koncepcyjne, bez zatwierdzenia producenta i kalkulacji cen. Wzory są schematyczne.',
       shape:'Kształt obrysu', rectangle:'Prostokątny', wingRatio:'Proporcja skrzydła', height:'Łączna wysokość ścian (m)', storeys:'Kondygnacje', roof:'Dach', flat:'Płaski', gable:'Dwuspadowy', pitch:'Kąt dachu (°)', genericHint:'Dom koncepcyjny. Wymiary określa użytkownik; bez specyfikacji producenta i potwierdzenia zgodności z prawem.',
       redo:'Ponów', downloadProject:'Pobierz JSON', openFile:'Otwórz plik JSON', variants:'Warianty lokalne', variantName:'Nazwa wariantu', saveVariant:'Zapisz jako wariant', openVariant:'Otwórz wariant', variantHint:'Tylko w tej przeglądarce, do 20 wariantów. Pobierz JSON jako kopię zapasową.', variantError:'Nie można zapisać lub odczytać wariantów. Sprawdź nazwę, pamięć i limit 20 wariantów.',
-      docTitle: 'Planer odległości od granic', title: 'Planer odległości', tagline: 'Obrys działki na siatce 1 m, budynki i wszystkie odległości.',
+      docTitle: 'Dom na działce: czy się zmieści?', title: 'Dom na działce', tagline: 'Obrys działki na siatce 1 m, budynki i wszystkie odległości.',
       language: 'Język', controls: 'Sterowanie', addBuilding: 'Dodaj budynek', house: 'Dom', garage: 'Garaż', buildings: 'Budynki',
       plot: 'Działka', area: 'Powierzchnia', perimeter: 'Obwód', side: 'Bok', cornersHint: 'Przeciągnij narożniki A–D na planie lub wpisz współrzędne.',
       rectW: 'Szerokość prostokąta w metrach', rectD: 'Głębokość prostokąta w metrach', makeRect: 'Utwórz prostokąt',
@@ -139,13 +138,36 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   try { const saved=JSON.parse(localStorage.getItem(CATALOG_LS)||'null');enabledCatalogs=Array.isArray(saved)?saved.filter(id=>catalogRegistrations.some(r=>r.id===id)):catalogRegistrations.map(r=>r.id); }
   catch { enabledCatalogs=catalogRegistrations.map(r=>r.id); }
   let catalogRevision=0;const loadedCatalogModels=new Map();
+  /** Does each catalogue design (with its carport or garage) fit this parcel with the setbacks? Houses already placed would be replaced, so they are ignored. */
+  let fitKey='',fitTimer=0;
+  function updateFitBadges(){
+    const key=JSON.stringify([state.plot,state.plotHoles,state.items.filter(i=>i.type!=='house'&&!i.attachedTo).map(i=>[i.x,i.y,i.w,i.d,i.rot])]);
+    if(key===fitKey)return;fitKey=key;clearTimeout(fitTimer);
+    const badges=[...document.querySelectorAll('.fit-badge[data-fit]')];if(!badges.length)return;
+    const base={...state,items:state.items.filter(i=>i.type!=='house'&&!state.items.some(h=>h.type==='house'&&houseAnnex(state.items,h)?.id===i.id))},cx=state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,cy=state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length;
+    let fitting=0,done=0;
+    // ponytail: one design per tick keeps the page responsive while the placement search runs
+    const step=i=>{fitTimer=setTimeout(async()=>{
+      if(fitKey!==key)return;const badge=badges[i];if(!badge)return;
+      const [catalogId,modelId]=badge.dataset.fit.split(':');let ok;
+      try{const catalog=await loadCatalog(catalogId),model=catalog.models.find(m=>m.id===modelId),house=createCatalogItem(catalog,modelId,{id:'fit-house',x:cx,y:cy,rot:parcelAxis(state.plot)});
+        let items=[...base.items,house];if(model.exterior?.carport&&(model.exterior.carport.kind||'carport')!=='none')items=setHouseParking(items,house.id,model.exterior.carport.kind||'carport',model.exterior,'fit-annex');
+        const h=items.find(x=>x.id===house.id),annex=houseAnnex(items,h);ok=placeGroup({...base,items},annex?[h,annex]:[h])?'yes':annex&&placeGroup({...base,items:items.filter(x=>x.id!==annex.id)},[h])?'alone':'';}catch{ok='';}
+      if(fitKey!==key)return;
+      done++;if(ok)fitting++;
+      badge.className='fit-badge '+(ok==='yes'?'fits':ok?'fits-alone':'no-fit');badge.textContent=ok==='yes'?bi('✓ Fits this parcel','✓ Mieści się na tej działce'):ok?bi('✓ Fits without the carport or garage','✓ Mieści się bez wiaty/garażu'):bi('✕ Too big for this parcel','✕ Za duży na tę działkę');
+      const card=badge.closest('.catalog-card');if(!ok)card?.parentElement?.append(card);// fitting designs first
+      const sum=$('#fit-summary');if(sum)sum.textContent=done===badges.length?bi(`${fitting} of ${badges.length} designs fit this parcel.`,`Na tej działce mieści się ${fitting} z ${badges.length} projektów.`):bi('Checking which designs fit…','Sprawdzam, które projekty się zmieszczą…');
+      step(i+1);},i?0:300);};
+    step(0);
+  }
   async function renderCatalogs(){
     const revision=++catalogRevision;
     $('#catalog-switches').innerHTML=catalogRegistrations.map(r=>`<label class="check"><input type="checkbox" data-catalog="${r.id}" ${enabledCatalogs.includes(r.id)?'checked':''}>${esc(r.name)}</label>`).join('');
     $('#catalog-models').textContent='';
     const entries=await Promise.all(enabledCatalogs.map(async id=>{try{return await loadCatalog(id);}catch{return null;}}));
     if(revision!==catalogRevision)return;for(const c of entries.filter(Boolean))for(const m of c.models)loadedCatalogModels.set(c.id+':'+m.id,m);
-    $('#catalog-models').innerHTML=entries.map(c=>c?`<div class="catalog-attribution"><span>${esc(c.name)}</span><a href="${esc(c.source)}" target="_blank" rel="noopener noreferrer">${lang==='pl'?'Strona producenta':'Manufacturer website'} ↗</a></div><div class="catalog-grid">${c.models.map(m=>`<article class="catalog-card"><img src="${esc(m.thumbnail)}" alt="${esc(m.name)} — ${esc(c.name)}" loading="lazy" width="600" height="340"><div class="catalog-card-body"><div class="catalog-card-heading"><h3>${esc(m.name)}</h3><span>${m.footprint.width.toFixed(2)} × ${m.footprint.depth.toFixed(2)} m</span></div><p>${lang==='pl'?'Wymiary wg rzutu producenta':'Dimensions from manufacturer plan'}</p><div class="catalog-actions"><button class="catalog-place" data-place-catalog="${esc(c.id)}" data-model="${esc(m.id)}">+ ${lang==='pl'?'Użyj tego projektu':'Use this design'}</button><button class="catalog-add" data-add-catalog="${esc(c.id)}" data-add-model="${esc(m.id)}" aria-label="${lang==='pl'?'Dodaj kolejny':'Add another'} ${esc(m.name)}" title="${lang==='pl'?'Dodaj kolejny dom':'Add another house'}">＋</button><button class="catalog-plan" data-plan-src="${esc(m.plan)}" data-plan-name="${esc(m.name)}">${lang==='pl'?'Rzut':'Plan'} ↗</button></div></div></article>`).join('')}</div>`:`<p class="hint">${t('catalogError')}</p>`).join('');
+    $('#catalog-models').innerHTML=`<p id="fit-summary" class="fit-summary" role="status"></p>`+entries.map(c=>c?`<div class="catalog-attribution"><span>${esc(c.name)}</span><a href="${esc(c.source)}" target="_blank" rel="noopener noreferrer">${lang==='pl'?'Strona producenta':'Manufacturer website'} ↗</a></div><div class="catalog-grid">${c.models.map(m=>`<article class="catalog-card"><img src="${esc(m.thumbnail)}" alt="${esc(m.name)} — ${esc(c.name)}" loading="lazy" width="600" height="340"><div class="catalog-card-body"><div class="catalog-card-heading"><h3>${esc(m.name)}</h3><span>${m.footprint.width.toFixed(2)} × ${m.footprint.depth.toFixed(2)} m</span></div><p class="fit-badge" data-fit="${esc(c.id)}:${esc(m.id)}" aria-live="polite">${lang==='pl'?'Sprawdzam, czy się mieści…':'Checking the fit…'}</p><p>${lang==='pl'?'Wymiary wg rzutu producenta':'Dimensions from manufacturer plan'}</p><div class="catalog-actions"><button class="catalog-place" data-place-catalog="${esc(c.id)}" data-model="${esc(m.id)}">+ ${lang==='pl'?'Użyj tego projektu':'Use this design'}</button><button class="catalog-add" data-add-catalog="${esc(c.id)}" data-add-model="${esc(m.id)}" aria-label="${lang==='pl'?'Dodaj kolejny':'Add another'} ${esc(m.name)}" title="${lang==='pl'?'Dodaj kolejny dom':'Add another house'}">＋</button><button class="catalog-plan" data-plan-src="${esc(m.plan)}" data-plan-name="${esc(m.name)}">${lang==='pl'?'Rzut':'Plan'} ↗</button></div></div></article>`).join('')}</div>`:`<p class="hint">${t('catalogError')}</p>`).join('');
     $('#catalog-models').querySelectorAll('[data-place-catalog],[data-add-catalog]').forEach(button=>button.onclick=async()=>{
       const current=get(selected),replace=!button.dataset.addCatalog&&current?.type==='house';
       if(replace&&current.locked){toast(lang==='pl'?'Odblokuj dom przed zmianą projektu.':'Unlock the house before changing its design.');return;}
@@ -153,7 +175,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       button.disabled=true;
       try{
         const catalog=await loadCatalog(button.dataset.placeCatalog||button.dataset.addCatalog),x=replace?current.x:state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,y=replace?current.y:state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length,item=createCatalogItem(catalog,button.dataset.model||button.dataset.addModel,{id:replace?current.id:'o'+uid++,x,y,rot:replace?current.rot:parcelAxis(state.plot)});
-        if(replace){item.setback=current.setback;item.group=current.group;}else{const {suggestPlacements}=await import('./core/placement.ts'),candidate=suggestPlacements(state,item).suggestions[0];if(!candidate){toast(lang==='pl'?'Brak wolnego miejsca. Przesuń istniejące obiekty lub wybierz większą działkę.':'No free placement found. Move existing objects or use a larger parcel.');return;}Object.assign(item,{x:candidate.x,y:candidate.y,rot:candidate.rot});}
+        if(replace){item.setback=current.setback;item.group=current.group;}
         const exterior=catalog.models.find(m=>m.id===(button.dataset.model||button.dataset.addModel))?.exterior;
         const parking=replace?houseParking(state.items,current):null;
         if(replace&&current.houseOptions)item.houseOptions={...current.houseOptions};
@@ -162,10 +184,17 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
           const kind=replace&&current.catalog?parking:(exterior.carport.kind||'carport');
           if(kind!=='none')items=setHouseParking(items,item.id,kind,exterior,'o'+uid++);
         }
+        // House and carport/garage are seated together: both must keep their setbacks (a replaced house stays put when it still fits).
+        {const house=items.find(i=>i.id===item.id),annex=houseAnnex(items,house),seated=placeGroup({...state,items},annex?[house,annex]:[house]);
+          const alone=!seated&&annex?placeGroup({...state,items:items.filter(i=>i.id!==annex.id)},[house]):null;
+          if(alone){items=items.filter(i=>i.id!==annex.id).map(i=>i.id===house.id?alone[0]:i);setTimeout(()=>toast(bi('Placed without the carport or garage: there is no room for both.','Ustawiono bez wiaty/garażu: na oba nie ma miejsca.')),1500);}
+          else if(seated){const by=new Map(seated.map(i=>[i.id,i]));items=items.map(i=>by.get(i.id)??i);}
+          else if(!replace){toast(lang==='pl'?'Ten projekt nie mieści się na działce z zachowaniem odległości od granic.':'This design does not fit on the parcel with the setbacks.');return;}}
         snapshot();state.items=items;selected=item.id;buildPanel();render();toast(replace?(lang==='pl'?'Zmieniono projekt wybranego domu.':'Selected house design updated.'):(lang==='pl'?'Dodano dom w wolnym miejscu. Możesz go przesunąć.':'House added in a free position. Drag it to adjust.'));
       }catch{toast(t('catalogError'));}finally{button.disabled=false;}
     });
     $('#catalog-models').querySelectorAll('[data-plan-src]').forEach(button=>button.onclick=()=>showCatalogPlan(button.dataset.planSrc,button.dataset.planName));
+    fitKey='';updateFitBadges();
 
   }
   const planDialog=document.createElement('dialog');planDialog.className='catalog-plan-dialog';planDialog.setAttribute('aria-labelledby','catalog-plan-title');planDialog.innerHTML='<header><h2 id="catalog-plan-title"></h2><button data-plan-close type="button">×</button></header><div class="plan-toolbar"><button type="button" data-plan-zoom></button><a target="_blank" rel="noopener noreferrer" data-plan-full></a></div><div class="plan-image-wrap"><img alt=""></div><p>Udana Budowa · udanabudowa.pl</p>';document.body.append(planDialog);planDialog.querySelector('[data-plan-close]').onclick=()=>planDialog.close();
@@ -188,12 +217,13 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     plot: [{x:0,y:0},{x:24,y:0},{x:26,y:42},{x:-1,y:40}],
     items: [
       {id:'o1',type:'house', name:t('house'), x:12,  y:17, w:12, d:10, rot:0, setback:4},
-      {id:'o2',type:'garage',name:t('garage'),x:20.5,y:31, w:6,  d:7,  rot:0, setback:3},
+      {id:'o2',type:'garage',name:t('garage'),x:19,  y:31, w:6,  d:7,  rot:0, setback:3},// keeps its 3 m from the slanted right edge
     ],
     snap: 0.5, dimScope: 'selected', showPairs: false,
   });
 
   // ---------- state ----------
+  let advisorReady=false;// set once /api/recipients answers (see openAdvisor)
   let persistencePaused = false;
   function projectWarning(message, pause = true){
     persistencePaused = pause;
@@ -465,7 +495,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       if(edge===null||JSON.stringify(state.plot)!==key)return;const f=state.fences.find(x=>x.id===BOUNDARY_FENCE_ID);if(!f||f.gate?.edge===edge)return;
       setBoundaryFence(true,edge);render();}catch{/* no map data: keep the facing edge */}
   }
-  function render(){ for(const it of state.items)if(it.openings.length)it.openings=fitOpenings(it); syncBoundaryFence(); syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d){viewer.update(state,originalAppearance,exteriorFor);void refreshContext();} if(parcelMap && mapActive)parcelMap.update(state); save(); journey?.refresh(); syncSiteData(); }
+  function render(){ updateFitBadges(); for(const it of state.items)if(it.openings.length)it.openings=fitOpenings(it); syncBoundaryFence(); syncFences(); syncEnvironment(); C = compute(); syncPanel(); renderSheet(); if(viewer && view3d){viewer.update(state,originalAppearance,exteriorFor);void refreshContext();} if(parcelMap && mapActive)parcelMap.update(state); save(); journey?.refresh(); syncSiteData(); }
 
   function dim(a, b, cls, text){
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
@@ -747,6 +777,38 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     $('#chipbar').innerHTML = (!plotValid ? `<span style="color:var(--warn)">${lang === 'pl' ? 'Nieprawidłowa granica działki' : 'Invalid parcel boundary'}</span>` : '') + `<span>${group(area)} m² · ${dec((area/100).toFixed(2))} a</span>` +
       (state.coordinates.projected?`<span>${t('north')}</span>`:'') + (state.items.length ? (warnCount ? `<button type="button" class="check-pill" data-issues aria-expanded="${issuesOpen}">${t('toCheck', {n: warnCount})}</button>` : `<span style="color:var(--ok)">${t('allMet')}</span>`) : '') +
       (warnCount && issuesOpen ? `<div class="issues-pop" role="list">${issueRows()}</div>` : '');
+    renderVerdict(warnCount);
+  }
+  // The answer the visitor came for, in one line on the plan, with a one-tap fix when something breaks a setback.
+  function renderVerdict(warnCount){
+    let v=$('#verdict');if(!v){v=document.createElement('div');v.id='verdict';v.setAttribute('role','status');$('#chipbar').after(v);
+      v.onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.fix!==undefined)fixLayout();else if(b.dataset.verdictReport!==undefined)$('#b-report')?.click();else if(b.dataset.advisor!==undefined)openAdvisor();};}
+    const buildings=state.items.filter(i=>i.type!=='landscape'&&i.visible);
+    if(!buildings.length){v.hidden=true;return;}
+    v.hidden=false;v.className=warnCount?'verdict bad':'verdict ok';
+    v.innerHTML=warnCount?`<b>${bi('✕ Does not fit yet','✕ Jeszcze się nie mieści')}</b><span>${bi(`${warnCount} ${warnCount===1?'object breaks':'objects break'} a setback.`,`${warnCount===1?'1 obiekt narusza':`${warnCount} ${warnCount<5?'obiekty naruszają':'obiektów narusza'}`} odległość od granicy.`)}</span><button type="button" data-fix>${bi('Fix the placement','Popraw ustawienie')}</button>`
+      :`<b>${bi('✓ Fits the parcel','✓ Mieści się na działce')}</b><span>${bi('Every building keeps its setbacks.','Wszystkie budynki zachowują odległości od granic.')}</span><button type="button" data-verdict-report>${bi('Full report','Pełny raport')}</button>${advisorReady?`<button type="button" data-advisor class="advisor">${bi('Talk to an advisor','Umów rozmowę')}</button>`:''}`;
+  }
+  /** Move each failing building (with its carport or garage) to the nearest spot where everything keeps its setbacks. */
+  function fixLayout(){
+    let items=state.items,moved=0,stuck=0,cleared=0,droppedAnnex=false;const done=new Set();
+    for(const it of state.items.filter(i=>C.res.get(i.id)?.warn&&!i.locked)){
+      if(done.has(it.id))continue;
+      const leader=it.attachedTo?items.find(i=>i.id===it.attachedTo)??it:it,old=leader.type==='house'?houseAnnex(items,leader):undefined,exterior=exteriorFor(leader);
+      // A carport or garage knocked out of line is rebuilt beside its house first (same id), so the pair moves as designed.
+      if(old&&exterior?.carport&&!old.locked){try{items=setHouseParking(items,leader.id,houseParking(items,leader),exterior,old.id);}catch{/* keep as is */}}
+      const house=items.find(i=>i.id===leader.id),annex=old?items.find(i=>i.id===old.id):undefined,group=[house,...(annex?[annex]:[])];
+      group.forEach(g=>done.add(g.id));
+      let seated=placeGroup({...state,items},group);
+      // Garden elements laid out around the old position may fill every free spot: seat the building without them, then drop only those now in its way.
+      if(!seated){const garden=i=>i.type==='landscape'&&!group.some(g=>g.id===i.id),again=placeGroup({...state,items:items.filter(i=>!garden(i))},group);
+        if(again){const rings=again.map(worldFootprint),inWay=new Set(items.filter(i=>garden(i)&&blocksPlacement(i)&&rings.some(r=>polygonRelation(r,worldFootprint(i))!=='disjoint')).map(i=>i.id));items=items.filter(i=>!inWay.has(i.id));cleared+=inWay.size;seated=again;}}
+      if(!seated&&annex){const alone=placeGroup({...state,items:items.filter(i=>i.id!==annex.id)},[house]);if(alone){items=items.filter(i=>i.id!==annex.id);seated=alone;droppedAnnex=true;}}
+      if(seated){const by=new Map(seated.map(i=>[i.id,i]));items=items.map(i=>by.get(i.id)??i);moved++;}else stuck++;
+    }
+    if(moved){snapshot();state.items=items;buildPanel();render();}
+    toast(stuck?bi('Some buildings do not fit anywhere on this parcel. Pick a smaller design.','Część budynków nie mieści się nigdzie na tej działce. Wybierz mniejszy projekt.'):bi('Placement fixed: everything keeps its setbacks.','Poprawiono ustawienie: wszystko zachowuje odległości od granic.')+(cleared?bi(` Removed ${cleared} garden elements that were in the way.`,` Usunięto elementy ogrodu, które przeszkadzały: ${cleared}.`):'')+(droppedAnnex?bi(' The carport or garage did not fit and was removed.',' Wiata/garaż się nie zmieściły i zostały usunięte.'):''));
+    if(stuck)workspace?.activate('houses');
   }
   // Issues behind the "to check" pill: why each building fails, one click selects it on the plan.
   let issuesOpen=false;
@@ -1001,65 +1063,11 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     finally{finish();}
   }
   const focusButton=document.createElement('button');focusButton.id='view-house';focusButton.dataset.bi='House|Dom';focusButton.textContent=bi('House','Dom');focusButton.onclick=()=>{const it=get(selected)?.type==='house'?get(selected):state.items.find(i=>i.type==='house');if(it)viewer?.focus(it);};$('#viewer-controls').append(focusButton);
-  // Describe-your-house: Workers AI reads the words, geometry is computed locally and shown before anything is added.
-  const brief=document.createElement('div');brief.id='house-brief';
-  brief.innerHTML='<h3><span data-bi="Describe your house|Opisz swój dom">Describe your house</span></h3><textarea id="brief-text" rows="3" maxlength="400" data-bi-placeholder="e.g. single-storey, about 110 m², gable roof, garage for 2 cars|np. parterowy ok. 110 m², dach dwuspadowy, garaż na 2 auta"></textarea><button id="brief-run" type="button"><span data-bi="Fill in from description (AI)|Uzupełnij z opisu (AI)">Fill in from description (AI)</span></button><p id="brief-status" class="hint" role="status"></p><div id="brief-result"></div>';
-  $('#add-house').closest('section').prepend(brief);
-  const fmtM=n=>new Intl.NumberFormat(lang==='pl'?'pl-PL':'en-GB',{maximumFractionDigits:1}).format(n);
-  async function addBriefHouse(plan){
-    if(state.items.length>=98){toast(t('objectLimit'));return;}
-    const {suggestPlacements}=await import('./core/placement.ts'),group=plan.garage?crypto.randomUUID():'';
-    const cx=state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,cy=state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length;
-    const house=parseScene({plot:state.plot,items:[{id:'o'+uid++,type:'house',name:bi('House (from description)','Dom (z opisu)'),x:cx,y:cy,w:plan.w,d:plan.d,rot:parcelAxis(state.plot),setback:4,group,architecture:{storeys:plan.storeys,height:plan.height,roof:plan.roof,pitch:plan.pitch,roofAxis:'width'}}]}).items[0];
-    const spot=suggestPlacements(state,house).suggestions[0];if(spot)Object.assign(house,{x:spot.x,y:spot.y,rot:spot.rot});
-    snapshot();state.items.push(house);
-    if(plan.garage){const g=plan.garage,lx=-((house.w+g.w)/2+.02),ly=house.d/2-g.d/2,r=house.rot*Math.PI/180;state.items.push(parseScene({plot:state.plot,items:[{id:'o'+uid++,type:g.kind==='attached'?'garage':'landscape',...(g.kind==='carport'?{kind:'carport'}:{}),name:g.kind==='attached'?t('garage'):bi('Carport','Wiata'),x:house.x+lx*Math.cos(r)-ly*Math.sin(r),y:house.y+lx*Math.sin(r)+ly*Math.cos(r),w:g.w,d:g.d,rot:house.rot,setback:3,group,architecture:{storeys:1,height:2.8,roof:'flat',pitch:0}}]}).items[0]);}
-    selected=house.id;buildPanel();render();toast(spot?bi('House added in a free position. Check the values.','Dodano dom w wolnym miejscu. Sprawdź wartości.'):bi('Added in the centre: no free position found.','Dodano na środku: brak wolnego miejsca.'));
-  }
-  function showBrief(answer,plan){
-    const out=$('#brief-result');out.replaceChildren();
-    const card=document.createElement('div');card.className='brief-card';
-    const said=document.createElement('p');said.textContent=answer.summary;
-    const chips=document.createElement('ul'),est=k=>plan.estimated.includes(k)?' *':'';
-    for(const text of [`${fmtM(plan.w)} × ${fmtM(plan.d)} m${est('size')}`,`${plan.storeys} ${bi(plan.storeys===1?'storey':'storeys',plan.storeys===1?'kondygnacja':'kondygnacje')}${est('storeys')}`,`${{gable:bi('Gable roof','Dach dwuspadowy'),hip:bi('Hip roof','Dach kopertowy'),flat:bi('Flat roof','Dach płaski'),shed:bi('Mono-pitch roof','Dach jednospadowy')}[plan.roof]} ${Math.round(plan.pitch)}°${est('roof')}`,...(plan.garage?[plan.garage.kind==='attached'?`${t('garage')} ${fmtM(plan.garage.w)} × ${fmtM(plan.garage.d)} m`:bi('Carport','Wiata')]:[])]){const li=document.createElement('li');li.textContent=text;chips.append(li);}
-    const add=document.createElement('button');add.type='button';add.className='brief-add';add.textContent=bi('Add this house','Dodaj ten dom');add.onclick=()=>void addBriefHouse(plan);
-    card.append(said,chips,add);
-    const model=plan.match&&[...loadedCatalogModels.values()].find(m=>m.id===plan.match);
-    if(model){const alt=document.createElement('button');alt.type='button';alt.textContent=bi(`Similar catalogue design: ${model.name}`,`Podobny projekt z katalogu: ${model.name}`);alt.onclick=()=>{const b=[...document.querySelectorAll('[data-place-catalog]')].find(x=>x.dataset.model===model.id);b?.scrollIntoView({block:'center'});b?.focus();};card.append(alt);}
-    const note=document.createElement('small');note.textContent=bi('AI interpretation of your words. * estimated from floor area or defaults. Nothing changes until you add it.','Interpretacja AI Twojego opisu. * oszacowane z powierzchni lub domyślnie. Nic się nie zmieni, dopóki nie dodasz domu.');card.append(note);
-    out.append(card);
-  }
-  $('#brief-run').onclick=async()=>{
-    const text=$('#brief-text').value.trim();if(text.length<3){$('#brief-text').focus();return;}
-    $('#brief-run').disabled=true;$('#brief-result').replaceChildren();$('#brief-status').textContent=bi('Reading your description…','Analizuję opis…');
-    try{
-      const r=await window.fetch('/api/ai/house',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,lang})}),j=await r.json().catch(()=>({}));
-      if(!r.ok||!j.answer)throw new Error('unavailable');
-      showBrief(j.answer,planFromBrief(j.answer,[...loadedCatalogModels.values()].map(m=>({id:m.id,width:m.footprint.width,depth:m.footprint.depth}))));$('#brief-status').textContent='';
-    }catch{$('#brief-status').textContent=bi('The assistant is unavailable right now. Add a house below or pick one from the catalogue.','Asystent jest teraz niedostępny. Dodaj dom poniżej lub wybierz z katalogu.');}
-    finally{$('#brief-run').disabled=false;}
-  };
   // One-click garden: deterministic layout around the main house; re-running replaces the previous auto-garden.
   const gardenCard=document.createElement('div');gardenCard.id='garden-designer';
   const boundaryToggle=document.createElement('label');boundaryToggle.className='check boundary-toggle';boundaryToggle.innerHTML='<input type="checkbox" id="boundary-fence"><span data-bi="Fence on the property lines (gate on the street side)|Ogrodzenie na granicy działki (brama od ulicy)"></span>';
-  gardenCard.innerHTML='<h3><span data-bi="Design my garden|Zaprojektuj ogród"></span></h3><div class="garden-chat" aria-live="polite"><p class="bubble ai"><span data-bi="Tell me what you would like: a pool, a vegetable patch, lots of trees, a place for kids… I will design it on your parcel.|Napisz, czego chcesz: basen, warzywnik, dużo drzew, miejsce dla dzieci… Zaprojektuję to na Twojej działce."></span></p></div><form class="garden-ask"><input id="garden-wish" type="text" maxlength="500" autocomplete="off" data-bi-placeholder="e.g. lush garden with a pergola and a vegetable patch|np. bujny ogród z pergolą i warzywnikiem"><button type="submit" aria-label="Send"><span data-bi="Design|Projektuj"></span></button></form><div class="garden-styles" role="radiogroup"><button type="button" role="radio" aria-checked="true" data-style="lush"><span data-bi="Lush|Bujny"></span></button><button type="button" role="radio" aria-checked="false" data-style="family"><span data-bi="Family|Rodzinny"></span></button><button type="button" role="radio" aria-checked="false" data-style="modern"><span data-bi="Modern|Nowoczesny"></span></button><button type="button" role="radio" aria-checked="false" data-style="natural"><span data-bi="Natural|Naturalny"></span></button></div><label class="gate-edge"><span data-bi="Gate on the side|Brama od strony"></span><select id="garden-gate"></select></label><button type="button" id="garden-design"><span data-bi="Design garden|Zaprojektuj ogród"></span></button>';
+  gardenCard.innerHTML='<h3><span data-bi="Garden|Ogród"></span></h3><p class="hint"><span data-bi="Pick a garden type or draw a random one. Every layout fits your parcel and can be edited.|Wybierz typ ogrodu albo wylosuj układ. Każdy mieści się na Twojej działce i można go edytować."></span></p><div class="garden-styles" role="radiogroup"><button type="button" role="radio" aria-checked="true" data-style="lush"><span data-bi="Lush|Bujny"></span></button><button type="button" role="radio" aria-checked="false" data-style="family"><span data-bi="Family|Rodzinny"></span></button><button type="button" role="radio" aria-checked="false" data-style="modern"><span data-bi="Modern|Nowoczesny"></span></button><button type="button" role="radio" aria-checked="false" data-style="natural"><span data-bi="Natural|Naturalny"></span></button></div><label class="gate-edge"><span data-bi="Gate on the side|Brama od strony"></span><select id="garden-gate"></select></label><button type="button" id="garden-random"><span data-bi="🎲 Random garden|🎲 Wylosuj ogród"></span></button><button type="button" id="garden-design"><span data-bi="Design this type|Zaprojektuj ten typ"></span></button>';
   gardenCard.querySelectorAll('[data-style]').forEach(b=>b.onclick=()=>gardenCard.querySelectorAll('[data-style]').forEach(x=>x.setAttribute('aria-checked',String(x===b))));
-  // Garden chat: Workers AI turns a wish into style + elements; the deterministic designer places them.
-  const chat=gardenCard.querySelector('.garden-chat'),chatHistory=[];
-  const bubble=(text,who)=>{const p=document.createElement('p');p.className='bubble '+who;p.textContent=text;chat.append(p);chat.scrollTop=chat.scrollHeight;return p;};
-  gardenCard.querySelector('.garden-ask').onsubmit=async e=>{
-    e.preventDefault();const input=$('#garden-wish'),text=input.value.trim();if(text.length<2)return;
-    input.value='';bubble(text,'me');const waiting=bubble(bi('Designing…','Projektuję…'),'ai');gardenCard.classList.add('busy');
-    try{
-      const r=await window.fetch('/api/ai/garden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,lang,history:chatHistory.slice(-6)})}),j=await r.json().catch(()=>({}));
-      if(!r.ok||!j.answer)throw new Error('unavailable');
-      const a=j.answer;pickStyle(a.style);chatHistory.push(text);
-      if(a.season||a.weather){if(a.season)state.environment.season=a.season;if(a.weather)state.environment.weather=a.weather;}
-      const count=runGarden({add:a.add,avoid:a.avoid});
-      waiting.textContent=count===false?bi('Add a house first, then ask again.','Najpierw dodaj dom, potem napisz ponownie.'):a.reply;
-    }catch{waiting.textContent=bi('The assistant is unavailable right now, so I used the selected style.','Asystent jest teraz niedostępny, więc użyłem wybranego stylu.');runGarden({});}
-    finally{gardenCard.classList.remove('busy');}
-  };
   let autoGarden={items:[],fences:[]},streetKey='',detectedStreet=null;
   // Gate edge: every parcel edge is selectable; the edge facing a mapped road is pre-selected.
   async function syncGateEdges(){
@@ -1075,6 +1083,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   gardenCard.addEventListener('change',e=>{if(e.target.id==='garden-gate')e.target.dataset.auto='0';});
   const pickStyle=style=>gardenCard.querySelectorAll('[data-style]').forEach(x=>x.setAttribute('aria-checked',String(x.dataset.style===style)));
   gardenCard.querySelector('#garden-design').onclick=()=>runGarden({});
+  // Random layout type: a style plus a few surprise features (pool, greenhouse, play tower…), all placed by the deterministic designer.
+  gardenCard.querySelector('#garden-random').onclick=()=>{const plan=randomGarden();pickStyle(plan.style);runGarden({add:plan.add});};
   function runGarden(options){
     const style=gardenCard.querySelector('[aria-checked=true]').dataset.style;
     const base={...state,items:state.items.filter(i=>!autoGarden.items.includes(i.id)),fences:state.fences.filter(f=>!autoGarden.fences.includes(f.id)&&f.id!==BOUNDARY_FENCE_ID)},gateValue=$('#garden-gate').value;
@@ -1240,6 +1250,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   };
   $('#report-print').onclick=()=>$('#report-frame').contentWindow.print();
   $('#report-close').onclick=()=>$('#report-dialog').close();
+  {const advisor=document.createElement('button');advisor.type='button';advisor.id='report-advisor';advisor.dataset.bi='Talk to an advisor|Umów rozmowę z doradcą';advisor.textContent=bi('Talk to an advisor','Umów rozmowę z doradcą');advisor.onclick=()=>{$('#report-dialog').close();openAdvisor();};$('#report-print').after(advisor);}
   $('#b-download').onclick=()=>{try{downloadFile(serializeScene(state),'setback-project.json','application/json');}catch{toast(t('notAPlan'));}};
   $('#b-file').onclick=()=>$('#project-file').click();
   $('#project-file').onchange=async e=>{
@@ -1338,7 +1349,6 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   // Starting over is one click from the header (it still asks first), not buried under Project > Save.
   const restart=document.createElement('button');restart.type='button';restart.className='restart-action';restart.innerHTML=`<span aria-hidden="true">↺</span><span data-bi="Start over|Zacznij od nowa">${bi('Start over','Zacznij od nowa')}</span>`;restart.title=bi('Start over','Zacznij od nowa');restart.setAttribute('aria-label',restart.title);restart.onclick=()=>$('#b-delete').click();
   $('#b-link').before(restart);
-  document.querySelector('[data-panel=houses]')?.prepend($('#house-brief'));
   document.querySelector('[data-panel=garden]')?.prepend(boundaryToggle,gardenCard);
   $('#chipbar').onclick=e=>{const pill=e.target.closest('[data-issues]'),row=e.target.closest('[data-issue]');if(pill)issuesOpen=!issuesOpen;else if(row){selected=row.dataset.issue;issuesOpen=false;buildPanel();}else return;render();};
   $('#boundary-fence').onchange=e=>{snapshot();setBoundaryFence(e.target.checked);render();if(e.target.checked)void gateToStreet();};
@@ -1353,7 +1363,11 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   setAdvanced((()=>{try{return localStorage.getItem(ADV_LS)==='1';}catch{return false;}})());
   const parcelPanel=document.querySelector('[data-panel=parcel]'),parcelAdvanced=document.createElement('details');parcelAdvanced.className='parcel-advanced';parcelAdvanced.innerHTML=`<summary>${lang==='pl'?'Rysowanie, import i współrzędne':'Drawing, import & coordinates'}</summary>`;parcelAdvanced.append($('#p-area').closest('section'));parcelPanel.append(parcelAdvanced);
   const review=document.createElement('section');review.id='review-layout';document.querySelector('[data-panel=project]').prepend(review);
-  function renderLayoutReview(){const data=compute();renderReview(review,{scene:state,language:lang,checks:state.items.map(i=>({id:i.id,...data.res.get(i.id)})),selectedId:selected,onShowPlan:id=>{if(id){selected=id;buildPanel();}setStageMode('2d');fit();render();workspace.activate('houses');if(matchMedia('(max-width:1000px)').matches)document.querySelector('.library-close').click();},onReport:()=>$('#b-report').click(),onSources:()=>{workspace.activate('parcel');document.querySelector('.journey-topics').scrollIntoView({block:'start'});}});}
+  /** The sales hand-off: the existing inquiry form (recipient, consent, Turnstile) with the project attached. */
+  // Advisor buttons appear only once someone can receive inquiries (a recipient set up in the private panel).
+  window.fetch('/api/recipients').then(r=>r.ok?r.json():null).then(d=>{advisorReady=!!d?.recipients?.length;document.body.classList.toggle('advisor-ready',advisorReady);render();}).catch(()=>{});
+  function openAdvisor(){$('.app')?.classList.remove('library-collapsed');workspace?.activate('presentation');void business?.openInquiry();}
+  function renderLayoutReview(){const data=compute();renderReview(review,{scene:state,language:lang,checks:state.items.map(i=>({id:i.id,...data.res.get(i.id)})),selectedId:selected,onShowPlan:id=>{if(id){selected=id;buildPanel();}setStageMode('2d');fit();render();workspace.activate('houses');if(matchMedia('(max-width:1000px)').matches)document.querySelector('.library-close').click();},onReport:()=>$('#b-report').click(),onAdvisor:advisorReady?openAdvisor:undefined,onSources:()=>{workspace.activate('parcel');document.querySelector('.journey-topics').scrollIntoView({block:'start'});}});}
   async function journeyMap(point){await $('#view-map').onclick();if(!parcelMap||!mapActive)throw new Error('Map unavailable');await parcelMap.ready;$('#map-cadastre').checked=true;parcelMap.setCadastre(true);if(point)parcelMap.focusLocation(point.longitude,point.latitude,point.label);}
   journey=mountParcelJourney({container:parcelPanel,stage:$('.stage'),fresh:freshVisit,language:()=>lang,getScene:()=>state,onIntroEnd:()=>{entryPending=false;requestAnimationFrame(()=>{fit();renderSheet();});},onExploreExample:()=>{freshScene=false;entryPending=false;},
     lookupId:async id=>(await import('./core/uldk.ts')).lookupParcel(id),lookupAt:async(longitude,latitude)=>(await import('./core/uldk.ts')).lookupParcelAt(longitude,latitude),

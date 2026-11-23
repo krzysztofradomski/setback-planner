@@ -232,7 +232,7 @@ test("mobile introduction and example exit stay inside the screen in Polish", as
   await page.evaluate(() => localStorage.setItem("setback-planner-test-lang", "pl"));await page.reload();
   await expect(
     page.getByRole("heading", {
-      name: "Zacznij od swojej działki",
+      name: "Czy wymarzony dom zmieści się na Twojej działce?",
       exact: true,
     }),
   ).toBeVisible();

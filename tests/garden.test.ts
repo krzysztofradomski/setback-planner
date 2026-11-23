@@ -18,3 +18,9 @@ test('requested extras are placed first and avoided elements never appear',()=>{
   const kinds=items.map(i=>i.kind);assert.ok(kinds.includes('pool')&&kinds.includes('greenhouse'),kinds.join());assert.ok(!kinds.includes('swing')&&!kinds.includes('sandbox'));
   n=0;const lush=designGarden(scene,'lush',()=>'y'+n++,k=>k).items;assert.ok(lush.length>=15,'lush garden is planting-rich: '+lush.length);
 });
+test('random garden types pick a style and up to three distinct extra features',async()=>{
+  const {randomGarden,GARDEN_STYLES}=await import('../public/core/garden.ts');
+  let seed=7;const random=()=>(seed=(seed*16807)%2147483647)/2147483647;
+  for(let i=0;i<50;i++){const g=randomGarden(random);assert.ok(GARDEN_STYLES.includes(g.style));assert.ok(g.add.length<=3);assert.equal(new Set(g.add).size,g.add.length);
+    let n=0;const {items}=designGarden(scene,g.style,()=>'r'+n++,k=>k,null,{add:g.add});for(const it of items)assert.ok(parcelContains(scene,worldFootprint(it)));}
+});

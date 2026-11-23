@@ -18,7 +18,7 @@ const copy = {
     houses: "House",
     parcel: "Parcel",
     garden: "Garden",
-    project: "Review",
+    project: "Result",
     presentation: "Inquiries",
     backPlan: "Back to plan",
     selected: "Inspector",
@@ -65,7 +65,7 @@ const copy = {
     houses: "Dom",
     parcel: "Działka",
     garden: "Ogród",
-    project: "Przegląd",
+    project: "Wynik",
     presentation: "Zapytania",
     backPlan: "Wróć do planu",
     selected: "Właściwości",
@@ -133,8 +133,9 @@ export function mountWorkspace({
     const button = document.getElementById(id)!;
     button.removeAttribute("data-t");
     button.dataset.ui = key;
+    // The report is what a visitor takes home, so it is the main header action; sharing stays one tap away.
     button.classList.add(
-      id === "b-link" ? "primary-action" : "secondary-action",
+      id === "b-report" ? "primary-action" : "secondary-action",
     );
     actions.append(button);
   }
@@ -142,7 +143,7 @@ export function mountWorkspace({
   const nav = document.createElement("nav");
   nav.className = "workspace-nav";
   nav.setAttribute("aria-label", "Planning steps");
-  const steps = ["parcel", "houses", "garden", "project"] as const;
+  const steps = ["parcel", "houses", "project", "garden"] as const;
   for (const tab of [...steps, "selected"] as const) {
     const button = document.createElement("button");
     button.type = "button";

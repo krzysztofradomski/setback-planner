@@ -38,6 +38,14 @@ const nearestOn = (p: Point, a: Point, b: Point) => { const dx = b.x - a.x, dy =
 /** Zone a free-standing extra element prefers when it is added on request. */
 const EXTRA_ZONE: Partial<Record<Kind, Zone>> = { pool: 'back', 'hot-tub': 'near', greenhouse: 'back-left', vegetables: 'back-left', 'raised-bed': 'back-left', shed: 'back-left', woodshed: 'back-right', playhouse: 'back-right', 'play-tower': 'back-right', swing: 'back-right', sandbox: 'back-right', firepit: 'back-right', kitchen: 'near', seating: 'near', pergola: 'near', gazebo: 'back', tree: 'back', evergreen: 'side', shrub: 'side', flowers: 'front', light: 'front', parking: 'front' };
 
+const SURPRISES: Kind[] = ['pool', 'hot-tub', 'greenhouse', 'playhouse', 'play-tower', 'gazebo', 'kitchen', 'firepit', 'pergola', 'vegetables', 'raised-bed', 'woodshed'];
+/** A random garden type: one style and up to three extra features. `random` is injectable for tests. */
+export function randomGarden(random: () => number = Math.random): { style: GardenStyle; add: Kind[] } {
+  const style = GARDEN_STYLES[Math.floor(random() * GARDEN_STYLES.length)], pool = [...SURPRISES], add: Kind[] = [];
+  for (let n = Math.floor(random() * 4); n > 0 && pool.length; n--) add.push(pool.splice(Math.floor(random() * pool.length), 1)[0]);
+  return { style, add };
+}
+
 export function designGarden(scene: Scene, style: GardenStyle, nextId: () => string, name: (kind: Kind) => string, gateEdge: number | null = null, options: { add?: Kind[]; avoid?: Kind[] } = {}) {
   const house = scene.items.filter(i => i.type === 'house' && i.visible).sort((a, b) => b.w * b.d - a.w * a.d)[0];
   if (!house) throw new Error('Add a house first');

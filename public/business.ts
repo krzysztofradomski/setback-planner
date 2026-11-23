@@ -250,5 +250,12 @@ export function mountBusiness({ container, getScene, getAttribution = () => null
         if (root.open && !content.childElementCount)
             void api('/api/auth/me').then(u => { session = u; }).catch(() => { }).then(render).catch(e => notice.textContent = e.message);
     });
-    return { async logout() { await api('/api/auth/logout', {}); session = null; content.replaceChildren(); notice.textContent = ''; root.open = false; }, clearPersonalData() { content.replaceChildren(); notice.textContent = ''; session = null; root.open = false; } };
+    /** Open the visitor's inquiry form (the "talk to an advisor" call to action) and put the cursor in it. */
+    async function openInquiry() {
+        root.open = true;
+        for (let i = 0; i < 40 && !content.querySelector('input'); i++) await new Promise(r => setTimeout(r, 100));
+        root.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        content.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
+    }
+    return { openInquiry, async logout() { await api('/api/auth/logout', {}); session = null; content.replaceChildren(); notice.textContent = ''; root.open = false; }, clearPersonalData() { content.replaceChildren(); notice.textContent = ''; session = null; root.open = false; } };
 }

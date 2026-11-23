@@ -29,8 +29,8 @@ interface Options {
 }
 const words = {
   en: {
-    title: "Start with your parcel",
-    intro: "Find its boundary, choose a house, then review your layout.",
+    title: "Will your dream house fit your plot?",
+    intro: "Enter the plot address. In a minute you will see which designs fit, in 3D, with a full report on the plot.",
     address: "Address or place",
     id: "Parcel identifier",
     addressLabel: "Town, street and house number",
@@ -43,9 +43,9 @@ const words = {
     example: "Explore the example project",
     examples: "Try an example",
     privacy:
-      "Your query is sent to GUGiK only when you search. Location access is optional.",
-    finding: "Finding matching locations in GUGiK…",
-    boundary: "Retrieving the parcel boundary from GUGiK…",
+      "The plot comes from the national land register. Location access is optional.",
+    finding: "Looking up the address…",
+    boundary: "Fetching the plot boundary…",
     pickHint:
       "Click the parcel you want on the map. You will confirm its boundary before changing your project.",
     addressHint:
@@ -86,7 +86,7 @@ const words = {
     openMap: "Open map",
     step1: "Find parcel",
     step2: "Choose house",
-    step3: "Review layout",
+    step3: "See if it fits",
     continue: "Continue planning",
     found: "Location found",
     summary: "Current parcel",
@@ -95,11 +95,11 @@ const words = {
     close: "Close introduction",
     placeHint: "This pin marks the town or street, not a confirmed parcel. Click your parcel on the map.",
     drawingHouse: "House",
-    drawingFits: "Fits within a 4 m setback",
+    drawingFits: "Fits, 4 m from every boundary",
   },
   pl: {
-    title: "Zacznij od swojej działki",
-    intro: "Znajdź granicę, wybierz dom i sprawdź swój układ.",
+    title: "Czy wymarzony dom zmieści się na Twojej działce?",
+    intro: "Wpisz adres działki. W minutę zobaczysz, które projekty się zmieszczą, w 3D i z pełnym raportem o działce.",
     address: "Adres lub miejscowość",
     id: "Identyfikator działki",
     addressLabel: "Miejscowość, ulica i numer domu",
@@ -112,9 +112,9 @@ const words = {
     example: "Poznaj przykładowy projekt",
     examples: "Wypróbuj przykład",
     privacy:
-      "Zapytanie trafia do GUGiK dopiero po wyszukaniu. Lokalizacja jest opcjonalna.",
-    finding: "Szukamy pasujących lokalizacji w GUGiK…",
-    boundary: "Pobieramy granicę działki z GUGiK…",
+      "Działkę bierzemy z państwowej ewidencji gruntów. Lokalizacja jest opcjonalna.",
+    finding: "Szukamy adresu…",
+    boundary: "Pobieramy granicę działki…",
     pickHint:
       "Kliknij właściwą działkę na mapie. Potwierdzisz jej granicę przed zmianą projektu.",
     addressHint:
@@ -155,7 +155,7 @@ const words = {
     openMap: "Otwórz mapę",
     step1: "Znajdź działkę",
     step2: "Wybierz dom",
-    step3: "Sprawdź układ",
+    step3: "Zobacz, czy się mieści",
     continue: "Kontynuuj planowanie",
     found: "Znaleziono lokalizację",
     summary: "Twoja działka",
@@ -205,7 +205,10 @@ export function mountParcelJourney(o: Options) {
     [[2,2],[66,2],[2,106],[66,106]].map(([x,y])=>'<div class="wd-box wd-pier" style="left:'+x+'px;top:'+y+'px;--w:6px;--d:6px;--h:46px;--r:0px"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i></div>').join('') + '</div>' +
     "</div></figure>";
   o.stage.append(welcome);
-  const figure=welcome.querySelector<HTMLElement>('.welcome-drawing')!;
+  let figure=welcome.querySelector<HTMLElement>('.welcome-drawing')!;
+  // The house animation is the hero: a tap replays the build (a fresh node restarts every CSS animation).
+  const replay=()=>{const fresh=figure.cloneNode(true) as HTMLElement;fresh.onclick=replay;figure.replaceWith(fresh);fallbackResize.unobserve(figure);figure=fresh;fallbackResize.observe(fresh);};
+  figure.onclick=replay;
   // Fit the native animated illustration to the existing landing layout.
   const fallbackResize=new ResizeObserver(()=>figure.style.setProperty('--s',String(.9*Math.min(figure.clientWidth/640,figure.clientHeight/470))));
   fallbackResize.observe(figure);

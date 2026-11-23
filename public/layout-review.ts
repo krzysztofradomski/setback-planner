@@ -20,6 +20,7 @@ export function renderLayoutReview(
     onShowPlan,
     onReport,
     onSources,
+    onAdvisor,
   }: {
     scene: Scene;
     language: "en" | "pl";
@@ -28,6 +29,7 @@ export function renderLayoutReview(
     onShowPlan: (id?: string) => void;
     onReport: () => void;
     onSources: () => void;
+    onAdvisor?: () => void;
   },
 ) {
   const pl = language === "pl",
@@ -64,8 +66,8 @@ export function renderLayoutReview(
         : "Start by choosing a house"
       : warnings.length
         ? pl
-          ? `${warnings.length} obiektów wymaga sprawdzenia`
-          : `${warnings.length} objects need attention`
+          ? `${warnings.length} ${warnings.length === 1 ? "obiekt wymaga" : warnings.length % 10 >= 2 && warnings.length % 10 <= 4 && (warnings.length % 100 < 12 || warnings.length % 100 > 14) ? "obiekty wymagają" : "obiektów wymaga"} sprawdzenia`
+          : `${warnings.length} ${warnings.length === 1 ? "object needs" : "objects need"} attention`
         : pl
           ? "Geometria spełnia wybrane odległości"
           : "Geometry meets your selected setbacks";
@@ -152,18 +154,20 @@ export function renderLayoutReview(
     );
     container.append(row);
   }
-  text(
-    "p",
-    pl
-      ? "Obliczenia geometryczne korzystają z Twoich ustawień odległości, a nie z potwierdzonych przepisów. Obszar po odsunięciu granic nie uwzględnia innych budynków ani ograniczeń MPZP."
-      : "Geometry uses your selected setbacks. The edge-offset region does not subtract other buildings or establish planning/legal feasibility.",
-  );
-  text(
-    "p",
-    pl
-      ? "Warunki zabudowy, ryzyka i warunki gruntu sprawdź w źródłach. Samo wyświetlenie mapy nie jest potwierdzonym ustaleniem."
-      : "Planning rules and site conditions still require verification in their sources. Opening a map is not a verified finding.",
-  );
+  // The fine print stays one tap away instead of in the main flow.
+  const notes = document.createElement("details");
+  notes.className = "review-notes";
+  const summary = document.createElement("summary");
+  summary.textContent = pl ? "Jak liczymy?" : "How is this calculated?";
+  const p1 = document.createElement("p"), p2 = document.createElement("p");
+  p1.textContent = pl
+    ? "Obliczenia geometryczne korzystają z Twoich ustawień odległości, a nie z potwierdzonych przepisów. Obszar po odsunięciu granic nie uwzględnia innych budynków ani ograniczeń MPZP."
+    : "Geometry uses your selected setbacks. The edge-offset region does not subtract other buildings or establish planning/legal feasibility.";
+  p2.textContent = pl
+    ? "Warunki zabudowy, ryzyka i warunki gruntu są opisane w pełnym raporcie i wymagają potwierdzenia w źródłach."
+    : "Planning rules, risks and ground conditions are in the full report and still need confirming in their sources.";
+  notes.append(summary, p1, p2);
+  container.append(notes);
   action(
     scene.items.length
       ? pl
@@ -179,6 +183,8 @@ export function renderLayoutReview(
     onReport,
   );
   report.id = "review-report";
+  if (onAdvisor && scene.items.length)
+    action(pl ? "Umów rozmowę z doradcą →" : "Talk to an advisor →", onAdvisor).className = "review-action review-advisor";
   const sources = action(
     pl ? "Sprawdź mapy otoczenia" : "Review surrounding maps",
     onSources,
