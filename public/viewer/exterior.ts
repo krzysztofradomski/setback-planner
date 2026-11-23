@@ -2,6 +2,7 @@
 // gable walls, eaves band, cladding zones, canopy, gutters, downpipes, PV, roof windows and chimneys.
 // Generic: reads only the manufacturer-independent CatalogExterior description.
 import * as THREE from 'three';
+import {resolveHouseOptions} from '../core/house-options.ts';
 import type { CatalogExterior } from '../core/catalogs.ts';
 import type { SceneItem } from '../core/scene.ts';
 import type { TextureFactory } from './model.ts';
@@ -103,19 +104,14 @@ export function buildExterior(item: SceneItem, spec: CatalogExterior, appearance
     m.rotation.x = s * pitch; m.position.set(-hw - g + at * (item.w + 2 * g), h + rise - d * Math.tan(pitch) + thick / Math.cos(pitch) + lift, s * d);
     return m;
   };
-  if (spec.roof.pv && !winter) {
+  if (spec.roof.pv && resolveHouseOptions(item,spec).solarPanels) {
     const span = (spec.roof.pv.to - spec.roof.pv.from) * (item.w + 2 * g), length = slope * .62, pv = solarCells();
     pv.repeat.set(span / 1.13, length / 1.72);
-    group.add(onSlope(spec.roof.pv.side, (spec.roof.pv.from + spec.roof.pv.to) / 2, .5, span, length, .05, mat('#ffffff', .25, { map: pv, metalness: .35 })));
+    const array=onSlope(spec.roof.pv.side, (spec.roof.pv.from + spec.roof.pv.to) / 2, .5, span, length, .05, mat('#ffffff', .25, { map: pv, metalness: .35 }));array.name='solar-panels';group.add(array);
   }
   for (const w of spec.roof.windows) {
     group.add(onSlope(w.side, w.at, .45, .78, 1.18, .07, mat('#f3f3f0', .6)));
     group.add(onSlope(w.side, w.at, .45, .64, 1.02, .1, mat('#5c7486', .15, { metalness: .5 })));
-  }
-  for (const at of spec.roof.chimneys) {
-    const x = -hw + at * item.w, chimney = new THREE.Mesh(new THREE.BoxGeometry(.55, 1.6, .55), mat('#efefec', .85));
-    chimney.position.set(x, h + rise + .2, -.35); group.add(chimney);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(.7, .08, .7), mat('#3a3d41', .6)); cap.position.set(x, h + rise + 1.04, -.35); group.add(cap);
   }
   return shadowed(group);
 }

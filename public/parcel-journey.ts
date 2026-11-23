@@ -184,12 +184,12 @@ export function mountParcelJourney(o: Options) {
   welcome.className = "journey-welcome";
   welcome.innerHTML =
     '<div class="welcome-copy"><h2></h2><p></p></div><div class="welcome-form"></div><ol class="welcome-explanation"></ol>' +
-    // Illustrative site plan, drawn flat (2D) and then tilted into 3D while the house and garage rise from their footprints.
+    // The original plan-to-3D illustration, enhanced in place with an adjacent carport and optional systems.
     '<figure class="welcome-drawing" aria-hidden="true"><div class="wd-world"><svg viewBox="0 0 600 440" width="600" height="440">' +
     '<path class="wd-plot" d="M70 60 L520 40 L560 390 L40 400 Z"/>' +
     '<path class="wd-setback" d="M106 95 L487 78 L521 357 L76 365 Z"/>' +
     '<g class="wd-build"><rect class="wd-house" x="170" y="130" width="230" height="150"/><text class="wd-label" x="285" y="200" text-anchor="middle" data-wd="house"></text><text class="wd-size" x="285" y="220" text-anchor="middle">12 × 8 m</text></g>' +
-    '<g class="wd-build"><rect class="wd-garage" x="404" y="268" width="84" height="70"/><text class="wd-size" x="446" y="308" text-anchor="middle">6 × 5 m</text></g>' +
+    '<g class="wd-build"><rect class="wd-garage" x="94" y="166" width="74" height="114"/></g>' +
     '<g class="wd-measure"><path class="wd-dim" d="M57 205 H170 M57 198 v14 M170 198 v14"/><text class="wd-dim-t" x="113" y="196" text-anchor="middle">6,30 m</text>' +
     '<path class="wd-dim" d="M285 50 V130 M278 50 h14 M278 130 h14"/><text class="wd-dim-t" x="296" y="95">4,10 m</text></g>' +
     '<g><circle class="wd-corner" cx="70" cy="60" r="6"/><circle class="wd-corner" cx="520" cy="40" r="6"/><circle class="wd-corner" cx="560" cy="390" r="6"/><circle class="wd-corner" cx="40" cy="400" r="6"/>' +
@@ -197,15 +197,18 @@ export function mountParcelJourney(o: Options) {
     '<g class="wd-badge"><rect x="150" y="300" width="234" height="34" rx="17"/><circle cx="170" cy="317" r="6"/><text x="184" y="322" data-wd="fits"></text></g>' +
     "</svg>" +
     // Boxes in CSS 3D: --w/--d footprint, --h wall height, --r ridge height (0 = flat roof).
-    '<div class="wd-box wd-house3d" style="left:170px;top:130px;--w:230px;--d:150px;--h:64px;--r:44px;--L:87px;--p:30.4deg"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rf"></i><i class="rb"></i></div>' +
-    '<div class="wd-box wd-garage3d" style="left:404px;top:268px;--w:84px;--d:70px;--h:38px;--r:0px"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div>' +
+    '<div class="wd-box wd-house3d" style="left:170px;top:130px;--w:230px;--d:150px;--h:64px;--r:44px;--L:87px;--p:30.4deg"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rb"></i><i class="rf"><span class="wd-solar wd-extra" style="--reveal:6.6s;--lift:2px"></span></i>' +
+    '<div class="wd-box wd-chimney wd-extra" style="left:58px;top:64px;--w:12px;--d:12px;--h:38px;--r:0px;--lift:92px;--reveal:5.5s"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div>' +
+    '<div class="wd-box wd-ventilation wd-extra" style="left:158px;top:65px;--w:9px;--d:9px;--h:21px;--r:0px;--lift:94px;--reveal:6s"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div>' +
+    '<div class="wd-box wd-heat-pump wd-extra" style="left:188px;top:152px;--w:26px;--d:12px;--h:23px;--r:0px;--lift:0px;--reveal:7.2s"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div></div>' +
+    '<div class="wd-box wd-carport3d wd-extra" style="left:94px;top:166px;--w:74px;--d:114px;--h:46px;--r:0px;--lift:0px;--reveal:4.7s"><i class="rt"></i>' +
+    [[2,2],[66,2],[2,106],[66,106]].map(([x,y])=>'<div class="wd-box wd-pier" style="left:'+x+'px;top:'+y+'px;--w:6px;--d:6px;--h:46px;--r:0px"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i></div>').join('') + '</div>' +
     "</div></figure>";
   o.stage.append(welcome);
-  // The scene is laid out at 600 × 440 px; scale it to the figure, whatever shape the banner has.
-  const figure = welcome.querySelector<HTMLElement>(".welcome-drawing")!;
-  new ResizeObserver(() =>
-    figure.style.setProperty("--s", String(0.9 * Math.min(figure.clientWidth / 640, figure.clientHeight / 470))),
-  ).observe(figure);
+  const figure=welcome.querySelector<HTMLElement>('.welcome-drawing')!;
+  // Fit the native animated illustration to the existing landing layout.
+  const fallbackResize=new ResizeObserver(()=>figure.style.setProperty('--s',String(.9*Math.min(figure.clientWidth/640,figure.clientHeight/470))));
+  fallbackResize.observe(figure);
   o.container.prepend(root);
   const summary = document.createElement("section");
   summary.className = "journey-parcel-summary";
@@ -225,6 +228,7 @@ export function mountParcelJourney(o: Options) {
   document.querySelector(".inspector-heading")?.after(inspectorNext);
   function leaveIntro() {
     intro = false;
+    fallbackResize.disconnect();
     o.onIntroEnd();
     welcome.hidden = true;
     app.classList.remove("journey-intro");

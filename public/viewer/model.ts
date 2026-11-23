@@ -1,3 +1,4 @@
+import { buildHouseSystems } from './house-systems.ts';
 import { outdoorModel } from './outdoor.ts';
 import * as THREE from 'three';
 import { localFootprint, worldFootprint } from '../core/footprints.ts';
@@ -32,6 +33,7 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
     const u=new THREE.Vector3((b.x-a.x)/length,0,(b.y-a.y)/length),n=new THREE.Vector3(u.z,0,-u.x);
     const mesh=buildOpening(new THREE.Vector3(a.x,0,a.y),u,n,opening,appearance,!!exterior);mesh.name=`opening-${opening.type}`;root.add(mesh);
   });
+  if(item.type==='house')root.add(buildHouseSystems(item,exterior));
   if(exterior&&item.shape==='rectangle'&&item.architecture.roof==='gable'&&item.architecture.roofAxis==='width'){root.add(buildExterior(item,exterior,appearance,textureFactory,season));return root;}
   let roofGeometry:THREE.BufferGeometry;
   if(item.shape==='rectangle'&&item.architecture.roof==='hip'){

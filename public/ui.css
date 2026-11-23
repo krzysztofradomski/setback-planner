@@ -4468,3 +4468,42 @@ body,
     padding: 8px;
   }
 }
+
+/* Saved manufacturer options, alongside the existing selected-house controls. */
+#house-options { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 14px 0; }
+#house-options summary { font-weight: 700; margin-bottom: 12px; }
+.house-option-grid { display: grid; gap: 8px; }
+.house-option-grid .check { min-height: 36px; cursor: pointer; }
+.house-option-grid input { accent-color: #d5652d; }
+.house-option-status { font-size: 12px; color: var(--warn); }
+
+/* Enhance the existing landing illustration: plan → tilt → house → optional elements. */
+.welcome-drawing { --model-accent: #ff6a00; }
+.welcome-drawing .wd-world::before { content: ''; position: absolute; inset: 38px 40px 40px; background: #faf9f5; border: 1px solid #fff; border-radius: 4px; transform: translateZ(-5px); box-shadow: 0 5px 0 #d7d8d5, 14px 24px 30px #343d481c; }
+.welcome-drawing .wd-plot { fill: #faf9f5; stroke: #919b95; }
+.welcome-drawing .wd-setback { stroke: #a6aea7; }
+.welcome-drawing .wd-house,.welcome-drawing .wd-garage { stroke: #9aa39b; }
+.wd-house3d .wf { background: linear-gradient(#bcc9c9,#d4dedc) 14% 38% / 18% 30% no-repeat, linear-gradient(#c2c8c2,#c2c8c2) 50% 100% / 12% 62% no-repeat, linear-gradient(#bcc9c9,#d4dedc) 86% 38% / 18% 30% no-repeat, #fcfaf5; box-shadow: inset 0 4px #eeece5, inset 0 -3px #dcded8; }
+.wd-house3d .wl { background: linear-gradient(#bfcbcb,#d4dedc) 70% 50% / 22% 26% no-repeat, #eeede7; }
+.wd-house3d .wr { background: #e6e6df; }
+.wd-house3d .rf { background: linear-gradient(#fffefa,#efede7); box-shadow: inset 0 -3px #d9dcd5, 0 2px 0 #ffffff; transform-style: preserve-3d; }
+.wd-house3d .rb { background: #dedfd9; }
+.wd-extra { transform-style: preserve-3d; transform: translateZ(var(--lift,0px)); transform-origin: center; }
+.wd-extra i { background-color: #f9f7f0; }
+.wd-carport3d>.rt { inset: -3px; background: #f9f7f0; box-shadow: 0 3px 0 #d5d8d1, 0 12px 18px #36433d1a; }
+.wd-carport3d .wd-pier { animation: none; }
+.wd-carport3d .wd-pier :is(.wb,.wr) { background-color: #dde1d9; }
+.wd-chimney>.rt,.wd-ventilation>.rt { inset: -2px; box-shadow: 0 2px 0 #d1d5cd; }
+.wd-solar { position: absolute; left: 126px; top: 12px; width: 88px; height: 52px; display: block; border: 2px solid #fdfcf7; background-color: #e0e7e2; background-image: repeating-linear-gradient(90deg,transparent 0 19px,#f9f8f2 19px 21px),repeating-linear-gradient(0deg,transparent 0 23px,#f9f8f2 23px 25px); box-shadow: 0 2px 1px #2d3a3429; }
+.wd-heat-pump .wf::after { content: ''; position: absolute; width: 15px; height: 15px; left: 5px; top: 4px; border-radius: 50%; border: 1px solid #9da8a0; background: repeating-conic-gradient(#9da8a0 0deg 22deg, transparent 22deg 60deg); box-shadow: inset 0 0 0 3px #f3f2eb; }
+@media(prefers-reduced-motion:no-preference){
+ .wd-extra { animation: wd-option-rise .9s cubic-bezier(.2,.8,.3,1.15) var(--reveal) both; }
+ .wd-extra>i,.wd-carport3d .wd-pier>i,.wd-solar { animation: wd-option-orange 2s ease var(--reveal) both; }
+ .wd-solar { animation: wd-option-rise .9s cubic-bezier(.2,.8,.3,1.15) var(--reveal) both,wd-option-orange 2s ease var(--reveal) both; }
+ .welcome-drawing .wd-badge { animation-delay: 8s; }
+}
+@keyframes wd-option-rise { from { visibility: hidden; transform: translateZ(calc(var(--lift,0px) + 24px)) scale(.01); } to { visibility: visible; transform: translateZ(var(--lift,0px)) scale(1); } }
+@keyframes wd-option-orange { 0%,45% { background-color: #ff6a00; } 100% { background-color: #f9f7f0; } }
+
+.welcome-drawing .wd-world { --tilt: scale(calc(var(--s,1) * 1.12)) rotateX(52deg) rotateZ(-24deg); }
+@keyframes wd-sway { 50% { transform: scale(calc(var(--s,1) * 1.12)) rotateX(50deg) rotateZ(-18deg); } }

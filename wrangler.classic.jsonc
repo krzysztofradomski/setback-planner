@@ -1,0 +1,7 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "setback-planner-classic",
+  "compatibility_date": "2026-10-04",
+  "assets": { "directory": "./classic" },
+  "routes": [{ "pattern": "setback-planner.paperplane.builders", "custom_domain": true }]
+}

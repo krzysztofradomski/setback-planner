@@ -16,6 +16,8 @@ export const itemSchema=z.object({
   kind:z.enum(Object.keys(objectLibrary) as [keyof typeof objectLibrary,...(keyof typeof objectLibrary)[]]).optional(),
   outdoor:z.object({maturity:finite.min(0).max(1).default(1),matureWidth:finite.min(0.5).max(50).default(4),matureHeight:finite.min(0.1).max(50).default(6),paving:z.enum(['granite','concrete','gravel','timber','grass-pavers']).default('concrete')}).default({maturity:1,matureWidth:4,matureHeight:6,paving:'concrete'}),
   catalog:catalogReferenceSchema.optional(),
+  attachedTo:z.string().min(1).max(80).regex(/^[\w-]+$/).optional(),
+  houseOptions:z.object({fireplace:z.boolean(),recuperation:z.boolean(),solarPanels:z.boolean(),heatPump:z.boolean()}).strict().optional(),
   appearance:appearanceSchema.default({}),
   visible:z.boolean().default(true),locked:z.boolean().default(false),group:z.string().max(60).default(''),
   custom:z.array(pointSchema).max(32).optional(),

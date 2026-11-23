@@ -13,7 +13,7 @@ export function catalogCarport(exterior:CatalogExterior,house:SceneItem,id:strin
   const c=exterior.carport;if(!c)return null;
   const lx=(c.side==='left'?-1:1)*((house.w+c.width)/2+.02),// ponytail: 2 cm gap so touching ≠ overlap in the clearance check
     ly=house.d/2-c.fromFront-c.depth/2,r=house.rot*Math.PI/180;
-  const at={id,name,x:house.x+lx*Math.cos(r)-ly*Math.sin(r),y:house.y+lx*Math.sin(r)+ly*Math.cos(r),w:c.width,d:c.depth,rot:house.rot,setback:3,group:house.group,architecture:{storeys:1,height:c.height,roof:'flat',pitch:0}};
+  const at={id,name,attachedTo:house.id,x:house.x+lx*Math.cos(r)-ly*Math.sin(r),y:house.y+lx*Math.sin(r)+ly*Math.cos(r),w:c.width,d:c.depth,rot:house.rot,setback:3,group:house.group,architecture:{storeys:1,height:c.height,roof:'flat',pitch:0}};
   if((c.kind??'carport')==='carport')return itemSchema.parse({...at,type:'landscape',kind:'carport'});
   // Garage wing: white flat-roof box with a sectional door across its front (edge 2).
   const door=Math.min(c.width-.6,3);

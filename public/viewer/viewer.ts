@@ -97,7 +97,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
       wall.position.set((x0+x1)/2-item.w/2,height/2,(y0+y1)/2-item.d/2);group.add(wall);}// no shadows: rooms stay readable from above
     return group;
   }
-  function applyCutaway(){content.traverse(o=>{if(o.userData.floorPlan)o.visible=cutaway;else if(o.name==='exterior'||(o.name.startsWith('wall-')&&o.parent?.children.some(c=>c.userData.floorPlan)))o.visible=!cutaway;});}
+  function applyCutaway(){content.traverse(o=>{if(o.userData.roofEquipment)o.visible=!cutaway;else if(o.userData.floorPlan)o.visible=cutaway;else if(o.name==='exterior'||(o.name.startsWith('wall-')&&o.parent?.children.some(c=>c.userData.floorPlan)))o.visible=!cutaway;});}
   function view(mode:'top'|'axonometric'|'orbit'|'walk'){
     walkMode=mode==='walk';cutaway=mode==='top';applyCutaway();camera.up.set(0,1,0);controls.target.copy(center);
     if(mode==='walk'){camera.position.set(center.x,1.65,center.z+extent*.4);controls.target.copy(camera.position).add(new THREE.Vector3(0,0,-5));controls.maxPolarAngle=Math.PI*.95;controls.update();render();return;}controls.maxPolarAngle=Math.PI*.49;

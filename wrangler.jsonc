@@ -12,7 +12,7 @@
   },
   "routes": [
     {
-      "pattern": "setback-planner.paperplane.builders",
+      "pattern": "ub.radomski.dev",
       "custom_domain": true
     }
   ],

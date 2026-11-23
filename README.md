@@ -1,6 +1,8 @@
 # Setback Planner
 
-**Production:** [setback-planner.paperplane.builders](https://setback-planner.paperplane.builders).
+**Current planner:** [ub.radomski.dev](https://ub.radomski.dev).
+
+**Original 2D planner:** [setback-planner.paperplane.builders](https://setback-planner.paperplane.builders).
 
 A bilingual parcel and house concept planner. The existing SVG editor is retained, with typed domain modules and optional Three.js and MapLibre views.
 
@@ -55,3 +57,9 @@ npx wrangler deploy
 ```
 
 Staging uses `npx wrangler deploy --env staging`; production uses `--env ''`. See [backend operations](docs/backend.md) for migrations, secrets, recipient activation and retention. For local API development, run `npm run dev:worker` alongside Vite and apply local D1 migrations; Vite proxies `/api` to port 8787. Never commit `.dev.vars` files.
+
+## Separate deployments
+
+The current planner uses `wrangler.jsonc` and the existing `setback-planner` Worker, API bindings, database and secrets, served at `ub.radomski.dev`. Build with `npm run build`, then deploy with `npx wrangler deploy --env ''`.
+
+The original standalone 2D planner is preserved verbatim in `classic/index.html` from git commit `04fc331` (the last original release before the typed-module/3D expansion). Deploy it with `npx wrangler deploy --config wrangler.classic.jsonc`, which publishes the independent static Worker `setback-planner-classic` at `setback-planner.paperplane.builders`. It has no backend bindings and does not change the current planner's database.
