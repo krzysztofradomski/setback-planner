@@ -4,7 +4,7 @@ import { mapSources } from '../map/sources.ts';
 import type { Scene } from './scene.ts';
 import { geographicPoint, projectPoint } from './geospatial.ts';
 
-export const siteLayerIds = ['cadastre', 'planning', 'utilities', 'environment', 'flood', 'groundwater', 'landslides', 'mining', 'wells'] as const;
+export const siteLayerIds = ['cadastre', 'planning', 'utilities', 'environment', 'flood', 'groundwater', 'landslides', 'mining', 'wells', 'heritage'] as const;
 export type SiteLayerId = typeof siteLayerIds[number];
 export type SiteStatus = 'found' | 'none' | 'unavailable' | 'error';
 export interface SiteFeature { layer?: string; attrs: Record<string, string> }
@@ -20,11 +20,26 @@ export interface SiteData {
   /** Filled in the browser from planLines: building line distance per parcel edge in metres. */
   planSetbacks?: (number | null)[];
   /** Filled in the browser from /api/plan-rules: the plan resolution and its rules quoted verbatim. */
+  /** Utility networks (GESUT, one layer per network) over a NETWORK_SPAN square around the query point; browser measures distances. */
+  networks?: { bbox: Box; size: number; images: Partial<Record<NetworkId, string>> };
+  /** Filled in the browser from `networks`: shortest distance from the parcel to each drawn network in metres (null: none in range). */
+  networkDistances?: Partial<Record<NetworkId, number | null>>;
+  /** Archival orthophotos of the frame, oldest first, one per distinct capture. */
+  history?: { date: string; series: string; image: string }[];
+  /** Filled in the browser from /api/site-insights (OpenStreetMap, OSRM, RCN, listings). */
+  insights?: import('./site-insights.ts').SiteInsights;
   planRules?: { status: string; note?: string; reason?: string; aiUsed?: boolean; plan?: { title: string; url: string; pdf: string; scope: string; source: string }; extraction?: { claims: { parameter: string; value: string; quote: string }[]; unknowns: string[] } | null; alternatives?: { title: string; url: string }[] };
 }
 export const SITE_SIZE = 512;
+/** GUGiK's national integration services forward each request to the county's own server, often outside .gov.pl. */
+const countyRelay = /^integracja\d*\.gugik\.gov\.pl$/;
+export const networkIds = ['water', 'sewer', 'gas', 'power'] as const;
+export type NetworkId = typeof networkIds[number];
+const networkLayers: Record<NetworkId, string> = { water: 'przewod_wodociagowy', sewer: 'przewod_kanalizacyjny', gas: 'przewod_gazowy', power: 'przewod_elektroenergetyczny' };
+/** Side of the utility-network square in metres (1 m per pixel); networks further than about half of it are reported as absent nearby. */
+export const NETWORK_SPAN = 600;
 /** INFO_FORMAT each server answers usefully (checked against the live services on 2026-11-17). */
-const infoFormat: Record<SiteLayerId, string> = { cadastre: 'text/xml', planning: 'text/html', utilities: 'text/xml', environment: 'application/json', flood: 'application/json', groundwater: 'text/xml', landslides: 'text/xml', mining: 'text/xml', wells: 'text/xml' };
+const infoFormat: Record<SiteLayerId, string> = { cadastre: 'text/xml', planning: 'text/html', utilities: 'text/xml', environment: 'application/json', flood: 'application/json', groundwater: 'text/xml', landslides: 'text/xml', mining: 'text/xml', wells: 'text/xml', heritage: 'text/xml' };
 
 /** The national local-plan integration redirects EPSG:2180 requests; it answers in Web Mercator. */
 const mercatorOnly: Partial<Record<SiteLayerId, true>> = { planning: true };
@@ -183,9 +198,9 @@ export function parseSiteQuery(params: URLSearchParams) {
 export async function fetchSiteData(frame: { bbox: SiteData['bbox']; point: SiteData['point'] }, fetcher: typeof fetch = fetch, timeout = 12000): Promise<SiteData> {
   const size = SITE_SIZE, B = frame.bbox.join(','), [px, py] = sitePixel({ bbox: frame.bbox, size }, ...frame.point).map(Math.round);
   const common = (layers: string) => `SERVICE=WMS&VERSION=1.1.1&LAYERS=${layers}&STYLES=&SRS=EPSG:2180&WIDTH=${size}&HEIGHT=${size}&BBOX=${B}`;
-  const get = async (url: string) => { const r = await fetcher(url, { signal: AbortSignal.timeout(timeout), headers: { Accept: '*/*' } }); if (!r.ok) throw new Error('HTTP ' + r.status); if (r.url && !new URL(r.url).hostname.endsWith('.gov.pl')) throw new Error('Unexpected redirect'); return r; };
-  const image = async (url: string) => {
-    const r = await get(url), type = r.headers.get('content-type') ?? '';
+  const get = async (url: string, wait = timeout) => { const r = await fetcher(url, { signal: AbortSignal.timeout(wait), headers: { Accept: '*/*' } }); if (!r.ok) throw new Error('HTTP ' + r.status); if (r.url && !new URL(r.url).hostname.endsWith('.gov.pl') && !countyRelay.test(new URL(url).hostname)) throw new Error('Unexpected redirect'); return r; };
+  const image = async (url: string, wait = timeout) => {
+    const r = await get(url, wait), type = r.headers.get('content-type') ?? '';
     if (!/^image\/(png|jpeg)/.test(type)) throw new Error('Not an image');
     const bytes = new Uint8Array(await r.arrayBuffer());
     if (bytes.length > 1_500_000) throw new Error('Image too large');
@@ -209,10 +224,21 @@ export async function fetchSiteData(frame: { bbox: SiteData['bbox']; point: Site
   const planLines = await image(`${wmsOf('planning').base}?${commonM('wektor-lzb')}&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=TRUE`).catch(() => undefined);
   const o = wmsOf('ortho'), oq = common(o.layers);
   const [orthoImage, orthoInfo] = await Promise.allSettled([image(`${o.base}?${oq}&REQUEST=GetMap&FORMAT=image/jpeg`), text(`${o.base}?${oq}${info(o.layers, 'text/plain')}`)]);
+  const half = NETWORK_SPAN / 2, nb: Box = [frame.point[0] - half, frame.point[1] - half, frame.point[0] + half, frame.point[1] + half].map(v => Math.round(v)) as Box;
+  const u = wmsOf('utilities'), nets = await Promise.all(networkIds.map(async id => [id, await image(`${u.base}?SERVICE=WMS&VERSION=1.1.1&LAYERS=${networkLayers[id]}&STYLES=&SRS=EPSG:2180&WIDTH=${NETWORK_SPAN}&HEIGHT=${NETWORK_SPAN}&BBOX=${nb.join(',')}&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=TRUE`).catch(() => undefined)] as const));
+  // The current mosaic lists every capture at the point; the archive serves each one by its exact date (oldest first).
+  const captures = orthoInfo.status === 'fulfilled' ? parseOrthoCaptures(orthoInfo.value) : [];
+  const archive = `${o.base.replace('StandardResolution', 'StandardResolutionTime')}?${oq}&REQUEST=GetMap&FORMAT=image/jpeg`;
+  const history = (await Promise.all(captures.slice(0, 4).reverse().map(async c => {
+    const img = await image(`${archive}&TIME=${c.date}`, 30000).catch(() => undefined); // the archive is slow
+    return img ? { ...c, image: img } : null;
+  }))).filter((h): h is NonNullable<typeof h> => !!h);
   return {
     retrievedAt: new Date().toISOString(), bbox: frame.bbox, point: frame.point, size, layers,
     ortho: { ...(orthoImage.status === 'fulfilled' ? { image: orthoImage.value } : {}), captures: orthoInfo.status === 'fulfilled' ? parseOrthoCaptures(orthoInfo.value) : [] },
     ...(planLines ? { planLines: { image: planLines, mercator: merc } } : {}),
+    networks: { bbox: nb, size: NETWORK_SPAN, images: Object.fromEntries(nets.filter(([, img]) => img)) },
+    history,
   };
 }
 
@@ -222,7 +248,7 @@ export function siteSummary(id: SiteLayerId, layer: SiteLayer): string {
   if (layer.status === 'error') return 'Usługa nie odpowiedziała. Sprawdź na mapie źródłowej.';
   // Some municipal services draw the plan but answer feature queries with nothing; a drawn map still means a plan applies.
   if (id === 'planning' && layer.status === 'none' && (layer.image?.length ?? 0) > 4000) return 'Działka w granicach miejscowego planu (rysunek planu na mapie). Gmina nie udostępnia opisu terenu w usłudze — przeznaczenie i ustalenia odczytaj z rysunku i tekstu planu.';
-  if (layer.status === 'none') return ({ flood: 'Punkt działki poza obszarami zagrożenia powodziowego na mapach MZP/MRP.', planning: 'Brak planu miejscowego w punkcie działki. Sprawdź w gminie plan ogólny lub warunki zabudowy.', utilities: 'Powiat nie zwrócił sieci w tym miejscu. Sprawdź mapę zasadniczą w starostwie.' } as Partial<Record<SiteLayerId, string>>)[id] ?? 'Brak obiektów w punkcie działki.';
+  if (layer.status === 'none') return ({ flood: 'Punkt działki poza obszarami zagrożenia powodziowego na mapach MZP/MRP.', planning: 'Brak planu miejscowego w punkcie działki. Sprawdź w gminie plan ogólny lub warunki zabudowy.', heritage: 'Brak zabytku z rejestru NID w punkcie działki.', utilities: 'Powiat nie zwrócił sieci w tym miejscu. Sprawdź mapę zasadniczą w starostwie.' } as Partial<Record<SiteLayerId, string>>)[id] ?? 'Brak obiektów w punkcie działki.';
   const a = layer.features[0].attrs, pick = (re: RegExp) => Object.entries(a).find(([k]) => re.test(k))?.[1];
   if (id === 'cadastre') return [pick(/^numer działki/i) && 'dz. ' + pick(/^numer działki/i), pick(/obrębu/i) && 'obręb ' + pick(/obrębu/i), pick(/^pole/i) && pick(/^pole/i)!.replace('.', ',') + ' ha', pick(/oznaczenie (konturu|użytku)/i) && 'użytki: ' + pick(/oznaczenie (konturu|użytku)/i)].filter(Boolean).join(' · ');
   if (id === 'flood') { const risk = layer.features.map(f => f.attrs.lor_qualitativevalue).find(Boolean); return risk ? `Działka w strefie ryzyka powodziowego (MRP, ISOK): ${risk}.` : 'Działka w obszarze zagrożenia powodziowego (MZP, ISOK).'; }

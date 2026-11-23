@@ -29,5 +29,5 @@ test('official context overlays use verified provider layers and are valid selec
   }
   assert.equal(isMapOverlay('osm'),false);assert.equal(isMapOverlay('__proto__'),false);
   for(const id of mapOverlayIds)assert.ok(sourceDirectory.find(source=>source.id===id&&source.status==='Available'));
-  assert.equal(sourceDirectory.find(source=>source.id==='prices')?.status,'External reference');
+  assert.equal(sourceDirectory.find(source=>source.id==='connectivity')?.status,'External reference');
 });

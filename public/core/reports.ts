@@ -7,6 +7,7 @@ import { setbackArea } from './placement.ts';
 import { sourceDirectory } from '../map/sources.ts';
 import type { ContextBuilding } from './context.ts';
 import type { CatalogExterior } from './catalogs.ts';
+import { insightFacts, insightSections, summaryWriteUp } from './report-insights.ts';
 import { siteLayerIds, siteParcelPath, mercatorMatrix, siteSummary, siteKeyLabel, siteLayerLabel, siteValue, type SiteData } from './site-data.ts';
 type Lang = 'en' | 'pl';
 export interface ReportExtras { screenshots?: { label: string; src: string }[]; neighbours?: ContextBuilding[]; exteriorFor?: (item: SceneItem) => CatalogExterior | undefined; site?: SiteData }
@@ -101,6 +102,8 @@ export function projectReport(input: Scene, lang: Lang = 'en', generatedAt = new
   const source = scene.parcel?.source, title = scene.parcel?.identifier ? `${l.parcel} ${scene.parcel.identifier}` : l.heading;
   const verdict = !buildings.length ? `<section class="verdict neutral"><h2>${l.verdictEmpty}</h2></section>` : failing.length ? `<section class="verdict bad"><h2>${esc(l.verdictBad(failing.length))}</h2><p>${l.verdictBadText}</p></section>` : `<section class="verdict ok"><h2>${l.verdictOk}</h2><p>${l.verdictOkText}</p></section>`;
   const card = (label: string, value: string, note = '') => `<div class="card"><small>${label}</small><b>${value}</b>${note ? `<em>${note}</em>` : ''}</div>`;
+  const insight = { scene, site: options.site, lang, area, buildable, coverage: area ? sum / area * 100 : 0, buildings: buildings.length, failing: failing.length, houseName: house?.name, neighbours: options.neighbours ? within(200) : undefined };
+  const facts = insightFacts(insight);
   const articles = scene.items.map(item => {
     const exterior = options.exteriorFor?.(item), appearance = resolveAppearance(item.appearance), a = item.architecture, building = item.type !== 'landscape', ok = building && meetsSetback(scene, item);
     const facade = exterior && !item.appearance.facade ? exterior.wall : appearance.facade;
@@ -122,11 +125,15 @@ export function projectReport(input: Scene, lang: Lang = 'en', generatedAt = new
   table{width:100%;border-collapse:collapse;margin:8px 0}td,th{text-align:left;padding:7px 8px;border-bottom:1px solid #dde3db;vertical-align:top}th{font-size:12px;color:#5b6862;font-weight:600}
   article.site{break-inside:avoid}.sitegrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}.sitegrid article{margin:0}svg.sitemap{height:auto;aspect-ratio:1;max-height:110mm}.pill{background:#eef1ec;color:#5b6862}.pill.found{background:#fff3cf;color:#7a5800}
   footer{margin-top:26px;border-top:1px solid #dde3db;padding-top:10px;color:#5b6862;font-size:12px}@media print{body{padding:0}h2{break-after:avoid}svg,figure{break-inside:avoid}}
+  .summary{background:#f4f6f2;border-left:4px solid #1f4a3a;border-radius:10px;padding:14px 18px;margin:0 0 16px}.summary h2{margin:0 0 6px}.summary p{font-size:14px;line-height:1.6}
+  ol.risks,ol.strengths,ol.checks{padding-left:22px}ol.risks li,ol.strengths li,ol.checks li{margin:0 0 8px;break-inside:avoid}ol.risks li::marker{color:#b8392a;font-weight:700}ol.strengths li::marker{color:#1f4a3a;font-weight:700}.cost{display:inline-block;background:#fff3cf;color:#7a5800;border-radius:99px;padding:1px 8px;font-size:12px;font-weight:600}.match{background:#fff3cf;border-radius:10px;padding:10px 14px}
   </style></head><body><header><small>${l.title} · ${l.generated}: ${esc(generatedAt)}</small><h1>${esc(title)}</h1>${source ? `<small>${esc(source.name)} · ${esc(source.retrievedAt)}</small>` : ''}</header>
+  ${summaryWriteUp(insight, facts)}
   ${verdict}
   <section class="cards">${card(l.area, `${fmt(area)} m²`, `${fmt(area / 100, 2)} a`)}${card(l.coverage, `${fmt(area ? sum / area * 100 : 0, 1)}%`, `${l.footprints}: ${number(sum)} m²`)}${card(l.buildable, `${fmt(buildable)} m²`)}${card(l.perimeter, `${fmt(perimeter, 1)} m`)}${options.neighbours ? card(l.nearest, nearest === null ? l.none : `${fmt(nearest, 1)} m`) : ''}</section>
   <h2>${l.plan}</h2><figure>${projectSvg(scene, lang, options.neighbours)}<figcaption class="legend"><span><i style="border-color:#2d4639"></i>${l.parcel}</span><span><i style="border-color:#c99a00;border-top-style:dashed"></i>${l.buildable}</span><span><i style="border-color:#b8392a"></i>${l.bad}</span></figcaption></figure>
   ${images.length ? `<h2>${l.views}</h2><div class="views">${images.map(s => `<figure><img alt="${esc(s.label)}" src="${s.src}"><figcaption>${esc(s.label)}</figcaption></figure>`).join('')}</div><p><small>${l.approximate}</small></p>` : ''}
+  ${insightSections(insight, facts)}
   <h2>${l.building}</h2>${articles}
   ${options.neighbours ? `<h2>${l.surroundings}</h2><section class="cards">${card(l.within(30), fmt(within(30)))}${card(l.within(100), fmt(within(100)))}${card(l.nearest, nearest === null ? l.none : `${fmt(nearest, 1)} m`)}</section><p><small>${l.neighbourNote}</small></p>` : ''}
   ${siteSection(scene, options.site, lang, l, iso => new Date(iso).toLocaleString(lang === 'pl' ? 'pl-PL' : 'en-GB'))}

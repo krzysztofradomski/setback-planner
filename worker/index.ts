@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {assistantRequestSchema,registeredCatalogSources,groundedAnswerSchema,layoutAnswerSchema,validateGroundedAnswer,validateLayoutAnswer,assistantInstructions} from '../public/core/assistant.ts';
 import {objectLibrary} from '../public/core/objects.ts';
 import { fetchSiteData, parseSiteQuery } from '../public/core/site-data.ts';
+import { fetchSiteInsights, parseInsightsQuery } from '../public/core/site-insights.ts';
 import type { Env, User, Lead, Tenant } from './types.ts';
 import { rulesSchema, evidenceSchema, statuses, transition, csvCell, extractionSchema, validateExtraction } from './domain.ts';
 import { HttpError, fail, randomToken, digest, tokenHash, passwordHash, equal, authenticate, owner, tenantScope, rate, jsonBody } from './security.ts';
@@ -95,13 +96,32 @@ async function siteData(req: Request, env: Env, url: URL): Promise<Response> {
     let frame: ReturnType<typeof parseSiteQuery>;
     try { frame = parseSiteQuery(url.searchParams); }
     catch { fail(400, 'Invalid parcel frame'); }
-    const key = new Request('https://site.cache/v1?bbox=' + frame!.bbox.join(',') + '&p=' + frame!.point.join(','));
+    const key = new Request('https://site.cache/v2?bbox=' + frame!.bbox.join(',') + '&p=' + frame!.point.join(','));
     const cache = (caches as unknown as { default: Cache }).default, hit = await cache.match(key);
     if (hit)
         return hit;
     await rate(env, 'site:' + req.headers.get('CF-Connecting-IP'), 60, 3600000);
     const res = new Response(JSON.stringify(await fetchSiteData(frame!)), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' } });
     await cache.put(key, res.clone());
+    return res;
+}
+// Surroundings, prices and listings (OpenStreetMap, OSRM, RCN, Otodom, OLX): fixed hosts only; the client sends a validated parcel ring.
+async function siteInsights(req: Request, env: Env): Promise<Response> {
+    let input: ReturnType<typeof parseInsightsQuery>;
+    const body = await jsonBody(req);
+    try { input = parseInsightsQuery(body); }
+    catch { fail(400, 'Invalid parcel'); }
+    const round = (p: number[]) => p.map(v => Math.round(v)).join(',');
+    const key = new Request('https://site.cache/insights/v1?k=' + await digest(round(input!.point) + '|' + Math.round(input!.area) + '|' + input!.ring.map(round).join(';')));
+    const cache = (caches as unknown as { default: Cache }).default, hit = await cache.match(key);
+    if (hit)
+        return hit;
+    await rate(env, 'insights:' + req.headers.get('CF-Connecting-IP'), 30, 3600000);
+    const data = await fetchSiteInsights(input!), complete = data.osm.source === 'overpass';
+    const res = new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json', 'Cache-Control': complete ? 'public, max-age=43200' : 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+    // ponytail: an Overpass outage is not cached, so the next report retries it
+    if (complete)
+        await cache.put(key, res.clone());
     return res;
 }
 const PLAN_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
@@ -190,6 +210,8 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
         return houseFromDescription(req, env);
     if (path === '/api/site-data' && method === 'GET')
         return siteData(req, env, url);
+    if (path === '/api/site-insights' && method === 'POST')
+        return siteInsights(req, env);
     if (path === '/api/plan-pick' && method === 'POST')
         return planPick(req, env);
     if (path === '/api/pdf-text' && method === 'POST')

@@ -1,9 +1,11 @@
-import {createCatalogItem, catalogCarport} from './catalogs/placement.ts';
+import {houseAnnex, houseParking, setHouseParking, resolveHouseOptions} from './core/house-options.ts';
+import {createCatalogItem} from './catalogs/placement.ts';
 import {fitItemsToParcel, parcelAxis} from './core/placement.ts';
 import {planFromBrief} from './core/brief.ts';
 import {designGarden} from './core/garden.ts';
 import {sourceDirectory,mapOverlayIds} from './map/sources.ts';
-import {siteFrame,siteLayerIds,siteSummary,mercatorPixel,buildingLineSetbacks} from './core/site-data.ts';
+import {siteFrame,siteLayerIds,siteSummary,mercatorPixel,buildingLineSetbacks,networkIds} from './core/site-data.ts';
+import {pointsToParcel} from './core/site-insights.ts';
 import {mountWorkspace} from './workspace.ts';
 import {mountParcelJourney} from './parcel-journey.ts';
 import {ATTRIBUTION_KEY,readAttribution,validateAttribution} from './core/attribution.ts';
@@ -152,11 +154,15 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       try{
         const catalog=await loadCatalog(button.dataset.placeCatalog||button.dataset.addCatalog),x=replace?current.x:state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,y=replace?current.y:state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length,item=createCatalogItem(catalog,button.dataset.model||button.dataset.addModel,{id:replace?current.id:'o'+uid++,x,y,rot:replace?current.rot:parcelAxis(state.plot)});
         if(replace){item.setback=current.setback;item.group=current.group;}else{const {suggestPlacements}=await import('./core/placement.ts'),candidate=suggestPlacements(state,item).suggestions[0];if(!candidate){toast(lang==='pl'?'Brak wolnego miejsca. Przesuń istniejące obiekty lub wybierz większą działkę.':'No free placement found. Move existing objects or use a larger parcel.');return;}Object.assign(item,{x:candidate.x,y:candidate.y,rot:candidate.rot});}
-        const exterior=catalog.models.find(m=>m.id===(button.dataset.model||button.dataset.addModel))?.exterior;let carport=null;
-        // Carport or garage wing from the plan or render; on replace only when the house has no attached structures yet.
-        const alone=replace&&!state.items.some(i=>i.id!==current.id&&current.group&&i.group===current.group);
-        if(exterior?.carport&&(!replace||alone)){const c=exterior.carport;item.group=item.group||crypto.randomUUID();carport=catalogCarport(exterior,item,'o'+uid++,(c.kind==='garage'?bi('Garage','Garaż'):bi('Carport','Wiata'))+' '+(c.source==='plan'?bi('(from plan)','(wg rzutu)'):bi('(from render)','(wg wizualizacji)')));}
-        snapshot();if(replace)state.items=state.items.map(i=>i.id===current.id?item:i);else state.items.push(item);if(carport)state.items.push(carport);selected=item.id;buildPanel();render();toast(replace?(lang==='pl'?'Zmieniono projekt wybranego domu.':'Selected house design updated.'):(lang==='pl'?'Dodano dom w wolnym miejscu. Możesz go przesunąć.':'House added in a free position. Drag it to adjust.'));
+        const exterior=catalog.models.find(m=>m.id===(button.dataset.model||button.dataset.addModel))?.exterior;
+        const parking=replace?houseParking(state.items,current):null;
+        if(replace&&current.houseOptions)item.houseOptions={...current.houseOptions};
+        let items=replace?state.items.map(i=>i.id===current.id?item:i):[...state.items,item];
+        if(exterior?.carport){
+          const kind=replace&&current.catalog?parking:(exterior.carport.kind||'carport');
+          if(kind!=='none')items=setHouseParking(items,item.id,kind,exterior,'o'+uid++);
+        }
+        snapshot();state.items=items;selected=item.id;buildPanel();render();toast(replace?(lang==='pl'?'Zmieniono projekt wybranego domu.':'Selected house design updated.'):(lang==='pl'?'Dodano dom w wolnym miejscu. Możesz go przesunąć.':'House added in a free position. Drag it to adjust.'));
       }catch{toast(t('catalogError'));}finally{button.disabled=false;}
     });
     $('#catalog-models').querySelectorAll('[data-plan-src]').forEach(button=>button.onclick=()=>showCatalogPlan(button.dataset.planSrc,button.dataset.planName));
@@ -359,7 +365,23 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   let viewer = null, view3d = false, parcelMap = null, mapActive = false;
   let originalAppearance = false;
   let C = compute();
-  let siteData=null,siteJob=Promise.resolve(),siteKey='',siteTimer=0,siteState='idle',sitePanel=null;
+  let siteData=null,siteJob=Promise.resolve(),insightsJob=Promise.resolve(),siteKey='',siteTimer=0,siteState='idle',sitePanel=null;
+  const parcelRing=()=>{const o=state.coordinates.projected.origin;return state.plot.map(p=>[o.x+p.x,o.y-p.y]);};
+  /** Distance from the parcel to each utility network drawn on its GESUT layer image (1 m per pixel). */
+  async function readNetworks(d,key){
+    if(!d.networks)return;const out={},ring=parcelRing(),[minE,,,maxN]=d.networks.bbox,S=d.networks.size,m=(d.networks.bbox[2]-minE)/S;
+    for(const id of networkIds){const src=d.networks.images[id];if(!src){out[id]=undefined;continue;}
+      try{const img=await window.createImageBitmap(await (await window.fetch(src)).blob()),c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');g.drawImage(img,0,0);const px=g.getImageData(0,0,S,S).data,points=[];
+        // ponytail: every opaque pixel counts, labels included; good to a few metres, which is what a showroom estimate needs
+        for(let v=0;v<S;v+=1)for(let u=0;u<S;u+=1)if(px[(v*S+u)*4+3]>100)points.push([minE+(u+.5)*m,maxN-(v+.5)*m]);
+        out[id]=pointsToParcel(ring,points);}catch{out[id]=undefined;}}
+    if(siteKey===key&&siteData){siteData.networkDistances=out;renderSitePanel();}
+  }
+  /** Roads, transit, prices and listings from the worker (OpenStreetMap, OSRM, RCN, Otodom, OLX). */
+  async function readInsights(d,key){
+    try{const r=await window.fetch('/api/site-insights',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({point:d.point,ring:parcelRing(),area:parcelArea(state)})});
+      if(r.ok&&siteKey===key&&siteData){siteData.insights=await r.json();renderSitePanel();}}catch{/* report without insights */}
+  }
   /** Decodes the plan's building-line image and measures each edge's line distance (see buildingLineSetbacks). */
   async function readPlanLines(d,key){
     if(!d.planLines)return;
@@ -420,7 +442,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     const frame=siteFrame(state),key=frame?.query??'';if(key===siteKey)return;
     siteKey=key;siteData=null;planSetbacks=[];clearTimeout(siteTimer);siteState=frame?'loading':'idle';renderSitePanel();if(!frame){siteJob=Promise.resolve();return;}
     // ponytail: 1.2 s debounce so dragging a corner does not query every registry on every frame
-    siteJob=new Promise(resolve=>{siteTimer=setTimeout(async()=>{try{const r=await fetch('/api/site-data?'+key);if(!r.ok)throw new Error('site data');const d=await r.json();if(siteKey===key){siteData=d;siteState='ready';void readPlanLines(d,key);void readPlanRules(d,key);}}catch{if(siteKey===key)siteState='error';}if(siteKey===key)renderSitePanel();resolve();},1200);});
+    siteJob=new Promise(resolve=>{siteTimer=setTimeout(async()=>{try{const r=await fetch('/api/site-data?v=2&'+key);if(!r.ok)throw new Error('site data');const d=await r.json();if(siteKey===key){siteData=d;siteState='ready';void readPlanLines(d,key);void readPlanRules(d,key);void readNetworks(d,key);insightsJob=readInsights(d,key);}}catch{if(siteKey===key)siteState='error';}if(siteKey===key)renderSitePanel();resolve();},1200);});
   }
   // The boundary fence follows the parcel: corner edits move it, the gate stays on its edge where possible.
   function syncBoundaryFence(){
@@ -614,6 +636,17 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
         <h3 class="lbl sm">${t('gaps')}</h3><div class="readout" id="f-gaps"></div>`;
       if($('#selected-plan'))$('#selected-plan').onclick=()=>showCatalogPlan(catalogModel.plan,catalogModel.name);
       if ($('#enable-missing-catalog')) $('#enable-missing-catalog').onclick=()=>toggleCatalog(it.catalog.catalogId,true);
+      if(it.type==='house'&&catalogModel?.exterior&&catalogAvailable(it.catalog,enabledCatalogs)){
+        const exterior=catalogModel.exterior,options=resolveHouseOptions(it,exterior),panel=document.createElement('details');
+        panel.id='house-options';panel.open=true;
+        panel.innerHTML=`<summary>${bi('House options','Opcje domu')}</summary><div class="field"><label for="house-parking">${bi('Parking beside the house','Parking przy domu')}</label><select id="house-parking">${[['none','None','Brak'],['carport','Carport','Wiata'],['garage','Garage','Garaż']].map(([v,en,pl])=>`<option value="${v}" ${houseParking(state.items,it)===v?'selected':''}>${bi(en,pl)}</option>`).join('')}</select></div><div class="house-option-grid">${[['fireplace','Fireplace','Kominek'],['recuperation','Heat recovery ventilation','Rekuperacja'],['solarPanels','Solar panels','Fotowoltaika'],['heatPump','Heat pump','Pompa ciepła']].map(([key,en,pl])=>`<label class="check"><input type="checkbox" data-house-option="${key}" ${options[key]?'checked':''}><span>${bi(en,pl)}</span></label>`).join('')}</div><p class="hint">${bi('Illustrative equipment and placement. In Top view, the roof is removed to show the fireplace and ventilation ducts. Confirm dimensions and installation layout with the manufacturer.','Urządzenia i położenie poglądowe. Widok Z góry odsłania kominek i przewody rekuperacji. Potwierdź wymiary i układ instalacji u producenta.')}</p><p class="house-option-status" role="status"></p>`;
+        $('#architecture-options').before(panel);
+        panel.querySelectorAll('[data-house-option]').forEach(input=>input.onchange=()=>{snapshot();it.houseOptions={...resolveHouseOptions(it,exterior),[input.dataset.houseOption]:input.checked};render();});
+        $('#house-parking').onchange=e=>{
+          try{const items=setHouseParking(state.items,it.id,e.target.value,exterior,'o'+uid++);snapshot();state.items=items;buildPanel();render();}
+          catch{e.target.value=houseParking(state.items,it);panel.querySelector('[role=status]').textContent=bi('Unlock the house and its annex, and leave room in the object list.','Odblokuj dom i jego dobudówkę oraz zostaw miejsce na liście obiektów.');}
+        };
+      }
       if(it.type==='landscape'){const f=document.createElement('div');f.className='field';f.innerHTML=`<label for="outdoor-maturity">${t('mature')}</label><input id="outdoor-maturity" type="number" min="0" max="1" step="0.1" value="${it.outdoor.maturity}">`;f.insertAdjacentHTML('beforeend',`<label for="outdoor-paving">${lang==='pl'?'Nawierzchnia':'Paving'}</label><select id="outdoor-paving">${['granite','concrete','gravel','timber','grass-pavers'].map(v=>`<option ${v===it.outdoor.paving?'selected':''}>${v}</option>`).join('')}</select>`);box.append(f);$('#outdoor-paving').onchange=e=>{snapshot();it.outdoor.paving=e.target.value;render();};bindNum('outdoor-maturity',v=>it.outdoor.maturity=Math.max(0,Math.min(1,v)));}
       if(it.type!=='landscape'){
         const openingPanel=document.createElement('details');openingPanel.id='opening-editor';openingPanel.innerHTML=`<summary>${lang==='pl'?'Okna i drzwi':'Windows & doors'}</summary><div class="grid2"><label>${lang==='pl'?'Element':'Element'}<select id="opening-type"><option value="window">${lang==='pl'?'Okno':'Window'}</option><option value="door">${lang==='pl'?'Drzwi':'Door'}</option></select></label><label>${lang==='pl'?'Ściana':'Wall'}<select id="opening-edge">${corners(it).map((_,i)=>`<option value="${i}">${i+1}</option>`).join('')}</select></label>${[['offset',lang==='pl'?'Od narożnika (m)':'From corner (m)',1],['width',lang==='pl'?'Szerokość (m)':'Width (m)',1.2],['height',lang==='pl'?'Wysokość (m)':'Height (m)',1.2],['sill',lang==='pl'?'Parapet (m)':'Sill (m)',.9]].map(([key,label,value])=>`<label>${label}<input id="opening-${key}" type="number" min="0" step=".1" value="${value}"></label>`).join('')}</div><button id="opening-add">+ ${lang==='pl'?'Dodaj element':'Add opening'}</button><p id="opening-error" role="status" class="hint"></p><div class="opening-list">${it.openings.map((o,i)=>`<button data-delete-opening="${i}">${lang==='pl'?'Ściana':'Wall'} ${o.edge+1} · ${o.width} × ${o.height} m <span>×</span></button>`).join('')}</div><p class="hint">${lang==='pl'?'Koncepcyjne otwory. Dobierz je do projektu architektonicznego.':'Conceptual openings. Match them to the architectural drawings.'}</p>`;$('#material-options').before(openingPanel);
@@ -658,6 +691,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   function syncPanel(force){
     const it = get(selected);
     if (it){
+      setVal('house-parking',houseParking(state.items,it));
+      const options=resolveHouseOptions(it,exteriorFor(it));for(const input of document.querySelectorAll('[data-house-option]'))input.checked=options[input.dataset.houseOption];
       setVal('f-w', fmtN(it.w)); setVal('f-d', fmtN(it.d)); setVal('f-rot', fmtN(it.rot)); setVal('f-sb', fmtN(it.setback));
       const appearance=resolveAppearance(it.appearance);
       for(const key of ['facade','grout','roofColor','frameColor','doorColor','gutterColor','trimColor','layout','roofCovering','tileWidth','tileHeight'])setVal('f-'+key,appearance[key]);
@@ -760,12 +795,16 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     const it = get(selected); if (!it) return;
     snapshot();
     const c = {...structuredClone(it), id: 'o' + (uid++), name: (it.name + t('copySuffix')).slice(0, 60), x: it.x + 2, y: it.y + 2};
+    const annex=it.type==='house'?houseAnnex(state.items,it):null;
+    if(annex&&state.items.length>=99){toast(t('objectLimit'));return;}
+    if(annex){c.group=crypto.randomUUID();state.items.push({...structuredClone(annex),id:'o'+uid++,attachedTo:c.id,group:c.group,x:annex.x+2,y:annex.y+2});}
+    else{delete c.attachedTo;c.group='';}
     state.items.push(c); selected = c.id; buildPanel(); render();
   }
   function removeSelected(){
     const it = get(selected); if (!it) return;
     snapshot();
-    state.items = state.items.filter(i => i.id !== it.id); selected = null;
+    state.items = state.items.filter(i => i.id !== it.id && i.attachedTo !== it.id); selected = null;
     buildPanel(); render(); toast(t('removed', {name: it.name}));
   }
   function rotate90(){
@@ -1194,7 +1233,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       }
       if(previous==='2d')setStageMode('2d');else if(previous==='map')await $('#view-map').onclick();
       if(state.coordinates.projected&&!state.terrain){try{const {sampleTerrain}=await import('./core/terrain.ts');scene={...scene,terrain:await sampleTerrain(state)};}catch{/* report without terrain */}}
-      await Promise.race([siteJob,wait(25000)]);
+      await Promise.race([siteJob,wait(25000)]);if(siteData?.insights?.osm?.status==='error')insightsJob=readInsights(siteData,siteKey);await Promise.race([insightsJob,wait(60000)]);
       $('#report-frame').srcdoc=projectReport(scene,lang,new Date().toISOString(),{screenshots:shots,neighbours:lastContext?.buildings.length?lastContext.buildings:undefined,exteriorFor,site:siteData??undefined});$('#report-dialog').showModal();
     }catch{toast(t('notAPlan'));}
     finally{button.disabled=false;}

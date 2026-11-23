@@ -44,6 +44,7 @@ test('each source fails independently and redirects off gov.pl are refused',asyn
     if(url.includes('sdi.gdos.gov.pl'))throw new Error('down');
     if(url.includes('REQUEST=GetMap'))return new Response(new Uint8Array([137,80,78,71]),{headers:{'content-type':'image/png'}});
     if(url.includes('isok'))return Object.defineProperty(new Response('{}'),'url',{value:'https://evil.example/'});
+    if(url.includes('KrajowaIntegracjaUzbrojeniaTerenu')&&url.includes('REQUEST=GetMap'))return Object.defineProperty(new Response(new Uint8Array([137,80,78,71]),{headers:{'content-type':'image/png'}}),'url',{value:'https://wms.um.warszawa.pl/serwis'});
     return new Response('{"type":"FeatureCollection","features":[{"properties":{"nazwa":"X"}}]}');
   }) as unknown as typeof fetch;
   const d=await fetchSiteData({bbox:[643300,497600,643500,497800],point:[643400,497700]},fetcher);
@@ -51,6 +52,9 @@ test('each source fails independently and redirects off gov.pl are refused',asyn
   assert.equal(d.layers.flood.status,'error');
   assert.equal(d.layers.wells.status,'found');
   assert.match(d.layers.wells.image!,/^data:image\/png;base64,/);
+  // GUGiK's county relay may forward to the county's own server; those images are kept.
+  assert.match(d.layers.utilities.image!,/^data:image\/png;base64,/);
+  assert.deepEqual(Object.keys(d.networks!.images).sort(),['gas','power','sewer','water']);
 });
 test('plan building lines: distance from each parcel edge, snapped to the half metres plans use',async()=>{
   const {buildingLineSetbacks}=await import('../public/core/site-data.ts');
