@@ -388,7 +388,7 @@ kbd{font:500 11px var(--f-num);border:1px solid var(--rule);border-bottom-width:
     const items = (Array.isArray(o.items) ? o.items : []).filter(i =>
       i && TYPES[i.type] && num(i.x) && num(i.y) && num(i.w) && num(i.d)
     ).map((i, n) => ({
-      id: String(i.id || ('o' + (n + 1))), type: i.type, name: String(i.name || t(i.type)).slice(0, 60),
+      id: /^[\w-]{1,40}$/.test(String(i.id)) ? String(i.id) : 'o' + (n + 1) /* ids land in HTML attributes */, type: i.type, name: String(i.name || t(i.type)).slice(0, 60),
       x: i.x, y: i.y, w: Math.max(0.5, i.w), d: Math.max(0.5, i.d),
       rot: num(i.rot) ? i.rot : 0, setback: num(i.setback) ? i.setback : TYPES[i.type].setback,
     }));
