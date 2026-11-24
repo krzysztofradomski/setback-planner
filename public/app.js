@@ -780,14 +780,16 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     renderVerdict(warnCount);
   }
   // The answer the visitor came for, in one line on the plan, with a one-tap fix when something breaks a setback.
+  let verdictDismissed='';
   function renderVerdict(warnCount){
     let v=$('#verdict');if(!v){v=document.createElement('div');v.id='verdict';v.setAttribute('role','status');$('#chipbar').after(v);
-      v.onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.fix!==undefined)fixLayout();else if(b.dataset.verdictReport!==undefined)$('#b-report')?.click();else if(b.dataset.advisor!==undefined)openAdvisor();};}
+      v.onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.close!==undefined){verdictDismissed=v.className;v.hidden=true;return;}if(b.dataset.fix!==undefined)fixLayout();else if(b.dataset.verdictReport!==undefined)$('#b-report')?.click();else if(b.dataset.advisor!==undefined)openAdvisor();};}
     const buildings=state.items.filter(i=>i.type!=='landscape'&&i.visible);
     if(!buildings.length){v.hidden=true;return;}
-    v.hidden=false;v.className=warnCount?'verdict bad':'verdict ok';
-    v.innerHTML=warnCount?`<b>${bi('✕ Does not fit yet','✕ Jeszcze się nie mieści')}</b><span>${bi(`${warnCount} ${warnCount===1?'object breaks':'objects break'} a setback.`,`${warnCount===1?'1 obiekt narusza':`${warnCount} ${warnCount<5?'obiekty naruszają':'obiektów narusza'}`} odległość od granicy.`)}</span><button type="button" data-fix>${bi('Fix the placement','Popraw ustawienie')}</button>`
-      :`<b>${bi('✓ Fits the parcel','✓ Mieści się na działce')}</b><span>${bi('Every building keeps its setbacks.','Wszystkie budynki zachowują odległości od granic.')}</span><button type="button" data-verdict-report>${bi('Full report','Pełny raport')}</button>${advisorReady?`<button type="button" data-advisor class="advisor">${bi('Talk to an advisor','Umów rozmowę')}</button>`:''}`;
+    const cls=warnCount?'verdict bad':'verdict ok';if(verdictDismissed===cls){v.hidden=true;return;}verdictDismissed='';// a closed card stays closed until the answer changes
+    v.hidden=false;v.className=cls;
+    v.innerHTML=warnCount?`<b>${bi('✕ Does not fit yet','✕ Jeszcze się nie mieści')}</b><span>${bi(`${warnCount} ${warnCount===1?'object breaks':'objects break'} a setback.`,`${warnCount===1?'1 obiekt narusza':`${warnCount} ${warnCount<5?'obiekty naruszają':'obiektów narusza'}`} odległość od granicy.`)}</span><button type="button" data-fix>${bi('Fix the placement','Popraw ustawienie')}</button><button type="button" class="verdict-close" data-close aria-label="${bi('Close','Zamknij')}">×</button>`
+      :`<b>${bi('✓ Fits the parcel','✓ Mieści się na działce')}</b><span>${bi('Every building keeps its setbacks.','Wszystkie budynki zachowują odległości od granic.')}</span><button type="button" data-verdict-report>${bi('Full report','Pełny raport')}</button>${advisorReady?`<button type="button" data-advisor class="advisor">${bi('Talk to an advisor','Umów rozmowę')}</button>`:''}<button type="button" class="verdict-close" data-close aria-label="${bi('Close','Zamknij')}">×</button>`;
   }
   /** Move each failing building (with its carport or garage) to the nearest spot where everything keeps its setbacks. */
   function fixLayout(){

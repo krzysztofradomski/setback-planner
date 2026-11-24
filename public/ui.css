@@ -4384,7 +4384,7 @@ body,
 @media (max-width:1000px){#verdict.verdict{top:132px;padding:6px 8px 6px 14px;gap:8px;font-size:13px}#verdict.verdict b{font-size:15px}#verdict.verdict span{display:none}#verdict.verdict button{padding:6px 10px}}
 
 /* Simple mode: three steps (parcel, house, result); garden and object properties come with Advanced */
-.app.simple .workspace-nav [data-workspace-tab="garden"],.app.simple .workspace-nav [data-workspace-tab="selected"]{display:none}
+.app.simple .workspace-nav [data-workspace-tab="garden"]{display:none}
 .workspace .review-notes{margin-top:10px;font-size:12.5px;color:var(--muted)}
 .workspace .review-notes summary{cursor:pointer;font-weight:600}
 
@@ -4400,3 +4400,4 @@ body,
 .stage:has(.journey-welcome:not([hidden])) #verdict{display:none}
 .workspace .fit-badge.fits-alone{color:#9a6700}
 body:not(.advisor-ready) #report-advisor{display:none}
+#verdict.verdict button.verdict-close{background:transparent;color:#4b5563;box-shadow:none;padding:4px 8px;font-size:18px;line-height:1}
