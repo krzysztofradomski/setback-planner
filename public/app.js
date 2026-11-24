@@ -140,19 +140,37 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   let catalogRevision=0;const loadedCatalogModels=new Map();
   /** Does each catalogue design (with its carport or garage) fit this parcel with the setbacks? Houses already placed would be replaced, so they are ignored. */
   let fitKey='',fitTimer=0;
+  /** Scene without houses or their annexes: a chosen design would replace them. */
+  const fitBase=()=>({...state,items:state.items.filter(i=>i.type!=='house'&&!state.items.some(h=>h.type==='house'&&houseAnnex(state.items,h)?.id===i.id))});
+  /** 'yes' when the design fits with its carport/garage, 'alone' when only without it, '' when not at all. */
+  async function designFit(catalogId,modelId,base){
+    try{const catalog=await loadCatalog(catalogId),model=catalog.models.find(m=>m.id===modelId),cx=state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,cy=state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length,house=createCatalogItem(catalog,modelId,{id:'fit-house',x:cx,y:cy,rot:parcelAxis(state.plot)});
+      let items=[...base.items,house];if(model.exterior?.carport&&(model.exterior.carport.kind||'carport')!=='none')items=setHouseParking(items,house.id,model.exterior.carport.kind||'carport',model.exterior,'fit-annex');
+      const h=items.find(x=>x.id===house.id),annex=houseAnnex(items,h);
+      return placeGroup({...base,items},annex?[h,annex]:[h])?'yes':annex&&placeGroup({...base,items:items.filter(x=>x.id!==annex.id)},[h])?'alone':'';}catch{return '';}
+  }
+  /** A plot with no house gets the largest catalogue design that fits (with its carport/garage if possible), placed by the catalogue button itself. */
+  async function autoPlaceHouse(){
+    const base=fitBase(),models=[];
+    for(const id of enabledCatalogs){try{const c=await loadCatalog(id);for(const m of c.models)models.push({c:c.id,m:m.id,area:m.footprint.width*m.footprint.depth});}catch{/* catalogue offline */}}
+    models.sort((a,b)=>b.area-a.area);
+    const fits=[];for(const x of models)fits.push({...x,fit:await designFit(x.c,x.m,base)});
+    const pick=fits.find(x=>x.fit==='yes')??fits.find(x=>x.fit==='alone');
+    if(state.items.some(i=>i.type==='house'))return;// the visitor picked one meanwhile
+    if(!pick){toast(bi('No catalogue design fits this plot with the setbacks.','Żaden projekt z katalogu nie mieści się na tej działce z zachowaniem odległości.'));return;}
+    for(let i=0;i<30&&!document.querySelector(`[data-place-catalog="${pick.c}"][data-model="${pick.m}"]`);i++)await new Promise(r=>setTimeout(r,100));
+    document.querySelector(`[data-place-catalog="${pick.c}"][data-model="${pick.m}"]`)?.click();
+  }
   function updateFitBadges(){
     const key=JSON.stringify([state.plot,state.plotHoles,state.items.filter(i=>i.type!=='house'&&!i.attachedTo).map(i=>[i.x,i.y,i.w,i.d,i.rot])]);
     if(key===fitKey)return;fitKey=key;clearTimeout(fitTimer);
     const badges=[...document.querySelectorAll('.fit-badge[data-fit]')];if(!badges.length)return;
-    const base={...state,items:state.items.filter(i=>i.type!=='house'&&!state.items.some(h=>h.type==='house'&&houseAnnex(state.items,h)?.id===i.id))},cx=state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,cy=state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length;
+    const base=fitBase();
     let fitting=0,done=0;
     // ponytail: one design per tick keeps the page responsive while the placement search runs
     const step=i=>{fitTimer=setTimeout(async()=>{
       if(fitKey!==key)return;const badge=badges[i];if(!badge)return;
-      const [catalogId,modelId]=badge.dataset.fit.split(':');let ok;
-      try{const catalog=await loadCatalog(catalogId),model=catalog.models.find(m=>m.id===modelId),house=createCatalogItem(catalog,modelId,{id:'fit-house',x:cx,y:cy,rot:parcelAxis(state.plot)});
-        let items=[...base.items,house];if(model.exterior?.carport&&(model.exterior.carport.kind||'carport')!=='none')items=setHouseParking(items,house.id,model.exterior.carport.kind||'carport',model.exterior,'fit-annex');
-        const h=items.find(x=>x.id===house.id),annex=houseAnnex(items,h);ok=placeGroup({...base,items},annex?[h,annex]:[h])?'yes':annex&&placeGroup({...base,items:items.filter(x=>x.id!==annex.id)},[h])?'alone':'';}catch{ok='';}
+      const [catalogId,modelId]=badge.dataset.fit.split(':'),ok=await designFit(catalogId,modelId,base);
       if(fitKey!==key)return;
       done++;if(ok)fitting++;
       badge.className='fit-badge '+(ok==='yes'?'fits':ok?'fits-alone':'no-fit');badge.textContent=ok==='yes'?bi('✓ Fits this parcel','✓ Mieści się na tej działce'):ok?bi('✓ Fits without the carport or garage','✓ Mieści się bez wiaty/garażu'):bi('✕ Too big for this parcel','✕ Za duży na tę działkę');
@@ -1374,7 +1392,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   journey=mountParcelJourney({container:parcelPanel,stage:$('.stage'),fresh:freshVisit,language:()=>lang,getScene:()=>state,onIntroEnd:()=>{entryPending=false;requestAnimationFrame(()=>{fit();renderSheet();});},onExploreExample:()=>{freshScene=false;entryPending=false;},
     lookupId:async id=>(await import('./core/uldk.ts')).lookupParcel(id),lookupAt:async(longitude,latitude)=>(await import('./core/uldk.ts')).lookupParcelAt(longitude,latitude),
     showMap:journeyMap,showPreview:parcel=>{if(parcelMap){parcelMap.clearLocation();parcelMap.update(parcel?parseScene({...state,...parcel,items:[],terrain:undefined}):state);if(parcel)parcelMap.fitProject();}},
-    applyParcel:parcel=>{entryPending=false;const next=parseScene({...state,...parcel,items:freshScene?[]:state.items,terrain:undefined});next.items=fitItemsToParcel(next);next.fences=next.fences.filter(f=>f.id!==BOUNDARY_FENCE_ID);{const f=boundaryFence(next.plot,facingEdge(next.plot,next.items.find(x=>x.type==='house')),bi('Boundary fence','Ogrodzenie działki'));if(f&&next.fences.length<12)next.fences.unshift(f);}applyPlan(next,t('planLoaded'));void gateToStreet();freshScene=false;setStageMode('2d');fit();render();requestAnimationFrame(()=>{fit();renderSheet();});},activate:tab=>workspace.activate(tab),
+    applyParcel:parcel=>{entryPending=false;const next=parseScene({...state,...parcel,items:freshScene?[]:state.items,terrain:undefined});next.items=fitItemsToParcel(next);next.fences=next.fences.filter(f=>f.id!==BOUNDARY_FENCE_ID);{const f=boundaryFence(next.plot,facingEdge(next.plot,next.items.find(x=>x.type==='house')),bi('Boundary fence','Ogrodzenie działki'));if(f&&next.fences.length<12)next.fences.unshift(f);}applyPlan(next,t('planLoaded'));void gateToStreet();freshScene=false;setStageMode('2d');fit();render();if(!state.items.some(i=>i.type==='house'))void autoPlaceHouse();requestAnimationFrame(()=>{fit();renderSheet();});},activate:tab=>workspace.activate(tab),
     pickMap:()=>{mapPick=true;$('#map-pick').setAttribute('aria-pressed','true');},stopPicking:()=>{mapPick=false;$('#map-pick').setAttribute('aria-pressed','false');},
     showTopic:async topic=>{workspace.activate('parcel');await journeyMap();const ids={planning:['planning'],water:['flood','groundwater'],utilities:['utilities'],nature:['environment'],ground:['relief','landslides','mining','wells']}[topic];for(const id of mapOverlayIds){const enabled=ids.includes(id);$('#map-'+id).checked=enabled;parcelMap.setOverlay(id,enabled);}},reviewLayout:renderLayoutReview});
   // Public registry data: fetched in the background whenever the located parcel changes, listed here and included in the report.

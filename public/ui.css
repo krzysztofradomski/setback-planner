@@ -4401,3 +4401,5 @@ body,
 .workspace .fit-badge.fits-alone{color:#9a6700}
 body:not(.advisor-ready) #report-advisor{display:none}
 #verdict.verdict button.verdict-close{background:transparent;color:#4b5563;box-shadow:none;padding:4px 8px;font-size:18px;line-height:1}
+@media (min-width:1001px){#verdict.verdict{top:auto;bottom:84px;left:24px;transform:none;max-width:min(560px,calc(100% - 48px))}}
+#verdict.verdict span{display:none}
