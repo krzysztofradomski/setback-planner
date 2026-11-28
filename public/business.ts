@@ -46,6 +46,16 @@ export function mountBusiness({ container }: { container: HTMLElement }) {
         if (!session) {
             const email = input('E-mail', 'email'), password = input('Hasło', 'password');
             button('Zaloguj', async () => { session = await api('/api/auth/login', { email: email.value, password: password.value }); password.value = ''; document.body.classList.add('admin'); await render(); });
+            // First owner only: needs the BOOTSTRAP_SECRET set on the worker; refused once an owner exists.
+            const first = document.createElement('details');
+            content.append(first);
+            text('summary', 'Pierwsze konto właściciela', first);
+            const newEmail = input('E-mail', 'email', '', first), newPassword = input('Hasło (min. 12 znaków)', 'password', '', first), secret = input('Sekret inicjalizacji', 'password', '', first);
+            button('Utwórz konto', async () => {
+                try { session = await api('/api/auth/bootstrap', { email: newEmail.value, password: newPassword.value, bootstrapSecret: secret.value }); }
+                catch (e) { throw Error((e as Error).message === 'Sprawdź wpisane dane.' ? 'Sprawdź e-mail i hasło (min. 12 znaków).' : 'Nie można utworzyć konta: konto już istnieje albo sekret jest nieprawidłowy.', { cause: e }); }
+                newPassword.value = secret.value = ''; document.body.classList.add('admin'); await render();
+            }, first);
             return;
         }
         text('p', `Zalogowano: ${session.email}.`);

@@ -8,6 +8,7 @@ function setup() {
     const db = new DatabaseSync(':memory:');
     db.exec(readFileSync(new URL('../migrations/0001_business.sql', import.meta.url), 'utf8'));
     db.exec(readFileSync(new URL('../migrations/0002_funnel.sql', import.meta.url), 'utf8'));
+    db.exec(readFileSync(new URL('../migrations/0003_reset_and_drop_partner_module.sql', import.meta.url), 'utf8'));
     const adapt = (sql: string, params: unknown[] = []): Statement => ({ bind(...p: unknown[]) { return adapt(sql, p); }, async first<T>() { return (db.prepare(sql).get(...params as never[]) ?? null) as T | null; }, async all<T>() { return { results: db.prepare(sql).all(...params as never[]) as T[] }; }, async run() { return { meta: { changes: Number(db.prepare(sql).run(...params as never[]).changes) } }; } });
     const DB: Database = { prepare: adapt, async batch(statements) {
             db.exec('BEGIN');
@@ -36,12 +37,9 @@ test('owner sign-in, secure sessions, CSRF and password change', async () => {
     assert.equal((await api(env, '/api/auth/bootstrap', { email: 'other@example.com', password: 'another secure password', bootstrapSecret: 'b'.repeat(40) })).status, 409);
     assert.equal((await api(env, '/api/auth/me', undefined, cookie)).status, 200);
     assert.equal((await worker.fetch(new Request(origin + '/api/auth/logout', { method: 'POST', headers: { Cookie: cookie } }), env)).status, 403, 'cross-site POST refused');
-    // Accounts left over from the removed partner roles cannot sign in.
-    db.prepare("INSERT INTO tenants(id,name) VALUES('t1','Old recipient')").run();
     const login = await api(env, '/api/auth/login', { email: 'owner@example.com', password: 'a secure password 1234' });
-    db.prepare("INSERT INTO users(id,email,password,role,tenant_id) VALUES('u2','sales@example.com',(SELECT password FROM users WHERE email='owner@example.com'),'sales','t1')").run();
+    assert.throws(() => db.prepare("INSERT INTO users(id,email,password,role) VALUES('u2','sales@example.com','x','sales')").run(), /CHECK/, 'only the owner role exists');
     assert.equal(login.status, 200);
-    assert.equal((await api(env, '/api/auth/login', { email: 'sales@example.com', password: 'a secure password 1234' })).status, 401);
     assert.equal((await api(env, '/api/auth/password', { currentPassword: 'a secure password 1234', newPassword: 'a newer password 5678' }, cookie)).status, 200);
     assert.equal((await api(env, '/api/auth/me', undefined, cookie)).status, 401, 'password change ends sessions');
     assert.equal((await api(env, '/api/auth/login', { email: 'owner@example.com', password: 'a newer password 5678' })).status, 200);
@@ -66,11 +64,10 @@ test('funnel counts are anonymous, bounded and readable only when signed in', as
     const report = await (await api(env, '/api/funnel?days=30', undefined, cookie)).json() as { rows: unknown[] };
     assert.equal(report.rows.length, 2);
 });
-test('retention still erases personal data in leftover leads', async () => {
+test('after the reset the dropped tables are gone and a first owner can be created again', async () => {
     const { env, db } = setup();
-    db.prepare("INSERT INTO tenants(id,name,retention_days) VALUES('t1','Old',1)").run();
-    db.prepare("INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent) VALUES('l1','t1','p','{\"email\":\"a@b.c\"}','h','{}','{}',0,0,'{}')").run();
+    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(t => t.name);
+    for (const gone of ['tenants', 'leads', 'audit', 'ai_cache']) assert.ok(!tables.includes(gone), gone);
+    await ownerSession(env);
     await worker.scheduled(null, env);
-    const row = db.prepare("SELECT contact,anonymized FROM leads WHERE id='l1'").get() as { contact: string; anonymized: number };
-    assert.deepEqual([row.contact, row.anonymized], ['{}', 1]);
 });

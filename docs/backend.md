@@ -23,9 +23,9 @@ Authentication uses salted PBKDF2-SHA256 (100,000 iterations), random 256-bit se
 2. Apply migrations: `npx wrangler d1 migrations apply setback-planner-production --remote` and `npx wrangler d1 migrations apply setback-planner-staging --remote --env staging`. Never edit an applied migration.
 3. Secrets (at least 32 random characters, different per environment, fed through stdin): `SESSION_SECRET`, and `BOOTSTRAP_SECRET` only while creating the first owner. Rotating SESSION_SECRET signs everyone out.
 4. Deploy staging (`npx wrangler deploy --env staging`), check `/api/health`, then production (`npx wrangler deploy --env ''`).
-5. First owner: call `POST /api/auth/bootstrap` with the bootstrap secret, e-mail and a 12+ character password, then remove BOOTSTRAP_SECRET.
+5. First owner: open `/?admin`, tab Statystyki → "Pierwsze konto właściciela", enter e-mail, a 12+ character password and the bootstrap secret (kept locally in the git-ignored `.dev.vars.bootstrap`). Then `npx wrangler secret delete BOOTSTRAP_SECRET --env ''` (and `--env staging`).
 
-The tables from the removed partner module (`tenants`, `leads`, `audit`, `ai_cache`) are left in the databases unused; dropping them is a separate, deliberate migration.
+Migration 0003 (2026-11-28) wiped the test data (users, sessions, rate limits, funnel counts) and dropped the partner module tables (`tenants`, `leads`, `audit`, `ai_cache`); `users` now allows only the owner role. D1 Time Travel can still restore the earlier state for its retention window.
 
 ## Verification
 
