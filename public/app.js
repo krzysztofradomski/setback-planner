@@ -281,7 +281,9 @@ import { track } from './core/funnel.ts';
     catch { projectWarning(lang === 'pl' ? 'Nieprawidłowy lub nieobsługiwany link projektu.' : 'Invalid or unsupported project link.'); return null; }
   }
   const sharedScene=await fromHash(),savedScene=sharedScene?null:load();let freshScene=!sharedScene&&!savedScene&&!persistencePaused,entryDismissed=false;try{entryDismissed=window.sessionStorage.getItem('setback-entry-dismissed')==='1';}catch{}
-  const freshVisit=freshScene&&!entryDismissed;let entryPending=freshVisit,journey=null,workspace=null;
+  // ?admin opens the owner's statistics panel straight away, without the visitor landing page.
+  const adminEntry=new URLSearchParams(location.search).has('admin');
+  const freshVisit=freshScene&&!entryDismissed&&!adminEntry;let entryPending=freshVisit||(freshScene&&adminEntry),journey=null,workspace=null;
   let state = sharedScene || savedScene || exampleScene();
   let saveT, saveRevision = 0;
   // View preference, not project data: garden objects and fences are hidden on the 2D plan, SVG and report unless switched on.
@@ -1390,10 +1392,10 @@ import { track } from './core/funnel.ts';
   funnelStep('visit');
   const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');mountBusiness({container:businessHost});
   // The statistics tab is for the owner: shown with ?admin in the address, or once a session exists.
-  if(new URLSearchParams(location.search).has('admin'))document.body.classList.add('admin');
+  if(adminEntry){document.body.classList.add('admin');const panel=businessHost.querySelector('details');if(panel)panel.open=true;}
   else window.fetch('/api/auth/me',{credentials:'same-origin'}).then(r=>{if(r.ok)document.body.classList.add('admin');}).catch(()=>{});
 
-  workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
+  workspace=mountWorkspace({initialTab:adminEntry?'presentation':freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
   $('#viewer').addEventListener('pointerdown',()=>$('.stage').classList.add('viewer-quiet'));
   // Phone: a "Więcej" tab opens the most used actions, so nothing depends on the desktop header.
   const quickActions=[['📄',bi('Full report','Pełny raport'),'#b-report'],['🔗',bi('Share link','Udostępnij link'),'#b-link'],['🧊',bi('3D view','Widok 3D'),'#view-3d'],['🗺️',bi('Map','Mapa'),'#view-map'],['↶',bi('Undo','Cofnij'),'#t-undo'],['↷',bi('Redo','Ponów'),'#t-redo'],['📐',bi('Plan as SVG','Plan SVG'),'#b-svg'],['💾',bi('Save project file','Zapisz projekt'),'#b-download'],['↺',bi('Start over','Zacznij od nowa'),'#b-delete']];
