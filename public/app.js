@@ -1120,10 +1120,13 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     buildPanel();render();toast(bi(`Garden designed: ${result.items.length} elements${fence?', hedge and a street gate':''}. Drag or delete anything.`,`Ogród gotowy: ${result.items.length} elementów${fence?', żywopłot i brama od ulicy':''}. Możesz wszystko przesuwać i usuwać.`));
     return result.items.length;
   }
-  const walkButton=document.createElement('button');walkButton.dataset.bi='Walk|Spacer';walkButton.textContent=bi('Walk','Spacer');walkButton.onclick=()=>viewer?.view('walk');$('#viewer-controls').append(walkButton);
+  const walkButton=document.createElement('button');walkButton.dataset.bi='Walk|Spacer';walkButton.textContent=bi('Walk','Spacer');walkButton.onclick=()=>viewer?.view('walk',tourHouse());$('#viewer-controls').append(walkButton);
+  // Interior: the selected (or first) house with its roof lifted off, rooms from the manufacturer plan; Walk steps inside it.
+  const tourHouse=()=>get(selected)?.type==='house'?get(selected):state.items.find(i=>i.type==='house');
+  const interiorButton=document.createElement('button');interiorButton.id='view-interior';interiorButton.dataset.bi='Interior|Wnętrze';interiorButton.textContent=bi('Interior','Wnętrze');interiorButton.onclick=()=>{const it=tourHouse();if(it)viewer?.view('interior',it);};
   // Toolbar: one camera group, the surroundings toggle, and a "more" menu for screenshot and low power.
   const cameraGroup=document.createElement('div');cameraGroup.className='camera-group';cameraGroup.setAttribute('role','group');cameraGroup.setAttribute('aria-label',bi('Camera','Kamera'));
-  cameraGroup.append($('#view-axon'),$('#view-top'),focusButton,walkButton);
+  cameraGroup.append($('#view-axon'),$('#view-top'),focusButton,interiorButton,walkButton);
   const more=document.createElement('details');more.className='viewer-more';more.innerHTML='<summary aria-label="More">⋯</summary><div class="viewer-more-menu"></div>';
   more.querySelector('.viewer-more-menu').append($('#view-capture'),$('#view-low').closest('label'));
   // Season, weather and time of day: a chip that opens a small popover (same data as Garden → Season and sunlight).

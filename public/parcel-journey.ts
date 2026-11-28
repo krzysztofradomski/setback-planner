@@ -35,7 +35,7 @@ const words = {
     id: "Parcel identifier",
     addressLabel: "Town, street and house number",
     idLabel: "Full cadastral parcel identifier",
-    placeholder: "e.g. Marki, Andersa 1",
+    placeholder: "e.g. Błonie, Poniatowskiego 28",
     idPlaceholder: "e.g. 141201_1.0001.6509",
     search: "Find parcel",
     pick: "Choose on map",
@@ -104,7 +104,7 @@ const words = {
     id: "Identyfikator działki",
     addressLabel: "Miejscowość, ulica i numer domu",
     idLabel: "Pełny identyfikator ewidencyjny działki",
-    placeholder: "np. Marki, Andersa 1",
+    placeholder: "np. Błonie, Poniatowskiego 28",
     idPlaceholder: "np. 141201_1.0001.6509",
     search: "Znajdź działkę",
     pick: "Wybierz na mapie",
@@ -190,19 +190,22 @@ export function mountParcelJourney(o: Options) {
     '<path class="wd-setback" d="M106 95 L487 78 L521 357 L76 365 Z"/>' +
     '<g class="wd-build"><rect class="wd-house" x="170" y="130" width="230" height="150"/><text class="wd-label" x="285" y="200" text-anchor="middle" data-wd="house"></text><text class="wd-size" x="285" y="220" text-anchor="middle">12 × 8 m</text></g>' +
     '<g class="wd-build"><rect class="wd-garage" x="94" y="166" width="74" height="114"/></g>' +
-    '<g class="wd-measure"><path class="wd-dim" d="M57 205 H170 M57 198 v14 M170 198 v14"/><text class="wd-dim-t" x="113" y="196" text-anchor="middle">6,30 m</text>' +
-    '<path class="wd-dim" d="M285 50 V130 M278 50 h14 M278 130 h14"/><text class="wd-dim-t" x="296" y="95">4,10 m</text></g>' +
+    // Distances to the two boundaries the tilted camera faces (front and right); lines behind the house would be hidden by it.
+    '<g class="wd-measure"><path class="wd-dim" d="M400 205 H539 M400 197 v16 M539 197 v16"/><text class="wd-dim-t" x="470" y="194" text-anchor="middle">7,20 m</text>' +
+    '<path class="wd-dim" d="M392 280 V392 M384 280 h16 M384 392 h16"/><text class="wd-dim-t" x="402" y="343">5,80 m</text></g>' +
     '<g><circle class="wd-corner" cx="70" cy="60" r="6"/><circle class="wd-corner" cx="520" cy="40" r="6"/><circle class="wd-corner" cx="560" cy="390" r="6"/><circle class="wd-corner" cx="40" cy="400" r="6"/>' +
     '<text class="wd-corner-t" x="56" y="48">A</text><text class="wd-corner-t" x="530" y="30">B</text><text class="wd-corner-t" x="572" y="404">C</text><text class="wd-corner-t" x="20" y="418">D</text></g>' +
-    '<g class="wd-badge"><rect x="150" y="300" width="234" height="34" rx="17"/><circle cx="170" cy="317" r="6"/><text x="184" y="322" data-wd="fits"></text></g>' +
+    '<g class="wd-badge"><rect x="120" y="300" width="234" height="34" rx="17"/><circle cx="140" cy="317" r="6"/><text x="154" y="322" data-wd="fits"></text></g>' +
     "</svg>" +
     // Boxes in CSS 3D: --w/--d footprint, --h wall height, --r ridge height (0 = flat roof).
-    '<div class="wd-box wd-house3d" style="left:170px;top:130px;--w:230px;--d:150px;--h:64px;--r:44px;--L:87px;--p:30.4deg"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rb"></i><i class="rf"><span class="wd-solar wd-extra" style="--reveal:6.6s;--lift:2px"></span></i>' +
-    '<div class="wd-box wd-chimney wd-extra" style="left:58px;top:64px;--w:12px;--d:12px;--h:38px;--r:0px;--lift:92px;--reveal:5.5s"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div>' +
-    '<div class="wd-box wd-ventilation wd-extra" style="left:158px;top:65px;--w:9px;--d:9px;--h:21px;--r:0px;--lift:94px;--reveal:6s"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div>' +
-    '<div class="wd-box wd-heat-pump wd-extra" style="left:188px;top:152px;--w:26px;--d:12px;--h:23px;--r:0px;--lift:0px;--reveal:7.2s"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div></div>' +
-    '<div class="wd-box wd-carport3d wd-extra" style="left:94px;top:166px;--w:74px;--d:114px;--h:46px;--r:0px;--lift:0px;--reveal:4.7s"><i class="rt"></i>' +
+    '<div class="wd-box wd-house3d" style="left:170px;top:130px;--w:230px;--d:150px;--h:64px;--r:44px;--L:87px;--p:30.4deg"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rb"></i><i class="rf"><span class="wd-solar wd-extra" style="--reveal:3.7s;--lift:2px"></span></i>' +
+    '<div class="wd-box wd-chimney wd-extra" style="left:58px;top:64px;--w:12px;--d:12px;--h:38px;--r:0px;--lift:92px;--reveal:3.4s"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div>' +
+    '<div class="wd-box wd-ventilation wd-extra" style="left:158px;top:65px;--w:9px;--d:9px;--h:21px;--r:0px;--lift:94px;--reveal:3.55s"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div>' +
+    '<div class="wd-box wd-heat-pump wd-extra" style="left:188px;top:152px;--w:26px;--d:12px;--h:23px;--r:0px;--lift:0px;--reveal:3.9s"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i><i class="rt"></i></div></div>' +
+    '<div class="wd-box wd-carport3d wd-extra" style="left:94px;top:166px;--w:74px;--d:114px;--h:46px;--r:0px;--lift:0px;--reveal:3.2s"><i class="rt"></i>' +
     [[2,2],[66,2],[2,106],[66,106]].map(([x,y])=>'<div class="wd-box wd-pier" style="left:'+x+'px;top:'+y+'px;--w:6px;--d:6px;--h:46px;--r:0px"><i class="wf"></i><i class="wb"></i><i class="wl"></i><i class="wr"></i></div>').join('') + '</div>' +
+    // Trees pop up around the plot while the camera swings in (--t delay, --k size).
+    [[88,92,1.5,1],[505,64,1.62,.8],[478,178,1.74,1.15],[528,336,1.86,.9],[250,384,1.98,1.05],[108,372,2.1,.85]].map(([x,y,t,k])=>'<i class="wd-tree" style="left:'+x+'px;top:'+y+'px;--t:'+t+'s;--k:'+k+'"></i>').join('') +
     "</div></figure>";
   o.stage.append(welcome);
   let figure=welcome.querySelector<HTMLElement>('.welcome-drawing')!;
@@ -281,7 +284,7 @@ export function mountParcelJourney(o: Options) {
   }
   function render() {
     const l = w();
-    root.innerHTML = `<div class="journey-search-heading"><span>${l.step1}</span><h3>${l.title}</h3></div><div class="search-modes" role="group" aria-label="${l.search}"><button type="button" data-mode="address" aria-pressed="${mode === "address"}">${l.address}</button><button type="button" data-mode="id" aria-pressed="${mode === "id"}">${l.id}</button></div><form class="parcel-search-form"><label for="journey-query">${mode === "address" ? l.addressLabel : l.idLabel}</label><div class="search-field"><input id="journey-query" type="search" autocomplete="off" maxlength="180" placeholder="${mode === "address" ? l.placeholder : l.idPlaceholder}" required minlength="3"><button type="submit" data-search>${l.search} →</button></div></form><div class="journey-example">${l.examples}: <button type="button" data-example>Marki, Andersa 1</button></div><div class="journey-search-options"><button type="button" data-pick>⌖ ${l.pick}</button><button type="button" data-gps>◎ ${l.gps}</button></div><p class="journey-status" role="status" aria-live="polite"></p><div class="journey-results"></div><p class="journey-privacy">${l.privacy}</p><button type="button" class="journey-explore" data-explore>${l.example} ↗</button>`;
+    root.innerHTML = `<div class="journey-search-heading"><span>${l.step1}</span><h3>${l.title}</h3></div><div class="search-modes" role="group" aria-label="${l.search}"><button type="button" data-mode="address" aria-pressed="${mode === "address"}">${l.address}</button><button type="button" data-mode="id" aria-pressed="${mode === "id"}">${l.id}</button></div><form class="parcel-search-form"><label for="journey-query">${mode === "address" ? l.addressLabel : l.idLabel}</label><div class="search-field"><input id="journey-query" type="search" autocomplete="off" maxlength="180" placeholder="${mode === "address" ? l.placeholder : l.idPlaceholder}" required minlength="3"><button type="submit" data-search>${l.search} →</button></div></form><div class="journey-example">${l.examples}: <button type="button" data-example>Błonie, Poniatowskiego 28</button></div><div class="journey-search-options"><button type="button" data-pick>⌖ ${l.pick}</button><button type="button" data-gps>◎ ${l.gps}</button></div><p class="journey-status" role="status" aria-live="polite"></p><div class="journey-results"></div><p class="journey-privacy">${l.privacy}</p><button type="button" class="journey-explore" data-explore>${l.example} ↗</button>`;
     root.querySelectorAll<HTMLButtonElement>("[data-mode]").forEach(
       (b) =>
         (b.onclick = () => {
@@ -296,7 +299,7 @@ export function mountParcelJourney(o: Options) {
       void search();
     };
     root.querySelector<HTMLButtonElement>("[data-example]")!.onclick = () => {
-      root.querySelector<HTMLInputElement>("input")!.value = "Marki, Andersa 1";
+      root.querySelector<HTMLInputElement>("input")!.value = "Błonie, Poniatowskiego 28";
       void search();
     };
     root.querySelector<HTMLButtonElement>("[data-pick]")!.onclick = () =>

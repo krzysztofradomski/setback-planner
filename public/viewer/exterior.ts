@@ -70,9 +70,9 @@ export function buildExterior(item: SceneItem, spec: CatalogExterior, appearance
     const slab = new THREE.Mesh(new THREE.BoxGeometry(item.w + 2 * g, thick, slope), [fascia, fascia, roofMat, soffit, fascia, fascia]);
     slab.rotation.x = side * pitch;
     slab.position.set(0, h + rise - ((hd + o) / 2) * Math.tan(pitch) + thick / 2 / Math.cos(pitch), side * (hd + o) / 2);
-    slab.name = 'roof'; group.add(slab);
+    slab.name = 'roof'; slab.userData.roof = true; group.add(slab);
     const gutter = new THREE.Mesh(new THREE.CylinderGeometry(.08, .08, item.w + 2 * g, 10, 1, true, 0, Math.PI), metal);
-    gutter.rotation.set(side > 0 ? Math.PI : 0, 0, Math.PI / 2); gutter.position.set(0, eaveY, side * (hd + o + .03)); group.add(gutter);
+    gutter.rotation.set(side > 0 ? Math.PI : 0, 0, Math.PI / 2); gutter.position.set(0, eaveY, side * (hd + o + .03)); gutter.userData.roof = true; group.add(gutter);
     for (const x of [-hw + .25, hw - .25]) {
       const pipe = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, eaveY, 8), metal);
       pipe.position.set(x, eaveY / 2, side * (hd + .07)); group.add(pipe);
@@ -80,7 +80,7 @@ export function buildExterior(item: SceneItem, spec: CatalogExterior, appearance
   }
   // Gable end walls above the eaves line, in the wall finish.
   const gable = new THREE.Shape([new THREE.Vector2(-hd, h), new THREE.Vector2(hd, h), new THREE.Vector2(0, h + rise)]);
-  for (const side of [1, -1]) { const tri = new THREE.Mesh(new THREE.ShapeGeometry(gable), wallMat); tri.rotation.y = Math.PI / 2; tri.position.x = side * hw; group.add(tri); }
+  for (const side of [1, -1]) { const tri = new THREE.Mesh(new THREE.ShapeGeometry(gable), wallMat); tri.rotation.y = Math.PI / 2; tri.position.x = side * hw; tri.userData.roof = true; group.add(tri); }
   // Eaves band around all walls.
   if (spec.band) {
     const band = mat(spec.band.color, .85);
@@ -102,7 +102,7 @@ export function buildExterior(item: SceneItem, spec: CatalogExterior, appearance
   const onSlope = (side: 'front' | 'back', at: number, down: number, w: number, l: number, lift: number, material: THREE.Material) => {
     const s = side === 'front' ? 1 : -1, d = down * (hd + o), m = new THREE.Mesh(new THREE.BoxGeometry(w, .06, l), material);
     m.rotation.x = s * pitch; m.position.set(-hw - g + at * (item.w + 2 * g), h + rise - d * Math.tan(pitch) + thick / Math.cos(pitch) + lift, s * d);
-    return m;
+    m.userData.roof = true; return m;
   };
   if (spec.roof.pv && resolveHouseOptions(item,spec).solarPanels) {
     const span = (spec.roof.pv.to - spec.roof.pv.from) * (item.w + 2 * g), length = slope * .62, pv = solarCells();
@@ -130,7 +130,7 @@ export function buildOpening(origin: THREE.Vector3, u: THREE.Vector3, n: THREE.V
     group.add(onWall(frame, cx, cy, .07, w, h, .06, frameMat));
     group.add(onWall(frame, cx + w * .3, cy, .12, .03, h * .55, .03, mat('#c9cdd0', .3, { metalness: .8 })));
   } else {
-    group.add(onWall(frame, cx, cy, .055, w - bar, h - bar, .02, mat('#22303a', .08, { metalness: .6 })));
+    const glass = onWall(frame, cx, cy, .055, w - bar, h - bar, .02, mat('#22303a', .08, { metalness: .6, transparent: true, opacity: .55 })); glass.userData.plainColour = '#c4d0ce'; group.add(glass);
     // Catalogue renders show external timber blinds lowered over the upper part of each window.
     if (blinds) { const drop = (h - bar) * .55, tex = slats(); tex.repeat.set(1, drop / .5); group.add(onWall(frame, cx, opening.sill + h - bar / 2 - drop / 2, .065, w - bar * 1.6, drop, .015, mat('#ffffff', .8, { map: tex }))); }
     const bars: [number, number, number, number][] = [[0, h / 2 - bar / 2, w, bar], [0, -h / 2 + bar / 2, w, bar], [-w / 2 + bar / 2, 0, bar, h], [w / 2 - bar / 2, 0, bar, h]];

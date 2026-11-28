@@ -60,7 +60,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   controls.maxPolarAngle=Math.PI*0.49;controls.enableDamping=false;controls.minDistance=2;controls.maxDistance=150;
   const ambient=new THREE.HemisphereLight('#e6f2ff','#6e775f',2);scene.add(ambient);
   const sun=new THREE.DirectionalLight('#fff2d8',3);sun.position.set(-30,60,-35);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.radius=3;sun.shadow.bias=-0.0005;scene.add(sun,sun.target);
-  let walkMode=false;let active=true,signature='',extent=50,center=new THREE.Vector3(),disposed=false;
+  let mode:'top'|'axonometric'|'orbit'|'interior'|'walk'='axonometric';let active=true,signature='',extent=50,center=new THREE.Vector3(),disposed=false;
   // White model by default: every mesh is swapped to a plain white material only for the draw call, so the scene's own
   // materials are never touched. userData.plainColour keeps an accent (setback line, boundary, tree crowns).
   let plain=true;const plainMats=new Map<string,THREE.Material>(),plainSky=sky('#ffffff','#e9edf4'),plainFog=new THREE.Fog('#eef1f6',1,2);
@@ -73,7 +73,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     return out;
   };
   function draw(){
-    if(!plain){renderer.render(scene,camera);return;}
+    if(!plain&&mode!=='interior'&&mode!=='walk'){renderer.render(scene,camera);return;}// the interior always uses the landing's white model with orange accents
     const swapped:[THREE.Mesh,THREE.Material|THREE.Material[]][]=[],bg=scene.background,fog=scene.fog;
     scene.traverse(o=>{const m=o as THREE.Mesh;if(!m.material||o===weatherFx)return;swapped.push([m,m.material]);m.material=Array.isArray(m.material)?m.material.map(x=>plainFor(x,o)):plainFor(m.material,o);});
     scene.background=plainSky;if(fog instanceof THREE.Fog){plainFog.near=fog.near*2;plainFog.far=fog.far*2;}scene.fog=plainFog;renderer.toneMappingExposure=1.5;// ACES greys a white surface; lift it back to paper
@@ -82,28 +82,116 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   }
   const render=()=>{if(active&&!disposed)draw();};
   controls.addEventListener('change',render);
-  const walk=(e:KeyboardEvent)=>{if(!active||!walkMode||!['w','a','s','d'].includes(e.key.toLowerCase())||['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement)?.tagName))return;const forward=controls.target.clone().sub(camera.position);forward.y=0;forward.normalize();const right=new THREE.Vector3().crossVectors(forward,camera.up);const direction=e.key==='w'?forward:e.key==='s'?forward.negate():e.key==='d'?right:right.negate();camera.position.add(direction);controls.target.add(direction);render();};window.addEventListener('keydown',walk);
   const resize=()=>{const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();render();};
   const observer=new ResizeObserver(resize);observer.observe(container);
   const failure=(event:Event)=>{event.preventDefault();active=false;onFailure();};renderer.domElement.addEventListener('webglcontextlost',failure);
-  /** Ground-floor walls of a catalogue house as real 3D walls on a floor slab, shown in the top view with the roof lifted off. */
-  let cutaway=false;
-  const interiorWall=new THREE.MeshStandardMaterial({color:'#f6f3ee',roughness:.9}),interiorFloor=new THREE.MeshStandardMaterial({color:'#e9dcc8',roughness:.95});
+  /** Ground-floor walls of a catalogue house as real 3D walls on a floor slab: the top view shows them with the outer walls
+   *  as thick boxes; the interior view and the walk-through keep the real outer walls (with window holes) and only lift the roof. */
+  const interiorWall=new THREE.MeshStandardMaterial({color:'#f4f0e8',roughness:.9}),interiorFloor=new THREE.MeshStandardMaterial({color:'#ebe5da',roughness:.9}),interiorCap=new THREE.MeshStandardMaterial({color:'#ff6a00',roughness:.6});
   function interiorWalls(item:{w:number;d:number},walls:number[][]){
-    const group=new THREE.Group(),height=2.7;group.userData.floorPlan=true;group.visible=cutaway;
-    const floor=new THREE.Mesh(new THREE.BoxGeometry(item.w,.06,item.d),interiorFloor);floor.position.y=.03;group.add(floor);
+    const group=new THREE.Group(),height=2.7;group.userData.floorPlan=true;group.userData.walls=walls.map(([x0,y0,x1,y1,t=.14])=>[x0-item.w/2,y0-item.d/2,x1-item.w/2,y1-item.d/2,t]);
+    const floor=new THREE.Mesh(new THREE.BoxGeometry(item.w,.06,item.d),interiorFloor);floor.position.y=.03;floor.userData.plainColour='#ebe5da';group.add(floor);
+    const ceiling=new THREE.Mesh(new THREE.BoxGeometry(item.w,.04,item.d),interiorWall);ceiling.position.y=height+.02;ceiling.userData.ceiling=true;ceiling.userData.plainColour='#ffffff';group.add(ceiling);// only inside the walk-through
     for(const [x0,y0,x1,y1,t=.14] of walls){const len=Math.hypot(x1-x0,y1-y0),along=Math.abs(x1-x0)>=Math.abs(y1-y0);
       const wall=new THREE.Mesh(new THREE.BoxGeometry(along?len+t:t,height,along?t:len+t),interiorWall);
-      wall.position.set((x0+x1)/2-item.w/2,height/2,(y0+y1)/2-item.d/2);group.add(wall);}// no shadows: rooms stay readable from above
+      wall.position.set((x0+x1)/2-item.w/2,height/2,(y0+y1)/2-item.d/2);wall.userData.shell=t>=.3;wall.userData.plainColour='#fcfaf5';group.add(wall);
+      // Orange cap on each wall top: from above the rooms read as an orange floor plan, like the landing animation.
+      const cap=new THREE.Mesh(new THREE.BoxGeometry(along?len+t:t,.02,along?t:len+t),interiorCap);cap.position.set(wall.position.x,height+.01,wall.position.z);cap.userData.cap=true;cap.userData.plainColour='#ff6a00';group.add(cap);}// no shadows: rooms stay readable from above
     return group;
   }
-  function applyCutaway(){content.traverse(o=>{if(o.userData.roofEquipment)o.visible=!cutaway;else if(o.userData.floorPlan)o.visible=cutaway;else if(o.name==='exterior'||(o.name.startsWith('wall-')&&o.parent?.children.some(c=>c.userData.floorPlan)))o.visible=!cutaway;});}
-  function view(mode:'top'|'axonometric'|'orbit'|'walk'){
-    walkMode=mode==='walk';cutaway=mode==='top';applyCutaway();camera.up.set(0,1,0);controls.target.copy(center);
-    if(mode==='walk'){camera.position.set(center.x,1.65,center.z+extent*.4);controls.target.copy(camera.position).add(new THREE.Vector3(0,0,-5));controls.maxPolarAngle=Math.PI*.95;controls.update();render();return;}controls.maxPolarAngle=Math.PI*.49;
-    const offset=mode==='top'?new THREE.Vector3(0,extent*1.6,0.001):new THREE.Vector3(extent*0.8,extent*1.05,extent*1.15);
+  function applyCutaway(){const top=mode==='top',open=mode==='interior'||mode==='walk';content.traverse(o=>{const u=o.userData;
+    if(u.roofEquipment||u.roof||o.name==='roof')o.visible=!top&&!open;
+    else if(u.shell)o.visible=top;
+    else if(u.ceiling)o.visible=mode==='walk';
+    else if(u.cap)o.visible=open&&mode!=='walk'||top;
+    else if(u.floorPlan)o.visible=top||open;
+    else if(o.name==='exterior'||(o.name.startsWith('wall-')&&o.parent?.children.some(c=>c.userData.floorPlan)))o.visible=!top;});}
+  type Target={id:string;x:number;y:number;w:number;d:number;rot:number};
+  // Camera flights between views: eased position and look-at; the orbit controls wait until the camera lands.
+  let flight=0;
+  function fly(to:THREE.Vector3,look:THREE.Vector3,ms:number,done?:()=>void){
+    cancelAnimationFrame(flight);const from=camera.position.clone(),fromLook=controls.target.clone(),start=performance.now();controls.enabled=false;
+    const step=(now:number)=>{const k=Math.min(1,(now-start)/ms),e=k<.5?4*k*k*k:1-(-2*k+2)**3/2;
+      camera.position.lerpVectors(from,to,e);controls.target.lerpVectors(fromLook,look,e);camera.lookAt(controls.target);render();
+      if(k<1)flight=requestAnimationFrame(step);else{flight=0;if(done)done();else{controls.enabled=true;controls.update();}}};
+    flight=requestAnimationFrame(step);
+  }
+  function view(next:'top'|'axonometric'|'orbit'|'interior'|'walk',item?:Target){
+    if(item)lastTarget=item;if(mode==='walk'&&next!=='walk')leaveWalk();
+    mode=next;applyCutaway();camera.up.set(0,1,0);controls.maxPolarAngle=Math.PI*.49;
+    const root=item&&content.getObjectByName(item.id);
+    if(next==='walk'){enterWalk(root??undefined);return;}
+    if(next==='interior'&&root){
+      // Roof lifted off, looking down into the rooms from the front-left, close enough to read the layout.
+      const r=-root.rotation.y,size=Math.max(item!.w,item!.d),look=root.position.clone().setY(root.position.y+.6);
+      const to=look.clone().add(new THREE.Vector3(-Math.sin(r)*-.55+Math.cos(r)*-.45,0,Math.cos(r)*.55+Math.sin(r)*-.45).multiplyScalar(size*1.5)).setY(root.position.y+size*1.25);
+      fly(to,look,1100);return;
+    }
+    cancelAnimationFrame(flight);flight=0;controls.enabled=true;controls.target.copy(center);
+    const offset=next==='top'?new THREE.Vector3(0,extent*1.6,0.001):new THREE.Vector3(extent*0.8,extent*1.05,extent*1.15);
     camera.position.copy(center).add(offset);camera.lookAt(center);controls.update();render();
   }
+  // ---------- first-person walk-through ----------
+  // Eye at 1.6 m, drag to look, WASD/arrows (Shift runs) or the on-screen pad, Esc leaves. The plan's walls stop you;
+  // doorways (gaps between transcribed wall segments) let you through. Walls are segments [x0,z0,x1,z1,thickness] in world metres.
+  const EYE=1.6,RADIUS=.22,pl=()=>document.documentElement.lang==='pl';
+  let yaw=0,pitch=0,floorY=0,walls:number[][]=[],walkLoop=0,lastStep=0,bob=0,hud:HTMLElement|null=null,mini:HTMLCanvasElement|null=null,miniBox={x:0,z:0,s:1};
+  const keys=new Set<string>(),pad={x:0,z:0},lamp=new THREE.PointLight('#fff1dc',0,10,1.4);scene.add(lamp);// soft fill that walks with you: rooms in the sun's shadow stay readable
+  const nearest=(x:number,z:number,[x0,z0,x1,z1]:number[])=>{const dx=x1-x0,dz=z1-z0,l=dx*dx+dz*dz,t=l?Math.max(0,Math.min(1,((x-x0)*dx+(z-z0)*dz)/l)):0;return [x0+dx*t,z0+dz*t];};
+  const clearance=(x:number,z:number,list=walls)=>list.reduce((m,w)=>{const [cx,cz]=nearest(x,z,w);return Math.min(m,Math.hypot(x-cx,z-cz)-w[4]/2);},Infinity);
+  function collide(p:THREE.Vector3){for(let i=0;i<3;i++)for(const w of walls){const [cx,cz]=nearest(p.x,p.z,w),dx=p.x-cx,dz=p.z-cz,d=Math.hypot(dx,dz),min=RADIUS+w[4]/2;if(d<min&&d>1e-6){p.x+=dx/d*(min-d);p.z+=dz/d*(min-d);}}}
+  function enterWalk(root?:THREE.Object3D){
+    const plan=root?.children.find(c=>c.userData.floorPlan);
+    walls=plan?(plan.userData.walls as number[][]).map(([x0,z0,x1,z1,t])=>{root!.updateMatrixWorld(true);const a=root!.localToWorld(new THREE.Vector3(x0,0,z0)),b=root!.localToWorld(new THREE.Vector3(x1,0,z1));return [a.x,a.z,b.x,b.z,t];}):[];
+    floorY=root?root.position.y+.06:0;
+    let spot=new THREE.Vector3(center.x,0,center.z+extent*.4);yaw=0;
+    if(plan){
+      // Start in the most open spot (usually the living room), facing the longest clear line of sight. Searched in the
+      // house's own axes: a rotated house's world bounding box has open corners outside its walls.
+      const local=plan.userData.walls as number[][],xs=local.flatMap(w=>[w[0],w[2]]),zs=local.flatMap(w=>[w[1],w[3]]);let best=-1,at=new THREE.Vector3();
+      for(let x=Math.min(...xs)+.5;x<Math.max(...xs)-.5;x+=.2)for(let z=Math.min(...zs)+.5;z<Math.max(...zs)-.5;z+=.2){const c=clearance(x,z,local);if(c>best){best=c;at=new THREE.Vector3(x,0,z);}}
+      let far=0,localYaw=0;for(let a=0;a<Math.PI*2;a+=Math.PI/24){let t=.3;while(t<25&&clearance(at.x-Math.sin(a)*t,at.z-Math.cos(a)*t,local)>RADIUS)t+=.15;if(t>far){far=t;localYaw=a;}}
+      spot=root!.localToWorld(at);yaw=localYaw+root!.rotation.y;
+    }
+    spot.y=floorY+EYE;pitch=-.06;
+    const look=spot.clone().add(new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)));
+    // Swoop down from wherever the camera is, then hand over to the walking controls.
+    ambient.groundColor.set('#e2d6c4');showHud();fly(spot,look,1400,()=>{camera.position.copy(spot);lastStep=0;walkLoop=requestAnimationFrame(walkStep);});
+  }
+  function leaveWalk(){lamp.intensity=0;ambient.groundColor.set('#6e775f');cancelAnimationFrame(walkLoop);walkLoop=0;keys.clear();pad.x=pad.z=0;hud?.remove();hud=mini=null;controls.enabled=true;}
+  function walkStep(now:number){
+    walkLoop=0;if(mode!=='walk'||disposed)return;walkLoop=requestAnimationFrame(walkStep);if(!active)return;
+    const dt=Math.min(.05,(now-(lastStep||now))/1000);lastStep=now;
+    const f=(keys.has('w')||keys.has('arrowup')?1:0)-(keys.has('s')||keys.has('arrowdown')?1:0)+pad.z,sd=(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0)+pad.x;
+    const moving=f!==0||sd!==0,speed=keys.has('shift')?3.2:1.5,p=camera.position;
+    if(moving){const l=Math.hypot(f,sd);p.x+=(-Math.sin(yaw)*f+Math.cos(yaw)*sd)/l*speed*dt;p.z+=(-Math.cos(yaw)*f-Math.sin(yaw)*sd)/l*speed*dt;collide(p);bob+=dt*speed*5.5;}
+    p.y=floorY+EYE+Math.sin(bob)*.025;lamp.position.set(p.x+Math.sin(yaw)*.8,floorY+2.2,p.z+Math.cos(yaw)*.8);lamp.intensity=10;camera.rotation.set(pitch,yaw,0,'YXZ');draw();drawMini();
+  }
+  function drawMini(){
+    const g=mini?.getContext('2d');if(!g||!walls.length)return;const {x,z,s}=miniBox,W=mini!.width,H=mini!.height;g.clearRect(0,0,W,H);
+    g.strokeStyle='#9aa39b';g.lineCap='round';for(const w of walls){g.lineWidth=Math.max(1.5,w[4]*s);g.beginPath();g.moveTo((w[0]-x)*s,(w[1]-z)*s);g.lineTo((w[2]-x)*s,(w[3]-z)*s);g.stroke();}
+    const px=(camera.position.x-x)*s,pz=(camera.position.z-z)*s;g.fillStyle='rgba(255,106,0,.22)';g.beginPath();g.moveTo(px,pz);g.arc(px,pz,26,-Math.PI/2-yaw-.6,-Math.PI/2-yaw+.6);g.closePath();g.fill();
+    g.fillStyle='#ff6a00';g.beginPath();g.arc(px,pz,5,0,Math.PI*2);g.fill();
+  }
+  function showHud(){
+    hud?.remove();hud=document.createElement('div');hud.className='walk-hud';
+    const t=(en:string,p:string)=>pl()?p:en;
+    hud.innerHTML=`<div class="walk-tip">${t('Drag to look around · W A S D or arrows to walk · Shift to run','Przeciągnij, by się rozejrzeć · W A S D lub strzałki, by iść · Shift — szybciej')}</div><button type="button" class="walk-exit">${t('Leave walk-through','Zakończ spacer')} <kbd>Esc</kbd></button><canvas class="walk-map" width="180" height="120" aria-hidden="true"></canvas><div class="walk-pad" aria-hidden="true"><button data-pad="0,1">▲</button><button data-pad="-1,0">◀</button><button data-pad="1,0">▶</button><button data-pad="0,-1">▼</button></div>`;
+    hud.querySelector<HTMLButtonElement>('.walk-exit')!.onclick=()=>view('interior',lastTarget);
+    hud.querySelectorAll<HTMLButtonElement>('[data-pad]').forEach(b=>{const [x,z]=b.dataset.pad!.split(',').map(Number);
+      b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);pad.x=x;pad.z=z;};b.onpointerup=b.onpointercancel=()=>{pad.x=pad.z=0;};});
+    mini=hud.querySelector('canvas');
+    if(walls.length){const xs=walls.flatMap(w=>[w[0],w[2]]),zs=walls.flatMap(w=>[w[1],w[3]]),w=Math.max(...xs)-Math.min(...xs),d=Math.max(...zs)-Math.min(...zs),s=Math.min(164/w,104/d);miniBox={x:Math.min(...xs)-(180/s-w)/2,z:Math.min(...zs)-(120/s-d)/2,s};}else mini!.hidden=true;
+    container.append(hud);
+  }
+  let lastTarget:Target|undefined,dragging:{x:number;y:number}|null=null;
+  renderer.domElement.addEventListener('pointerdown',e=>{if(mode!=='walk'||flight)return;dragging={x:e.clientX,y:e.clientY};renderer.domElement.setPointerCapture(e.pointerId);});
+  renderer.domElement.addEventListener('pointermove',e=>{if(!dragging)return;yaw+=(e.clientX-dragging.x)*.0045;pitch=Math.max(-1.2,Math.min(1.2,pitch+(e.clientY-dragging.y)*.0045));dragging={x:e.clientX,y:e.clientY};});
+  const endDrag=()=>{dragging=null;};renderer.domElement.addEventListener('pointerup',endDrag);renderer.domElement.addEventListener('pointercancel',endDrag);
+  const typing=(e:KeyboardEvent)=>['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement)?.tagName);
+  const keyDown=(e:KeyboardEvent)=>{if(mode!=='walk'||!active||typing(e))return;const k=e.key.toLowerCase();if(k==='escape'){view('interior',lastTarget);return;}if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);e.preventDefault();}};
+  const keyUp=(e:KeyboardEvent)=>keys.delete(e.key.toLowerCase());
+  window.addEventListener('keydown',keyDown);window.addEventListener('keyup',keyUp);window.addEventListener('blur',()=>keys.clear());
   let contextSeason='summer',lastPlot:{x:number;y:number}[]=[];
   function update(project:Scene,original=false,exteriorFor:(item:Scene['items'][number])=>CatalogExterior|undefined=()=>undefined){
     contextSeason=project.environment.season;lastPlot=project.plot;
@@ -196,7 +284,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   }
   /** Frame one building from its front-left, at eye-catching height. */
   function focus(item:{x:number;y:number;w:number;d:number;rot:number}){
-    walkMode=false;cutaway=false;applyCutaway();const r=item.rot*Math.PI/180,size=Math.max(item.w,item.d),front=new THREE.Vector3(-Math.sin(r),0,Math.cos(r)),side=new THREE.Vector3(Math.cos(r),0,Math.sin(r));
+    if(mode==='walk')leaveWalk();cancelAnimationFrame(flight);flight=0;controls.enabled=true;mode='orbit';applyCutaway();const r=item.rot*Math.PI/180,size=Math.max(item.w,item.d),front=new THREE.Vector3(-Math.sin(r),0,Math.cos(r)),side=new THREE.Vector3(Math.cos(r),0,Math.sin(r));
     const target=new THREE.Vector3(item.x,2.2,item.y);controls.maxPolarAngle=Math.PI*.49;controls.target.copy(target);
     // Prefer the front corners; skip viewpoints whose line of sight is blocked by a neighbouring building.
     const ray=new THREE.Raycaster(),candidates=[[1,-1],[1,1],[-1,-1],[-1,1]].map(([f,sd])=>target.clone().addScaledVector(front,f*size*1.9).addScaledVector(side,sd*size*.7).add(new THREE.Vector3(0,size*.55,0)));
@@ -206,17 +294,18 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   }
   /** Overview plus an optional close-up of one building, without disturbing the user's camera. */
   function snapshots(item?:{x:number;y:number;w:number;d:number;rot:number}){
-    const position=camera.position.clone(),target=controls.target.clone(),walking=walkMode,cut=cutaway,shots:{kind:'overview'|'house';src:string}[]=[];
+    const position=camera.position.clone(),target=controls.target.clone(),quaternion=camera.quaternion.clone(),was=mode,shots:{kind:'overview'|'house';src:string}[]=[];
+    if(was==='walk')mode='orbit';// keep the walk HUD; the loop restarts below
     view('axonometric');shots.push({kind:'overview',src:renderer.domElement.toDataURL('image/png')});
     if(item){focus(item);shots.push({kind:'house',src:renderer.domElement.toDataURL('image/png')});}
-    walkMode=walking;cutaway=cut;applyCutaway();camera.position.copy(position);controls.target.copy(target);controls.update();render();return shots;
+    mode=was;applyCutaway();camera.position.copy(position);controls.target.copy(target);if(was==='walk'){controls.enabled=false;camera.quaternion.copy(quaternion);if(!walkLoop)walkLoop=requestAnimationFrame(walkStep);}else controls.update();render();return shots;
   }
   return {update,view,setContext,addContextFences,focus,snapshots,ready:()=>contextReady,
     setPlain(value:boolean){plain=value;render();},
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},
     screenshot(){render();return renderer.domElement.toDataURL('image/png');},
-    dispose(){window.removeEventListener('keydown',walk);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();rainSky.dispose();interiorWall.dispose();interiorFloor.dispose();snowSky.dispose();plainSky.dispose();plainMats.forEach(m=>m.dispose());disposeObject(contextGroup);roofMat.dispose();land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
+    dispose(){leaveWalk();cancelAnimationFrame(flight);window.removeEventListener('keydown',keyDown);window.removeEventListener('keyup',keyUp);disposed=true;observer.disconnect();controls.dispose();disposeObject(content);sun.shadow.dispose();renderer.domElement.removeEventListener('webglcontextlost',failure);if(frame)cancelAnimationFrame(frame);setWeather('clear',center,1);greySky.dispose();rainSky.dispose();interiorWall.dispose();interiorFloor.dispose();interiorCap.dispose();snowSky.dispose();plainSky.dispose();plainMats.forEach(m=>m.dispose());disposeObject(contextGroup);roofMat.dispose();land.geometry.dispose();(land.material as THREE.Material).dispose();daySky.dispose();nightSky.dispose();renderer.dispose();renderer.domElement.remove();},
     memory(){return {...renderer.info.memory};},
   };
 }

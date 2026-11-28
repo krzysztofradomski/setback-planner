@@ -150,7 +150,7 @@ test("short parcel numbers and unavailable address services offer recovery witho
   await page.locator("[data-search]").click();
   await expect(page.locator(".journey-status")).toContainText("not unique");
   expect(calls).toBe(0);
-  await page.locator("#journey-query").fill("Marki, Andersa 1");
+  await page.locator("#journey-query").fill("Błonie, Poniatowskiego 28");
   await page.locator("[data-search]").click();
   await expect(page.locator(".journey-status")).toContainText(
     "Try again or choose on the map",

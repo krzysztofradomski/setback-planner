@@ -19,11 +19,13 @@ export function buildBuilding(item:SceneItem,original=false,textureFactory?:Text
   points.forEach((a,i)=>{
     const b=points[(i+1)%points.length],length=Math.hypot(b.x-a.x,b.y-a.y);
     const materialId=appearance.walls[String(i)]??appearance.facade,preset=materialPresets[materialId];
-    const geometry=new THREE.BufferGeometry();
-    geometry.setAttribute('position',new THREE.Float32BufferAttribute([a.x,0,a.y,b.x,0,b.y,b.x,height,b.y,a.x,height,a.y],3));
-    const u=length/(((original?undefined:item.appearance.tileWidth)??preset.tileWidth)*2),v=height/(((original?undefined:item.appearance.tileHeight)??preset.tileHeight)*2);
-    const uv=appearance.layout==='vertical'?[0,0,0,u,v,u,v,0]:[0,0,u,0,u,v,0,v];
-    geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geometry.setIndex([0,2,1,0,3,2]);geometry.computeVertexNormals();
+    // The wall is a shape along the edge with real holes for its openings, so the interior walk-through looks out through the windows.
+    const shape=new THREE.Shape([new THREE.Vector2(0,0),new THREE.Vector2(length,0),new THREE.Vector2(length,height),new THREE.Vector2(0,height)]);
+    for(const o of item.openings)if(o.edge===i&&o.offset+o.width<=length&&o.sill+o.height<=height)shape.holes.push(new THREE.Path([new THREE.Vector2(o.offset,o.sill),new THREE.Vector2(o.offset,o.sill+o.height),new THREE.Vector2(o.offset+o.width,o.sill+o.height),new THREE.Vector2(o.offset+o.width,o.sill)]));
+    const geometry=new THREE.ShapeGeometry(shape),flat=geometry.getAttribute('position'),dx=(b.x-a.x)/length,dz=(b.y-a.y)/length,positions:number[]=[],uv:number[]=[];
+    const tw=((original?undefined:item.appearance.tileWidth)??preset.tileWidth)*2,th=((original?undefined:item.appearance.tileHeight)??preset.tileHeight)*2;
+    for(let k=0;k<flat.count;k++){const s=flat.getX(k),y=flat.getY(k);positions.push(a.x+dx*s,y,a.y+dz*s);if(appearance.layout==='vertical')uv.push(y/th,s/tw);else uv.push(s/tw,y/th);}
+    geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geometry.computeVertexNormals();
     const texture=textureFactory?.(materialId,appearance)??null;
     const material=new THREE.MeshStandardMaterial({color:texture?'#ffffff':preset.color,map:texture,normalMap:texture?.userData.normalMap??null,normalScale:new THREE.Vector2(.4,.4),roughness:preset.roughness,side:THREE.DoubleSide});
     const mesh=new THREE.Mesh(geometry,material);mesh.name=`wall-${i}`;mesh.userData.materialId=materialId;mesh.castShadow=true;mesh.receiveShadow=true;root.add(mesh);
