@@ -277,4 +277,8 @@ test('funnel counts are anonymous, bounded and readable only when signed in', as
     const cookie = await ownerSession(env);
     const report = await (await api(env, '/api/funnel?days=30', undefined, cookie)).json() as { rows: unknown[] };
     assert.equal(report.rows.length, 2);
+    const tenant = await (await api(env, '/api/tenants', { name: 'Recipient' }, cookie)).json() as { id: string };
+    await api(env, '/api/users', { email: 'maker@example.com', password: 'a secure password 5678', role: 'manufacturer', tenantId: tenant.id }, cookie);
+    const maker = (await api(env, '/api/auth/login', { email: 'maker@example.com', password: 'a secure password 5678' })).headers.get('set-cookie')!.split(';')[0];
+    assert.equal((await api(env, '/api/funnel?days=30', undefined, maker)).status, 403, 'other recipients cannot read campaign labels');
 });

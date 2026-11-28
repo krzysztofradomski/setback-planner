@@ -239,7 +239,8 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
     if (path === '/api/auth/me')
         return response(user);
     if (path === '/api/funnel' && method === 'GET') {
-        // Aggregate, non-personal counts, so every signed-in role may read them.
+        // ponytail: owner only, because campaign labels are not tied to a recipient; add tenant_id to funnel rows to open it to manufacturers
+        owner(user);
         const days = z.coerce.number().int().min(1).max(365).default(30).parse(url.searchParams.get('days') ?? undefined);
         const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
         const rows = (await env.DB.prepare('SELECT source,step,SUM(count) AS count FROM funnel WHERE day>=? GROUP BY source,step').bind(since).all<{ source: string; step: string; count: number }>()).results;

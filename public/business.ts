@@ -146,7 +146,7 @@ export function mountBusiness({ container, getScene, getAttribution = () => null
         text('summary', 'Zmień hasło', passwordPanel);
         const currentPassword = input('Obecne hasło', 'password', '', passwordPanel), newPassword = input('Nowe hasło', 'password', '', passwordPanel);
         button('Zmień hasło i wyloguj wszystkie sesje', async () => { await api('/api/auth/password', { currentPassword: currentPassword.value, newPassword: newPassword.value }); session = null; await render(); }, passwordPanel);
-        await marketing().catch(e => notice.textContent = 'Marketing: ' + (e as Error).message); // never blocks leads and settings
+        if (session.role === 'owner') await marketing().catch(e => notice.textContent = 'Marketing: ' + (e as Error).message); // never blocks leads and settings
         tenants = await api('/api/tenants');
         if (session.role === 'owner') {
             const name = input('Nazwa nowego odbiorcy');
