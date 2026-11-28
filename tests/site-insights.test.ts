@@ -1,6 +1,6 @@
 import{test}from'node:test';import assert from'node:assert/strict';
 import{tileElements,readRcn,priceSummary,readOsm,readOtodom,readOlx,distanceToParcel,pointsToParcel,parseInsightsQuery,slug}from'../public/core/site-insights.ts';
-import{soilClasses,levellingCost}from'../public/core/report-insights.ts';
+import{soilClasses}from'../public/core/report-insights.ts';
 import{projectReport}from'../public/core/reports.ts';
 import{geographicPoint,projectPoint}from'../public/core/geospatial.ts';
 import{parseScene}from'../public/core/scene.ts';
@@ -60,12 +60,11 @@ test('insights requests accept only a parcel ring in Poland',()=>{
   assert.throws(()=>parseInsightsQuery(null));
 });
 
-test('soil classes decide conversion fees and slope gives a levelling cost',()=>{
+test('soil classes decide conversion fees',()=>{
   assert.deepEqual(soilClasses('ŁVI, PsV'),{classes:['ŁVI','PsV'],valuable:false,forest:false,built:false});
   assert.equal(soilClasses('RIIIa').valuable,true);
   assert.equal(soilClasses('B').built,true);
   assert.equal(soilClasses('Ls').forest,true);
-  assert.equal(levellingCost(1.2),'0–5 tys. zł');
 });
 
 test('the report opens with a summary, lists risks and prices, and gives no buying verdict',()=>{
@@ -78,8 +77,9 @@ test('the report opens with a summary, lists risks and prices, and gives no buyi
       prices:{status:'ok' as const,radius:1500,count:3,median:250,q1:240,q3:260,estimate:400000,buildingOnly:true,sales:[{date:'2025-05-01',price:300000,area:1200,perM2:250}]},
       listings:{status:'ok' as const,searched:[],items:[{source:'OLX' as const,title:'Działka <b>1600</b>',url:'https://www.olx.pl/d/oferta/x.html',price:400000,area:1600,perM2:250,distance:300}],match:{source:'OLX' as const,title:'Działka <b>1600</b>',url:'https://www.olx.pl/d/oferta/x.html',price:400000,area:1600,distance:300}}}};
   const html=projectReport(scene,'pl','2026-11-23T00:00:00Z',{site});
-  assert.ok(html.indexOf('Podsumowanie')<html.indexOf('Ryzyka i ukryte koszty'));
-  for(const text of ['Brak wodociągu','Brak kanalizacji','Nieutwardzona droga dojazdowa','ok. 10–18 tys. zł','250 zł/m²','400\u00a0000 zł','Ta działka może być wystawiona na sprzedaż','13 min do: Grodzisk Mazowiecki','Księga wieczysta','bez opłat (kl. IV–VI)'])assert.ok(html.includes(text),text);
+  assert.ok(html.indexOf('Podsumowanie')<html.indexOf('Ryzyka do sprawdzenia'));
+  for(const text of ['Brak wodociągu','Brak kanalizacji','Nieutwardzona droga dojazdowa','250 zł/m²','400\u00a0000 zł','Ta działka może być wystawiona na sprzedaż','13 min do: Grodzisk Mazowiecki','Księga wieczysta','bez opłat (kl. IV–VI)'])assert.ok(html.includes(text),text);
+  assert.ok(!html.includes('tys. zł'),'no invented cost ranges');
   assert.ok(!html.includes('<b>1600</b>'));
   assert.ok(!/warto kupi|worth buying|\/ ?100/i.test(html));
   const en=projectReport(scene,'en','2026-11-23T00:00:00Z',{site});
@@ -93,4 +93,8 @@ test('vector tiles stand in for Overpass: roads, land use and a building count',
   const box:[number,number][]=[[c[0]-5,c[1]-5],[c[0]+5,c[1]-5],[c[0]+5,c[1]+5],[c[0]-5,c[1]+5]],osm=readOsm(elements,box);
   assert.ok(osm.road&&osm.road.distance<300);
   assert.equal(elements.at(-1)?.type,'count');
+});
+test('report risks carry no invented cost estimates',async()=>{
+  const src=(await import('node:fs')).readFileSync(new URL('../public/core/report-insights.ts',import.meta.url),'utf8');
+  assert.doesNotMatch(src,/tys\. zł|thousand zł|\* 300|levellingCost/);
 });
