@@ -90,11 +90,12 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   const interiorWall=new THREE.MeshStandardMaterial({color:'#f4f0e8',roughness:.9}),interiorFloor=new THREE.MeshStandardMaterial({color:'#ebe5da',roughness:.9}),interiorCap=new THREE.MeshStandardMaterial({color:'#ff6a00',roughness:.6});
   function interiorWalls(item:{w:number;d:number},walls:number[][]){
     const group=new THREE.Group(),height=2.7;group.userData.floorPlan=true;group.userData.walls=walls.map(([x0,y0,x1,y1,t=.14])=>[x0-item.w/2,y0-item.d/2,x1-item.w/2,y1-item.d/2,t]);
-    const floor=new THREE.Mesh(new THREE.BoxGeometry(item.w,.06,item.d),interiorFloor);floor.position.y=.03;floor.userData.plainColour='#ebe5da';group.add(floor);
-    const ceiling=new THREE.Mesh(new THREE.BoxGeometry(item.w,.04,item.d),interiorWall);ceiling.position.y=height+.02;ceiling.userData.ceiling=true;ceiling.userData.plainColour='#ffffff';group.add(ceiling);// only inside the walk-through
+    const floor=new THREE.Mesh(new THREE.BoxGeometry(item.w,.06,item.d),interiorFloor);floor.position.y=.03;floor.userData.plainColour='#a3927a';group.add(floor);
+    const ceiling=new THREE.Mesh(new THREE.BoxGeometry(item.w,.04,item.d),interiorWall);ceiling.position.y=height+.02;ceiling.userData.ceiling=true;ceiling.userData.plainColour='#f4f1ea';group.add(ceiling);// only inside the walk-through
     for(const [x0,y0,x1,y1,t=.14] of walls){const len=Math.hypot(x1-x0,y1-y0),along=Math.abs(x1-x0)>=Math.abs(y1-y0);
       const wall=new THREE.Mesh(new THREE.BoxGeometry(along?len+t:t,height,along?t:len+t),interiorWall);
       wall.position.set((x0+x1)/2-item.w/2,height/2,(y0+y1)/2-item.d/2);wall.userData.shell=t>=.3;wall.userData.plainColour='#fcfaf5';group.add(wall);
+      if(t<.3){const skirt=new THREE.Mesh(new THREE.BoxGeometry(along?len+t+.02:t+.02,.1,along?t+.02:len+t+.02),interiorWall);skirt.position.set(wall.position.x,.11,wall.position.z);skirt.userData.plainColour='#5f6862';group.add(skirt);}
       // Orange cap on each wall top: from above the rooms read as an orange floor plan, like the landing animation.
       const cap=new THREE.Mesh(new THREE.BoxGeometry(along?len+t:t,.02,along?t:len+t),interiorCap);cap.position.set(wall.position.x,height+.01,wall.position.z);cap.userData.cap=true;cap.userData.plainColour='#ff6a00';group.add(cap);}// no shadows: rooms stay readable from above
     return group;
@@ -135,7 +136,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   // Eye at 1.6 m, drag to look, WASD/arrows (Shift runs) or the on-screen pad, Esc leaves. The plan's walls stop you;
   // doorways (gaps between transcribed wall segments) let you through. Walls are segments [x0,z0,x1,z1,thickness] in world metres.
   const EYE=1.6,RADIUS=.22,pl=()=>document.documentElement.lang==='pl';
-  let yaw=0,pitch=0,floorY=0,walls:number[][]=[],walkLoop=0,lastStep=0,bob=0,hud:HTMLElement|null=null,mini:HTMLCanvasElement|null=null,miniBox={x:0,z:0,s:1};
+  let yaw=0,pitch=0,floorY=0,walls:number[][]=[],openings:[number,number,number,number,string][]=[],walkLoop=0,lastStep=0,bob=0,hud:HTMLElement|null=null,mini:HTMLCanvasElement|null=null,miniBox={x:0,z:0,s:1};
   const keys=new Set<string>(),pad={x:0,z:0},lamp=new THREE.PointLight('#fff1dc',0,10,1.4);scene.add(lamp);// soft fill that walks with you: rooms in the sun's shadow stay readable
   const nearest=(x:number,z:number,[x0,z0,x1,z1]:number[])=>{const dx=x1-x0,dz=z1-z0,l=dx*dx+dz*dz,t=l?Math.max(0,Math.min(1,((x-x0)*dx+(z-z0)*dz)/l)):0;return [x0+dx*t,z0+dz*t];};
   const clearance=(x:number,z:number,list=walls)=>list.reduce((m,w)=>{const [cx,cz]=nearest(x,z,w);return Math.min(m,Math.hypot(x-cx,z-cz)-w[4]/2);},Infinity);
@@ -144,6 +145,7 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     const plan=root?.children.find(c=>c.userData.floorPlan);
     walls=plan?(plan.userData.walls as number[][]).map(([x0,z0,x1,z1,t])=>{root!.updateMatrixWorld(true);const a=root!.localToWorld(new THREE.Vector3(x0,0,z0)),b=root!.localToWorld(new THREE.Vector3(x1,0,z1));return [a.x,a.z,b.x,b.z,t];}):[];
     floorY=root?root.position.y+.06:0;
+    openings=(root?.children??[]).filter(c=>c.userData.span).map(c=>{const [x0,z0,x1,z1,k]=c.userData.span,a=root!.localToWorld(new THREE.Vector3(x0,0,z0)),b=root!.localToWorld(new THREE.Vector3(x1,0,z1));return [a.x,a.z,b.x,b.z,k];});
     let spot=new THREE.Vector3(center.x,0,center.z+extent*.4);yaw=0;
     if(plan){
       // Start in the most open spot (usually the living room), facing the longest clear line of sight. Searched in the
@@ -170,13 +172,14 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   function drawMini(){
     const g=mini?.getContext('2d');if(!g||!walls.length)return;const {x,z,s}=miniBox,W=mini!.width,H=mini!.height;g.clearRect(0,0,W,H);
     g.strokeStyle='#9aa39b';g.lineCap='round';for(const w of walls){g.lineWidth=Math.max(1.5,w[4]*s);g.beginPath();g.moveTo((w[0]-x)*s,(w[1]-z)*s);g.lineTo((w[2]-x)*s,(w[3]-z)*s);g.stroke();}
+    for(const o of openings){g.strokeStyle=o[4]==='door'?'#ff6a00':o[4]==='garage'?'#a7aea8':'#4f8fbf';g.lineWidth=o[4]==='door'?5:3.5;g.beginPath();g.moveTo((o[0]-x)*s,(o[1]-z)*s);g.lineTo((o[2]-x)*s,(o[3]-z)*s);g.stroke();}
     const px=(camera.position.x-x)*s,pz=(camera.position.z-z)*s;g.fillStyle='rgba(255,106,0,.22)';g.beginPath();g.moveTo(px,pz);g.arc(px,pz,26,-Math.PI/2-yaw-.6,-Math.PI/2-yaw+.6);g.closePath();g.fill();
     g.fillStyle='#ff6a00';g.beginPath();g.arc(px,pz,5,0,Math.PI*2);g.fill();
   }
   function showHud(){
     hud?.remove();hud=document.createElement('div');hud.className='walk-hud';
     const t=(en:string,p:string)=>pl()?p:en;
-    hud.innerHTML=`<div class="walk-tip">${t('Drag to look around · W A S D or arrows to walk · Shift to run','Przeciągnij, by się rozejrzeć · W A S D lub strzałki, by iść · Shift — szybciej')}</div><button type="button" class="walk-exit">${t('Leave walk-through','Zakończ spacer')} <kbd>Esc</kbd></button><canvas class="walk-map" width="180" height="120" aria-hidden="true"></canvas><div class="walk-pad" aria-hidden="true"><button data-pad="0,1">▲</button><button data-pad="-1,0">◀</button><button data-pad="1,0">▶</button><button data-pad="0,-1">▼</button></div>`;
+    hud.innerHTML=`<div class="walk-tip">${t('Drag to look around · W A S D or arrows to walk · Shift to run · scroll out to leave the house','Przeciągnij, by się rozejrzeć · W A S D lub strzałki, by iść · Shift — szybciej · przewiń, by wyjść z domu')}</div><button type="button" class="walk-exit">${t('Leave walk-through','Zakończ spacer')} <kbd>Esc</kbd></button><canvas class="walk-map" width="180" height="120" aria-hidden="true"></canvas><div class="walk-pad" aria-hidden="true"><button data-pad="0,1">▲</button><button data-pad="-1,0">◀</button><button data-pad="1,0">▶</button><button data-pad="0,-1">▼</button></div>`;
     hud.querySelector<HTMLButtonElement>('.walk-exit')!.onclick=()=>view('interior',lastTarget);
     hud.querySelectorAll<HTMLButtonElement>('[data-pad]').forEach(b=>{const [x,z]=b.dataset.pad!.split(',').map(Number);
       b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);pad.x=x;pad.z=z;};b.onpointerup=b.onpointercancel=()=>{pad.x=pad.z=0;};});
@@ -187,6 +190,11 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
   let lastTarget:Target|undefined,dragging:{x:number;y:number}|null=null;
   renderer.domElement.addEventListener('pointerdown',e=>{if(mode!=='walk'||flight)return;dragging={x:e.clientX,y:e.clientY};renderer.domElement.setPointerCapture(e.pointerId);});
   renderer.domElement.addEventListener('pointermove',e=>{if(!dragging)return;yaw+=(e.clientX-dragging.x)*.0045;pitch=Math.max(-1.2,Math.min(1.2,pitch+(e.clientY-dragging.y)*.0045));dragging={x:e.clientX,y:e.clientY};});
+  renderer.domElement.addEventListener('wheel',e=>{if(mode==='walk'&&!flight&&e.deltaY>0){e.preventDefault();view('interior',lastTarget);}},{passive:false});
+  const touches=new Map<number,{x:number;y:number}>();let pinch=0;
+  renderer.domElement.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')touches.set(e.pointerId,{x:e.clientX,y:e.clientY});});
+  renderer.domElement.addEventListener('pointermove',e=>{if(!touches.has(e.pointerId))return;touches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(touches.size!==2||mode!=='walk')return;const [a,b]=[...touches.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(!pinch)pinch=d;else if(d<pinch*.75){pinch=0;touches.clear();dragging=null;view('interior',lastTarget);}});
+  const endTouch=(e:PointerEvent)=>{touches.delete(e.pointerId);pinch=0;};renderer.domElement.addEventListener('pointerup',endTouch);renderer.domElement.addEventListener('pointercancel',endTouch);
   const endDrag=()=>{dragging=null;};renderer.domElement.addEventListener('pointerup',endDrag);renderer.domElement.addEventListener('pointercancel',endDrag);
   const typing=(e:KeyboardEvent)=>['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement)?.tagName);
   const keyDown=(e:KeyboardEvent)=>{if(mode!=='walk'||!active||typing(e))return;const k=e.key.toLowerCase();if(k==='escape'){view('interior',lastTarget);return;}if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);e.preventDefault();}};

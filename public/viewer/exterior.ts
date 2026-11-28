@@ -123,19 +123,19 @@ export function buildOpening(origin: THREE.Vector3, u: THREE.Vector3, n: THREE.V
   const frameMat = mat(opening.type === 'door' ? appearance.doorColor : appearance.frameColor, .55);
   if (opening.type === 'door' && w >= 2) {
     // Wide doors are garage doors: sectional panels, no pull handle.
-    group.add(onWall(frame, cx, cy, .07, w, h, .06, frameMat));
+    const leaf = onWall(frame, cx, cy, .07, w, h, .06, frameMat); leaf.userData.plainColour = '#a7aea8'; group.add(leaf);
     const groove = mat('#000000', .9, { transparent: true, opacity: .25 });
     for (let y = opening.sill + .5; y < opening.sill + h - .1; y += .5) group.add(onWall(frame, cx, y, .105, w - .04, .025, .01, groove));
   } else if (opening.type === 'door') {
-    group.add(onWall(frame, cx, cy, .07, w, h, .06, frameMat));
+    const leaf = onWall(frame, cx, cy, .07, w, h, .06, frameMat); leaf.userData.plainColour = '#ff6a00'; group.add(leaf);
     group.add(onWall(frame, cx + w * .3, cy, .12, .03, h * .55, .03, mat('#c9cdd0', .3, { metalness: .8 })));
   } else {
-    const glass = onWall(frame, cx, cy, .055, w - bar, h - bar, .02, mat('#22303a', .08, { metalness: .6, transparent: true, opacity: .55 })); glass.userData.plainColour = '#c4d0ce'; group.add(glass);
+    const glass = onWall(frame, cx, cy, .055, w - bar, h - bar, .02, mat('#22303a', .08, { metalness: .6, transparent: true, opacity: .55 })); glass.userData.plainColour = '#7fa9c4'; group.add(glass);
     // Catalogue renders show external timber blinds lowered over the upper part of each window.
     if (blinds) { const drop = (h - bar) * .55, tex = slats(); tex.repeat.set(1, drop / .5); group.add(onWall(frame, cx, opening.sill + h - bar / 2 - drop / 2, .065, w - bar * 1.6, drop, .015, mat('#ffffff', .8, { map: tex }))); }
     const bars: [number, number, number, number][] = [[0, h / 2 - bar / 2, w, bar], [0, -h / 2 + bar / 2, w, bar], [-w / 2 + bar / 2, 0, bar, h], [w / 2 - bar / 2, 0, bar, h]];
     if (w > 1.4) bars.push([0, 0, bar * .8, h]);
-    for (const [dx, dy, bw, bh] of bars) group.add(onWall(frame, cx + dx, cy + dy, .08, bw, bh, .07, frameMat));
+    for (const [dx, dy, bw, bh] of bars) { const b = onWall(frame, cx + dx, cy + dy, .08, bw, bh, .07, frameMat); b.userData.plainColour = '#4f5b63'; group.add(b); }
     if (opening.sill > .1) group.add(onWall(frame, cx, opening.sill - .02, .12, w + .1, .04, .16, mat('#5b5f63', .5, { metalness: .3 })));
   }
   return shadowed(group);

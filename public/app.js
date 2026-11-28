@@ -149,8 +149,18 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
       const h=items.find(x=>x.id===house.id),annex=houseAnnex(items,h);
       return placeGroup({...base,items},annex?[h,annex]:[h])?'yes':annex&&placeGroup({...base,items:items.filter(x=>x.id!==annex.id)},[h])?'alone':'';}catch{return '';}
   }
+  // The parcel edge facing a mapped street (OpenStreetMap roads), cached per plot; new houses are placed with their front toward it.
+  let streetCache={key:'',edge:null};
+  const plotKey=()=>JSON.stringify([state.plot,state.coordinates.projected?.origin??null]);
+  async function ensureStreet(){
+    const key=plotKey();if(streetCache.key===key)return;let edge=null;
+    if(state.coordinates.projected){try{const {loadStreets,streetEdge}=await import('./core/context.ts');edge=streetEdge(state.plot,await loadStreets(state));}catch{/* no map data: no street preference */}}
+    streetCache={key,edge};
+  }
+  const streetLine=()=>{const e=streetCache.key===plotKey()?streetCache.edge:null;return e===null?null:[state.plot[e],state.plot[(e+1)%state.plot.length]];};
   /** A plot with no house gets the largest catalogue design that fits (with its carport/garage if possible), placed by the catalogue button itself. */
   async function autoPlaceHouse(){
+    await ensureStreet();
     const base=fitBase(),models=[];
     for(const id of enabledCatalogs){try{const c=await loadCatalog(id);for(const m of c.models)models.push({c:c.id,m:m.id,area:m.footprint.width*m.footprint.depth});}catch{/* catalogue offline */}}
     models.sort((a,b)=>b.area-a.area);
@@ -203,8 +213,8 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
           if(kind!=='none')items=setHouseParking(items,item.id,kind,exterior,'o'+uid++);
         }
         // House and carport/garage are seated together: both must keep their setbacks (a replaced house stays put when it still fits).
-        {const house=items.find(i=>i.id===item.id),annex=houseAnnex(items,house),seated=placeGroup({...state,items},annex?[house,annex]:[house]);
-          const alone=!seated&&annex?placeGroup({...state,items:items.filter(i=>i.id!==annex.id)},[house]):null;
+        {const house=items.find(i=>i.id===item.id),annex=houseAnnex(items,house),street=replace?null:streetLine(),seated=placeGroup({...state,items},annex?[house,annex]:[house],street);
+          const alone=!seated&&annex?placeGroup({...state,items:items.filter(i=>i.id!==annex.id)},[house],street):null;
           if(alone){items=items.filter(i=>i.id!==annex.id).map(i=>i.id===house.id?alone[0]:i);setTimeout(()=>toast(bi('Placed without the carport or garage: there is no room for both.','Ustawiono bez wiaty/garażu: na oba nie ma miejsca.')),1500);}
           else if(seated){const by=new Map(seated.map(i=>[i.id,i]));items=items.map(i=>by.get(i.id)??i);}
           else if(!replace){toast(lang==='pl'?'Ten projekt nie mieści się na działce z zachowaniem odległości od granic.':'This design does not fit on the parcel with the setbacks.');return;}}
@@ -1395,7 +1405,7 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
   journey=mountParcelJourney({container:parcelPanel,stage:$('.stage'),fresh:freshVisit,language:()=>lang,getScene:()=>state,onIntroEnd:()=>{entryPending=false;requestAnimationFrame(()=>{fit();renderSheet();});},onExploreExample:()=>{freshScene=false;entryPending=false;},
     lookupId:async id=>(await import('./core/uldk.ts')).lookupParcel(id),lookupAt:async(longitude,latitude)=>(await import('./core/uldk.ts')).lookupParcelAt(longitude,latitude),
     showMap:journeyMap,showPreview:parcel=>{if(parcelMap){parcelMap.clearLocation();parcelMap.update(parcel?parseScene({...state,...parcel,items:[],terrain:undefined}):state);if(parcel)parcelMap.fitProject();}},
-    applyParcel:parcel=>{entryPending=false;const next=parseScene({...state,...parcel,items:freshScene?[]:state.items,terrain:undefined});next.items=fitItemsToParcel(next);next.fences=next.fences.filter(f=>f.id!==BOUNDARY_FENCE_ID);{const f=boundaryFence(next.plot,facingEdge(next.plot,next.items.find(x=>x.type==='house')),bi('Boundary fence','Ogrodzenie działki'));if(f&&next.fences.length<12)next.fences.unshift(f);}applyPlan(next,t('planLoaded'));void gateToStreet();freshScene=false;setStageMode('2d');fit();render();if(!state.items.some(i=>i.type==='house'))void autoPlaceHouse();requestAnimationFrame(()=>{fit();renderSheet();});},activate:tab=>workspace.activate(tab),
+    applyParcel:parcel=>{entryPending=false;const next=parseScene({...state,...parcel,items:freshScene?[]:state.items,terrain:undefined});next.items=fitItemsToParcel(next);next.fences=next.fences.filter(f=>f.id!==BOUNDARY_FENCE_ID);{const f=boundaryFence(next.plot,facingEdge(next.plot,next.items.find(x=>x.type==='house')),bi('Boundary fence','Ogrodzenie działki'));if(f&&next.fences.length<12)next.fences.unshift(f);}applyPlan(next,t('planLoaded'));void gateToStreet();void ensureStreet();freshScene=false;setStageMode('2d');fit();render();if(!state.items.some(i=>i.type==='house'))void autoPlaceHouse();requestAnimationFrame(()=>{fit();renderSheet();});},activate:tab=>workspace.activate(tab),
     pickMap:()=>{mapPick=true;$('#map-pick').setAttribute('aria-pressed','true');},stopPicking:()=>{mapPick=false;$('#map-pick').setAttribute('aria-pressed','false');},
     showTopic:async topic=>{workspace.activate('parcel');await journeyMap();const ids={planning:['planning'],water:['flood','groundwater'],utilities:['utilities'],nature:['environment'],ground:['relief','landslides','mining','wells']}[topic];for(const id of mapOverlayIds){const enabled=ids.includes(id);$('#map-'+id).checked=enabled;parcelMap.setOverlay(id,enabled);}},reviewLayout:renderLayoutReview});
   // Public registry data: fetched in the background whenever the located parcel changes, listed here and included in the report.

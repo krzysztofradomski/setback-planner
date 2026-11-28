@@ -17,8 +17,17 @@ export function moveWith(leader:SceneItem,members:SceneItem[],pose:{x:number;y:n
  const turn=(pose.rot-leader.rot)*Math.PI/180,c=Math.cos(turn),s=Math.sin(turn);
  return members.map(m=>{const dx=m.x-leader.x,dy=m.y-leader.y;return {...m,x:pose.x+dx*c-dy*s,y:pose.y+dx*s+dy*c,rot:m.rot+pose.rot-leader.rot};});
 }
-/** Free poses for `item` (with `members` moving along), each piece inside the parcel shrunk by its own setback and clear of other objects. */
-export function suggestPlacements(scene:Scene,item:SceneItem,members:SceneItem[]=[]){
+/** Rotation (degrees) that turns a building's front (its local +y side, plan direction (-sin r, cos r)) toward the street edge [a,b]. */
+export function streetFacingRotation(plot:Point[],[a,b]:[Point,Point]){
+ const cx=plot.reduce((n,p)=>n+p.x,0)/plot.length,cy=plot.reduce((n,p)=>n+p.y,0)/plot.length,len=Math.hypot(b.x-a.x,b.y-a.y)||1;
+ let nx=(b.y-a.y)/len,ny=-(b.x-a.x)/len;if(nx*((a.x+b.x)/2-cx)+ny*((a.y+b.y)/2-cy)<0){nx=-nx;ny=-ny;}// outward, toward the street
+ return Math.round(Math.atan2(-nx,ny)*1800/Math.PI)/10;
+}
+const segmentDistance=(p:Point,a:Point,b:Point)=>{const dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l)):0;return Math.hypot(p.x-a.x-dx*t,p.y-a.y-dy*t);};
+/** Free poses for `item` (with `members` moving along), each piece inside the parcel shrunk by its own setback and clear of other objects.
+ *  With a `street` edge the front faces it (side or back turns only when that cannot fit) and stands about 6 m back from it
+ *  (a typical building line, never inside the setback), so the garden lies behind the house. */
+export function suggestPlacements(scene:Scene,item:SceneItem,members:SceneItem[]=[],street:[Point,Point]|null=null){
  const moving=new Set([item.id,...members.map(m=>m.id)]),areas=new Map<number,ReturnType<typeof setbackArea>>();
  const areaFor=(d:number)=>{if(!areas.has(d))areas.set(d,setbackArea(scene,d));return areas.get(d)!;};
  const area=areaFor(item.setback),others=scene.items.filter(i=>!moving.has(i.id)&&blocksPlacement(i)).map(worldFootprint);
@@ -26,7 +35,9 @@ export function suggestPlacements(scene:Scene,item:SceneItem,members:SceneItem[]
  const fits=(piece:SceneItem)=>{const ring=worldFootprint(piece);return areaFor(piece.setback).parts.some(([outer,...holes])=>parcelContains({plot:outer,plotHoles:holes},ring))&&(!blocksPlacement(piece)||!others.some(o=>polygonRelation(ring,o)!=='disjoint'));};
  const feasible=(candidate:SceneItem)=>fits(candidate)&&moveWith(item,members,candidate).every(fits);
  const points:Point[]=[{x:item.x,y:item.y}];for(let row=0;row<=20;row++)for(let col=0;col<=20;col++)points.push({x:minX+(maxX-minX)*col/20,y:minY+(maxY-minY)*row/20});
- for(const rot of new Set([item.rot,item.rot+90,0,90]))for(const p of points)if(feasible({...item,...p,rot}))found.push({...p,rot,score:Math.hypot(p.x-item.x,p.y-item.y)+Math.abs(rot-item.rot)*.01});
+ const facing=street?streetFacingRotation(scene.plot,street):null;
+ const turns:[number,number][]=facing===null?[...new Set([item.rot,item.rot+90,0,90])].map(rot=>[rot,Math.abs(rot-item.rot)*.01]):[[facing,0],[facing+90,1000],[facing-90,1000],[facing+180,2000]];
+ for(const [rot,penalty] of turns)for(const p of points)if(feasible({...item,...p,rot}))found.push({...p,rot,score:penalty+Math.hypot(p.x-item.x,p.y-item.y)+(street?1.5*Math.abs(segmentDistance(p,street[0],street[1])-item.d/2-Math.max(6,item.setback)):0)});
  found.sort((a,b)=>a.score-b.score||a.x-b.x||a.y-b.y||a.rot-b.rot);return {...area,suggestions:found.slice(0,8)};
 }
 /** Direction of the parcel's longest edge in degrees, folded to (-45,45] (a rectangle turned 90° is the same alignment). */
@@ -52,7 +63,7 @@ export function fitItemsToParcel(scene:Scene):SceneItem[]{
 }
 
 /** Seat a group (leader first) in the best free spot of the scene, or null when it does not fit anywhere. */
-export function placeGroup(scene:Scene,group:SceneItem[]):SceneItem[]|null{
- const [leader,...members]=group,best=suggestPlacements({...scene,items:[...scene.items.filter(i=>!group.some(g=>g.id===i.id)),...group]},leader,members).suggestions[0];
+export function placeGroup(scene:Scene,group:SceneItem[],street:[Point,Point]|null=null):SceneItem[]|null{
+ const [leader,...members]=group,best=suggestPlacements({...scene,items:[...scene.items.filter(i=>!group.some(g=>g.id===i.id)),...group]},leader,members,street).suggestions[0];
  return best?moveWith(leader,group,best):null;
 }

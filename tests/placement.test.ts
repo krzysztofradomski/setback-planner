@@ -37,3 +37,14 @@ test('a house and its carport are seated together, each keeping its own setback'
   const tiny=parseScene({plot:[{x:0,y:0},{x:14,y:0},{x:14,y:14},{x:0,y:14}],items:scene.items});
   assert.equal(placeGroup(tiny,tiny.items),null);
 });
+test('with a street edge the house front faces the street, about 6 m back from it',async()=>{
+  const {placeGroup,streetFacingRotation}=await import('../public/core/placement.ts');
+  const plot=[{x:0,y:0},{x:30,y:0},{x:30,y:40},{x:0,y:40}],scene=parseScene({plot,items:[{id:'h',type:'house',name:'H',x:15,y:20,w:12,d:8,setback:4}]});
+  const front=(rot:number)=>{const r=rot*Math.PI/180;return [Math.round(-Math.sin(r)*1e6)/1e6+0,Math.round(Math.cos(r)*1e6)/1e6+0];};
+  for(const [edge,dir] of [[2,[0,1]],[0,[0,-1]],[1,[1,0]],[3,[-1,0]]] as const){
+    const street:[typeof plot[0],typeof plot[0]]=[plot[edge],plot[(edge+1)%4]],[h]=placeGroup(scene,scene.items,street)!;
+    assert.deepEqual(front(h.rot),dir,'front toward edge '+edge);assert.deepEqual(front(streetFacingRotation(plot,street)),dir);
+    const toStreet=edge===2?40-h.y:edge===0?h.y:edge===1?30-h.x:h.x;assert.ok(Math.abs(toStreet-10)<=2,'front wall about 6 m from the street, centre got '+toStreet);
+    assert.ok(parcelContains(scene,worldFootprint(h)));
+  }
+});
