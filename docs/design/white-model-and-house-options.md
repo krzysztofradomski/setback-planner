@@ -21,5 +21,5 @@ Validation: `npm test`, `npm run typecheck`, `npm run build`; browser regression
 ## Production split — 2026-11-23
 
 - Current planner: `https://ub.radomski.dev/`, existing Worker `setback-planner`, version `2a3f3cc5-b21d-4720-b11b-d1cc657d3ca1`. Existing production D1/AI/session/Turnstile bindings retained; no pending migrations. Turnstile now also permits `ub.radomski.dev`.
-- Original 2D planner: `https://setback-planner.paperplane.builders/`, independent static Worker `setback-planner-classic`, version `04767de9-9541-4eb3-b03d-ff553bd7ad9c`. Live HTML matches the archived `04fc331` source exactly.
+- Legacy 2D planner (now only on the `legacy` branch): `https://setback-planner.paperplane.builders/`, independent static Worker `setback-planner-classic`, version `04767de9-9541-4eb3-b03d-ff553bd7ad9c`. Live HTML matches the archived `04fc331` source exactly.
 - Previous current-planner version available for rollback: `ed034e10-ccd9-43a2-93c6-3ccb0808633c` (rolling code back does not restore or alter database data).

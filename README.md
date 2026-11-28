@@ -2,7 +2,7 @@
 
 **Current planner:** [ub.radomski.dev](https://ub.radomski.dev).
 
-**Original 2D planner:** [setback-planner.paperplane.builders](https://setback-planner.paperplane.builders).
+**Legacy 2D planner** (setback-planner.paperplane.builders, Worker `setback-planner-classic`) lives only on the `legacy` branch; it is not part of `main`.
 
 A bilingual parcel and house concept planner. The existing SVG editor is retained, with typed domain modules and optional Three.js and MapLibre views.
 
@@ -62,4 +62,4 @@ Staging uses `npx wrangler deploy --env staging`; production uses `--env ''`. Se
 
 The current planner uses `wrangler.jsonc` and the existing `setback-planner` Worker, API bindings, database and secrets, served at `ub.radomski.dev`. Build with `npm run build`, then deploy with `npx wrangler deploy --env ''`.
 
-The original standalone 2D planner is preserved verbatim in `classic/index.html` from git commit `04fc331` (the last original release before the typed-module/3D expansion). Deploy it with `npx wrangler deploy --config wrangler.classic.jsonc`, which publishes the independent static Worker `setback-planner-classic` at `setback-planner.paperplane.builders`. It has no backend bindings and does not change the current planner's database.
+The legacy standalone 2D planner was moved to the `legacy` branch (`classic/index.html`, `wrangler.classic.jsonc`). Deploy it only from that branch with `npx wrangler deploy --config wrangler.classic.jsonc`. Despite its name, the `setback-planner` Worker and the `setback-planner-*` D1 databases belong to the current planner at ub.radomski.dev.

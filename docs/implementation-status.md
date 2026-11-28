@@ -25,7 +25,7 @@ Unit/integration tests run against deterministic fixtures and a real SQLite sche
 
 ## Operations
 
-Production: https://setback-planner.paperplane.builders/ . Staging: https://setback-planner-staging.stronginarm.workers.dev/ . D1 schema migrations are applied independently. Secrets and first-owner credentials are outside Git in the owner's protected Codex private directory. Remove bootstrap secrets after owner creation. Cloudflare invocation/error logs and sampled traces are configured; use its dashboard for AI neurons and storage usage.
+Production: https://ub.radomski.dev/ (Worker `setback-planner`). Staging: https://setback-planner-staging.stronginarm.workers.dev/ . D1 schema migrations are applied independently. Secrets and first-owner credentials are outside Git in the owner's protected Codex private directory. Remove bootstrap secrets after owner creation. Cloudflare invocation/error logs and sampled traces are configured; use its dashboard for AI neurons and storage usage.
 
 Rollback: use Cloudflare Worker deployment rollback to the previous version; retain the additive D1 schema and database backups. Do not reset or delete production databases when rolling back static/editor code.
 
