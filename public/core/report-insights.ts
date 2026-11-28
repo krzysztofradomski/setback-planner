@@ -3,6 +3,7 @@
 // every figure comes from a named source (registers, OpenStreetMap, PVGIS, GIOŚ, GUS, the law); nothing is estimated without one.
 import type { Scene } from './scene.ts';
 import { roadCategory, roadSetback, type Stat } from './site-insights.ts';
+import { kwNumber, readRegister, registerSummary } from './land-register.ts';
 import type { SiteData, NetworkId } from './site-data.ts';
 import { siteSummary } from './site-data.ts';
 
@@ -91,9 +92,17 @@ export function insightFacts(c: InsightContext) {
   if (osm?.status === 'ok' && osm.source !== 'tiles' && !nuisance.length) strengths.push({ title: T('Quiet surroundings', 'Spokojne otoczenie'), text: T('No industrial sites, landfills, motorways or airports mapped within 1 km.', 'Brak zakładów, składowisk, dróg szybkiego ruchu i lotnisk w promieniu 1 km.') });
   const drive = ins?.drives[0];
   if (drive) strengths.push({ title: T(`${drive.minutes} min to ${drive.name}`, `${drive.minutes} min do: ${drive.name}`), text: `${dec(drive.km, pl)} km ${T('by car', 'samochodem')}` });
-  checks.push(T('Land and mortgage register (księga wieczysta): encumbrances, easements, mortgages.', 'Księga wieczysta – obciążenia, służebności, hipoteki.'));
+  // Land register sections pasted by the user from the court's EKW browser: entries named in them, nothing inferred beyond.
+  const lr = scene.parcel?.landRegister, reg = lr && (lr.section3?.trim() || lr.section4?.trim()) ? readRegister(lr.section3, lr.section4) : undefined;
+  if (reg) {
+    for (const b of reg.burdens) risks.push({ title: T(`Land register: ${b}`, `Księga wieczysta: ${b}`), text: T('An entry in section III: read it in full and ask the notary what it means for building and access.', 'Wpis w dziale III: przeczytaj go w całości i zapytaj notariusza, co oznacza dla budowy i dojazdu.') });
+    if (reg.mortgage) risks.push({ title: T('Mortgage in the land register', 'Hipoteka w księdze wieczystej'), text: (reg.mortgages.length ? reg.mortgages.join(', ') + '. ' : '') + T('A mortgage stays on the property after a sale (art. 65 of the Land Register and Mortgage Act): agree its repayment and deletion in the contract.', 'Hipoteka obciąża nieruchomość także po sprzedaży (art. 65 ustawy o księgach wieczystych i hipotece): ustal w umowie jej spłatę i wykreślenie.') });
+    if (reg.section3Empty) strengths.push({ title: T('Land register section III: no entries', 'Księga wieczysta, dział III: brak wpisów'), text: T('No easements, claims or restrictions in the pasted text.', 'W wklejonej treści brak służebności, roszczeń i ograniczeń.') });
+    if (reg.section4Empty) strengths.push({ title: T('Land register section IV: no mortgage', 'Księga wieczysta, dział IV: bez hipoteki'), text: '' });
+    checks.push(T('Land register: check the entries again on the day of signing – the report shows them as pasted.', 'Księga wieczysta: sprawdź wpisy ponownie w dniu podpisania umowy – raport pokazuje stan z chwili wklejenia.'));
+  } else checks.push(T('Land and mortgage register (księga wieczysta): encumbrances, easements, mortgages – paste sections III and IV in the Parcel tab to include them here.', 'Księga wieczysta – obciążenia, służebności, hipoteki; wklej dział III i IV w zakładce Działka, a trafią do raportu.'));
   checks.push(T('Map for design purposes from a surveyor (needed for the building permit).', 'Mapa do celów projektowych od geodety (potrzebna do pozwolenia na budowę).'));
-  return { risks, strengths, checks, soil, use, planned, netText, nets, osm, ins, zs, category };
+  return { risks, strengths, checks, soil, use, planned, netText, nets, osm, ins, zs, category, lr, reg };
 }
 export type InsightFacts = ReturnType<typeof insightFacts>;
 
@@ -120,8 +129,15 @@ export function insightSections(c: InsightContext, f: InsightFacts) {
   const pl = c.lang === 'pl', T = (en: string, plText: string) => pl ? plText : en, site = c.site, osm = f.osm, ins = f.ins;
   const list = (items: Item[], cls: string) => items.length ? `<ol class="${cls}">${items.map(i => `<li><b>${esc(i.title.charAt(0).toUpperCase() + i.title.slice(1))}</b>${i.cost ? ` <span class="cost">${esc(i.cost)}</span>` : ''}${i.text ? `<br><small>${esc(i.text)}</small>` : ''}</li>`).join('')}</ol>` : `<p>${T('None found.', 'Nic nie znaleziono.')}</p>`;
   const rows = (pairs: [string, string | undefined][]) => `<table>${pairs.filter(([, v]) => v).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>`;
-  const near = (x?: { name?: string; kind: string; distance: number; detail?: string }) => x ? `${x.name ? x.name + ', ' : ''}${m(x.distance)}${x.detail ? ' · ' + x.detail : ''}` : osm?.status === 'ok' ? T('none nearby', 'brak w pobliżu') : undefined;
-  const card = (title: string, source: string, body: string) => `<article class="site"><h3>${esc(title)}</h3><small>${esc(source)}</small>${body}</article>`;
+  // Compass direction from the parcel, in words: "240 m na północ" / "240 m north".
+  const where = (x: { distance: number; bearing?: number }) => {
+    if (x.bearing === undefined) return x.distance ? m(x.distance) : T('at the parcel', 'przy działce');
+    const i = Math.round(x.bearing / 45) % 8;
+    return `${m(x.distance)} ${T(['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][i], 'na ' + ['północ', 'północny wschód', 'wschód', 'południowy wschód', 'południe', 'południowy zachód', 'zachód', 'północny zachód'][i])}`;
+  };
+  const unnamed = T('unnamed in OpenStreetMap', 'bez nazwy w OpenStreetMap');
+  const near = (x?: { name?: string; kind: string; distance: number; detail?: string; bearing?: number }, showKind = false) => x ? `${x.name ?? (showKind ? unnamed : '')}${showKind ? ` (${x.kind})` : ''}${x.name || showKind ? ', ' : ''}${where(x)}${x.detail ? ' · ' + x.detail : ''}` : osm?.status === 'ok' ? T('none nearby', 'brak w pobliżu') : undefined;
+  const card = (title: string, source: string, body: string, cls = '') => `<article class="site${cls ? ' ' + cls : ''}"><h3>${esc(title)}</h3><small>${esc(source)}</small>${body}</article>`;
   const terrain = c.scene.terrain;
   const ground = card(T('Land register and ground', 'Ewidencja gruntów i teren'), 'EGiB / KIEG, NMT GUGiK', rows([
     [T('Land use and soil class', 'Użytki i klasy'), f.use || undefined],
@@ -141,17 +157,19 @@ export function insightSections(c: InsightContext, f: InsightFacts) {
   ]));
   const heritage = site?.layers.heritage?.status;
   const nature = card(T('Nature and surroundings', 'Przyroda i otoczenie'), 'OpenStreetMap, GDOŚ, NID', rows([
-    [T('Forest', 'Las'), near(osm?.forest)],
-    [T('Watercourse', 'Najbliższy ciek'), near(osm?.water)],
-    [T('Power lines', 'Linie energetyczne'), osm?.source === 'tiles' ? T('no data this time – generate the report again', 'brak danych tym razem – wygeneruj raport ponownie') : osm?.status === 'ok' ? (osm.powerLines.length ? osm.powerLines.map(p => `${p.kind}${p.detail ? ' ' + p.detail : ''}: ${m(p.distance)}`).join(', ') : T('none within 1.2 km', 'brak w promieniu 1,2 km')) : undefined],
-    [T('Nuisance sites', 'Obiekty uciążliwe'), osm?.status === 'ok' ? (osm.nuisance.length ? osm.nuisance.map(x => `${x.kind}: ${m(x.distance)}`).join(', ') : T('none mapped nearby', 'brak w pobliżu')) : undefined],
+    [T('Forest', 'Las'), osm?.forest ? `${osm.forest.name ?? unnamed}, ${where(osm.forest)}${osm.forest.detail ? ' · ' + osm.forest.detail : ''}` : near()],
+    [T('Watercourse', 'Najbliższy ciek'), osm?.water ? near(osm.water, true) : near()],
+    [T('Power lines', 'Linie energetyczne'), osm?.source === 'tiles' ? T('no data this time – generate the report again', 'brak danych tym razem – wygeneruj raport ponownie') : osm?.status === 'ok' ? (osm.powerLines.length ? osm.powerLines.map(p => `${p.kind}${p.detail ? ' ' + p.detail : ''}: ${where(p)}`).join(', ') : T('none within 1.2 km', 'brak w promieniu 1,2 km')) : undefined],
+    [T('Nuisance sites', 'Obiekty uciążliwe'), osm?.status === 'ok' ? (osm.nuisance.length ? osm.nuisance.map(x => `${x.kind}${x.name ? ` „${x.name}”` : ''}: ${where(x)}`).join('; ') : T('none mapped nearby', 'brak w pobliżu')) : undefined],
     [T('Buildings within 200 m', 'Budynki w promieniu 200 m'), osm?.buildings200 !== undefined ? String(osm.buildings200) : c.neighbours !== undefined ? String(c.neighbours) : undefined],
     [T('Heritage register', 'Rejestr zabytków'), heritage === 'found' ? T('monument at the parcel', 'zabytek w punkcie działki') : heritage === 'none' ? T('none', 'brak') : heritage ? T('no answer', 'brak odpowiedzi') : undefined],
   ]));
   const amen = osm?.amenities;
-  const daily = card(T('Everyday places', 'Na co dzień'), T('OpenStreetMap, straight-line distance to the parcel', 'OpenStreetMap, odległość w linii prostej od działki'), osm?.status !== 'ok' ? '' : !amen ? `<p><small>${T('No data this time – generate the report again.', 'Brak danych tym razem – wygeneruj raport ponownie.')}</small></p>` : rows(['szkoła', 'przedszkole', 'sklep spożywczy', 'apteka', 'przychodnia'].map(kind => { const a = amen.find(x => x.kind === kind); return [kind.charAt(0).toUpperCase() + kind.slice(1), a ? `${a.name ? a.name + ', ' : ''}${m(a.distance)}` : osm.source === 'tiles' ? T('none within ~2 km', 'brak w promieniu ok. 2 km') : T('none within 3 km', 'brak w promieniu 3 km')] as [string, string]; })));
+  const daily = card(T('Everyday places', 'Na co dzień'), T('OpenStreetMap, straight-line distance to the parcel', 'OpenStreetMap, odległość w linii prostej od działki'), osm?.status !== 'ok' ? '' : !amen ? `<p><small>${T('No data this time – generate the report again.', 'Brak danych tym razem – wygeneruj raport ponownie.')}</small></p>` : rows(['szkoła', 'przedszkole', 'sklep spożywczy', 'apteka', 'przychodnia'].map(kind => { const a = amen.find(x => x.kind === kind);
+    // The backup map tiles carry schools, shops, pharmacies and doctors, but not kindergartens: never report those as absent.
+    const missing = osm.source !== 'tiles' ? T('none within 3 km', 'brak w promieniu 3 km') : kind === 'przedszkole' ? T('no data this time – generate the report again', 'brak danych tym razem – wygeneruj raport ponownie') : T('none within ~2 km', 'brak w promieniu ok. 2 km');
+    return [kind.charAt(0).toUpperCase() + kind.slice(1), a ? `${a.name ? a.name + ', ' : ''}${where(a)}` : missing] as [string, string]; })));
   const sol = ins?.solar, air = ins?.air, st = ins?.stats;
-  const series = (xs: Stat[], unit = '') => xs.length ? xs.map(x => `${x.year}: ${n0(x.val)}${unit}`).join(' · ') : undefined;
   const solar = card(T('Solar energy', 'Energia słoneczna'), `PVGIS 5.3 (JRC, ${T('European Commission', 'Komisja Europejska')})${sol ? `, ${sol.database} ${sol.years}` : ''}`, sol ? rows([
     [T('Yearly yield of 1 kWp', 'Roczna produkcja z 1 kWp'), `${n0(sol.kwhPerKwp)} kWh`],
     [T('Best fixed setting', 'Optymalne ustawienie'), T(`${sol.angle}° tilt, azimuth ${sol.azimuth}° (0° = south)`, `nachylenie ${sol.angle}°, azymut ${sol.azimuth}° (0° = południe)`)],
@@ -160,12 +178,17 @@ export function insightSections(c: InsightContext, f: InsightFacts) {
     [T('Nearest station', 'Najbliższa stacja'), `${air.station}, ${dec(air.distance / 1000, pl)} km`],
     [T('Index at report time', 'Indeks w chwili raportu'), `${air.index}${air.at ? ` (${air.at})` : ''}`],
   ]) + `<p><small>${T('A single reading, not a yearly average.', 'Pojedynczy odczyt, nie średnia roczna.')}</small></p>` : `<p>${T('GIOŚ did not answer.', 'GIOŚ nie odpowiedział.')}</p>`);
-  const commune = card(T('The commune in numbers', 'Gmina w liczbach'), `GUS, Bank Danych Lokalnych${st ? ' · ' + st.unit : ''}`, st ? rows([
-    [T('Residents', 'Ludność'), series(st.population)],
-    [T('New homes completed', 'Mieszkania oddane do użytkowania'), series(st.dwellings)],
-    [T('Net migration', 'Saldo migracji'), series(st.migration)],
-    [T('Average time to build a house', 'Średni czas budowy domu jednorodzinnego'), st.buildMonths.length ? `${dec(st.buildMonths[st.buildMonths.length - 1].val, pl)} ${T('months', 'mies.')} (${st.buildMonths[st.buildMonths.length - 1].year})` : undefined],
-  ]) : `<p>${T('GUS did not answer.', 'GUS nie odpowiedział.')}</p>`);
+  const years = st ? [...new Set([...st.population, ...st.dwellings, ...st.migration].map(x => x.year))].sort() : [];
+  const statRow = (label: string, xs: Stat[]) => xs.length ? `<tr><td>${esc(label)}</td>${years.map(y => { const v = xs.find(x => x.year === y); return `<td class="num">${v ? esc(n0(v.val)) : '–'}</td>`; }).join('')}</tr>` : '';
+  const popChange = st && st.population.length > 1 ? (st.population[st.population.length - 1].val - st.population[0].val) / st.population[0].val * 100 : undefined;
+  const last = st?.buildMonths[st.buildMonths.length - 1];
+  const commune = card(T('The commune in numbers', 'Gmina w liczbach'), `GUS, Bank Danych Lokalnych${st ? ' · ' + st.unit : ''}`, st ? `<table class="stats"><tr><th></th>${years.map(y => `<th class="num">${esc(y)}</th>`).join('')}</tr>${statRow(T('Residents', 'Ludność'), st.population)}${statRow(T('New homes completed', 'Mieszkania oddane'), st.dwellings)}${statRow(T('Net migration', 'Saldo migracji'), st.migration)}</table>
+    <p>${popChange !== undefined ? esc(T(`Residents ${popChange >= 0 ? '+' : ''}${dec(popChange, pl)}% (${st.population[0].year}–${st.population[st.population.length - 1].year}).`, `Ludność ${popChange >= 0 ? '+' : ''}${dec(popChange, pl)}% (${st.population[0].year}–${st.population[st.population.length - 1].year}).`)) : ''}${last ? ' ' + esc(T(`A new single-family house took ${dec(last.val, pl)} months to build on average (${last.year}).`, `Budowa domu jednorodzinnego trwała średnio ${dec(last.val, pl)} mies. (${last.year}).`)) : ''}</p>` : `<p>${T('GUS did not answer.', 'GUS nie odpowiedział.')}</p>`, 'wide');
+  const lr = f.lr, excerpt = (label: string, text?: string) => text?.trim() ? `<p><small>${esc(label)}</small></p><pre class="kw">${esc(text.trim().slice(0, 2000))}${text.trim().length > 2000 ? '…' : ''}</pre>` : '';
+  const register = lr && (lr.number || lr.section3 || lr.section4) ? card(T('Land register', 'Księga wieczysta'), T('Pasted from the EKW register browser (Ministry of Justice)', 'Wklejone z przeglądarki EKW (Ministerstwo Sprawiedliwości)'), rows([
+    [T('Number', 'Numer'), lr.number ? kwNumber(lr.number).number : undefined],
+    ...(f.reg ? registerSummary(f.reg, lr.section3, lr.section4, pl).map((line, i) => [i === 0 && lr.section3?.trim() ? T('Section III', 'Dział III') : T('Section IV', 'Dział IV'), line.replace(/^(Section|Dział) I[IV]+: /, '')] as [string, string]) : []),
+  ]) + excerpt(T('Section III as pasted', 'Dział III – wklejona treść'), lr.section3) + excerpt(T('Section IV as pasted', 'Dział IV – wklejona treść'), lr.section4)) : '';
   const shots = (site?.history ?? []).filter(h => dataImage(h.image));
   const history = shots.length ? `<h2>${T('Land history: archival orthophotos', 'Historia terenu: archiwalne ortofotomapy')}</h2><p>${T('Compare the pictures for old ponds, dumps, embankments or cleared forest: they change foundation costs.', 'Porównaj zdjęcia: dawne stawy, wysypiska, nasypy czy wycinki lasu zmieniają koszt fundamentów.')}</p><div class="views">${shots.map(h => `<figure><img alt="${esc(fmtDate(h.date))}" src="${dataImage(h.image)}"><figcaption>${esc(fmtDate(h.date))} · ${esc(h.series)} · GUGiK</figcaption></figure>`).join('')}${dataImage(site!.ortho.image) ? `<figure><img alt="" src="${dataImage(site!.ortho.image)}"><figcaption>${T('Current mosaic', 'Obecna mozaika')} · GUGiK</figcaption></figure>` : ''}</div>` : '';
   const p = ins?.prices;
@@ -176,7 +199,7 @@ export function insightSections(c: InsightContext, f: InsightFacts) {
   const listings = ins ? `<h2>${T('Market check: listings nearby', 'Weryfikacja rynkowa: ogłoszenia w okolicy')}</h2>${l?.match ? `<p class="match"><b>${T('This parcel may be listed for sale', 'Ta działka może być wystawiona na sprzedaż')}:</b> <a href="${esc(l.match.url)}">${esc(l.match.title)}</a>${l.match.price ? ` – ${esc(zl(l.match.price))}` : ''}</p>` : ''}${listed.length ? `<p>${T(`${listed.length} plots for sale nearby; median asking price`, `Działki na sprzedaż w okolicy: ${listed.length}; mediana ceny ofertowej`)} <b>${perM2.length ? perM2[Math.floor(perM2.length / 2)] + ' zł/m²' : '–'}</b>${p?.median && perM2.length ? T(` (notarial median ${p.median} zł/m²)`, ` (mediana z aktów ${p.median} zł/m²)`) : ''}.</p><table><tr><th>${T('Listing', 'Ogłoszenie')}</th><th>${T('Area', 'Pow.')}</th><th>${T('Price', 'Cena')}</th><th>zł/m²</th></tr>${listed.slice(0, 12).map(i => `<tr><td><a href="${esc(i.url)}">${esc(i.title)}</a><br><small>${esc(i.source)}${i.place ? ' · ' + esc(i.place) : ''}${i.distance !== undefined ? ' · ' + esc(m(i.distance)) : ''}</small></td><td>${i.area ? esc(m(i.area)) + '²' : ''}</td><td>${esc(zl(i.price!))}</td><td>${i.perM2 ?? ''}</td></tr>`).join('')}</table>` : `<p>${l?.status === 'error' ? T('The listing portals did not answer.', 'Portale ogłoszeniowe nie odpowiedziały.') : T('No plot listings found nearby.', 'Nie znaleziono ogłoszeń działek w okolicy.')}</p>`}<p><small>${T('Otodom and OLX, read when the report was made.', 'Otodom i OLX, odczyt w chwili tworzenia raportu.')}</small></p>` : '';
   return `<h2>${T('Risks to check', 'Ryzyka do sprawdzenia')}</h2>${list(f.risks, 'risks')}
   <h2>${T('Strengths', 'Mocne strony')}</h2>${list(f.strengths, 'strengths')}
-  <h2>${T('Detailed analysis', 'Szczegółowa analiza')}</h2>${osm?.status === 'error' ? `<p><small>${T('OpenStreetMap did not answer in time: road, transport and surroundings are missing. Generate the report again in a moment.', 'OpenStreetMap nie odpowiedział na czas: brak danych o drodze, komunikacji i otoczeniu. Wygeneruj raport ponownie za chwilę.')}</small></p>` : ''}<div class="sitegrid">${ground}${media}${access}${nature}${daily}</div>
+  <h2>${T('Detailed analysis', 'Szczegółowa analiza')}</h2>${osm?.status === 'error' ? `<p><small>${T('OpenStreetMap did not answer in time: road, transport and surroundings are missing. Generate the report again in a moment.', 'OpenStreetMap nie odpowiedział na czas: brak danych o drodze, komunikacji i otoczeniu. Wygeneruj raport ponownie za chwilę.')}</small></p>` : ''}<div class="sitegrid">${ground}${media}${access}${nature}${daily}${register}</div>
   ${ins ? `<h2>${T('Energy, air and the commune', 'Energia, powietrze i gmina')}</h2><div class="sitegrid">${solar}${airCard}${commune}</div>` : ''}
   ${history}${prices}${listings}
   <h2>${T('Checklist before buying and designing', 'Lista kontrolna przed zakupem i projektem')}</h2><ol class="checks">${[...new Set(f.checks)].map(x => `<li>${esc(x)}</li>`).join('')}</ol>`;

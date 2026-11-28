@@ -4,7 +4,8 @@
 import { geographicPoint, projectPoint } from './geospatial.ts';
 
 type P = [number, number];
-export interface Near { name?: string; kind: string; distance: number; detail?: string; ref?: string }
+/** `bearing`: compass degrees (0 = north, clockwise) from the parcel to the feature's nearest mapped point; absent when the parcel touches it. */
+export interface Near { name?: string; kind: string; distance: number; detail?: string; ref?: string; bearing?: number }
 export interface Stat { year: string; val: number }
 export interface Sale { date: string; price: number; area: number; perM2: number; use?: string; purpose?: string; place?: string }
 export interface Listing { source: 'Otodom' | 'OLX'; title: string; url: string; price?: number; area?: number; perM2?: number; distance?: number; place?: string }
@@ -52,8 +53,15 @@ const amenityKinds: [string, (t: Record<string, string>) => boolean][] = [['szko
 /** Nearest features of each kind from an Overpass answer, measured to the parcel ring (EPSG:2180). */
 export function readOsm(elements: OsmElement[], ring: P[]): SiteInsights['osm'] {
   const shape = (e: OsmElement): P[] => (e.geometry ?? (e.lat !== undefined ? [{ lat: e.lat, lon: e.lon! }] : e.center ? [e.center] : [])).map(g => projectPoint([g.lon, g.lat]));
+  const cx = ring.reduce((n, q) => n + q[0], 0) / ring.length, cy = ring.reduce((n, q) => n + q[1], 0) / ring.length;
   const near = (test: (t: Record<string, string>) => boolean, describe: (t: Record<string, string>) => Omit<Near, 'distance'>) => elements.filter(e => e.type !== 'count' && e.tags && test(e.tags) && shape(e).length)
-    .map(e => ({ ...describe(e.tags!), distance: distanceToParcel(ring, shape(e)) })).sort((a, b) => a.distance - b.distance);
+    .map(e => {
+      const pts = shape(e), distance = distanceToParcel(ring, pts);
+      // Direction to the feature's closest mapped point (EPSG:2180 points are [easting, northing]).
+      const closest = pts.reduce((best, q) => { const d = distanceToParcel(ring, [q]); return d < best.d ? { q, d } : best; }, { q: pts[0], d: Infinity }).q;
+      const bearing = distance > 0 ? Math.round((Math.atan2(closest[0] - cx, closest[1] - cy) * 180 / Math.PI + 360) % 360) % 360 : undefined;
+      return { ...describe(e.tags!), distance, ...(bearing !== undefined ? { bearing } : {}) };
+    }).sort((a, b) => a.distance - b.distance);
   const road = near(x => !!roadKinds[x.highway] && !/^(motorway|trunk)$/.test(x.highway), x => ({ name: x.name ?? x.ref, kind: roadKinds[x.highway], ...(x.ref ? { ref: x.ref } : {}), detail: x.surface ? (paved.test(x.surface) ? 'utwardzona' : 'nieutwardzona') : x.highway === 'track' ? 'nieutwardzona' : undefined }))[0];
   const count = elements.find(e => e.type === 'count')?.tags;
   return {

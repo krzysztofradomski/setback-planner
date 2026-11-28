@@ -129,3 +129,27 @@ test('OpenStreetMap gives the road number and the nearest everyday places',()=>{
   assert.equal(osm.road?.ref,'4105W');
   assert.deepEqual(osm.amenities?.map(a=>[a.kind,a.name]),[['szkoła','SP 1'],['sklep spożywczy',undefined]]);
 });
+test('nearby features carry the compass direction from the parcel; the report says it in words and never claims absence the backup map cannot see',async()=>{
+  const ring:[number,number][]=[[500000,500000],[500020,500000],[500020,500020],[500000,500020]];
+  const ll=(e:number,n:number)=>{const [lon,lat]=geo([e,n]);return {lat,lon};};
+  const osm=readOsm([
+    {type:'way',tags:{landuse:'forest'},geometry:[ll(500010,500300),ll(500050,500400)]},
+    {type:'way',tags:{waterway:'river',name:'Rokitnica'},geometry:[ll(499700,499990),ll(499700,500050)]},
+    {type:'node',tags:{amenity:'school',name:'SP 1'},...ll(500300,500010)},
+  ],ring);
+  assert.ok(Math.abs(osm.forest!.bearing!-0)<=10,'forest north, got '+osm.forest!.bearing);
+  assert.ok(Math.abs(osm.water!.bearing!-270)<=10,'river west, got '+osm.water!.bearing);
+  const {insightFacts,insightSections}=await import('../public/core/report-insights.ts');
+  const {parseScene}=await import('../public/core/scene.ts');
+  const scene=parseScene({plot:[{x:0,y:0},{x:20,y:0},{x:20,y:20},{x:0,y:20}]});
+  const insights={retrievedAt:'2026-11-28T10:00:00Z',osm:{...osm,source:'tiles' as const},drives:[],prices:{status:'none' as const,radius:1500,count:0,sales:[]},listings:{status:'none' as const,searched:[],items:[]},
+    stats:{unit:'Błonie',population:[{year:'2020',val:22108},{year:'2025',val:22680}],dwellings:[{year:'2020',val:218},{year:'2025',val:255}],migration:[],buildMonths:[{year:'2025',val:36.7}]}};
+  const empty={status:'none' as const,features:[]},layers=Object.fromEntries(['cadastre','planning','utilities','environment','flood','groundwater','landslides','mining','wells','heritage'].map(id=>[id,empty]));
+  const c={scene,lang:'pl' as const,area:400,buildable:100,coverage:0,buildings:0,failing:0,site:{layers,networkDistances:{},ortho:{captures:[]},insights} as never};
+  const html=insightSections(c,insightFacts(c));
+  assert.match(html,/bez nazwy w OpenStreetMap, \d+ m na północ/);
+  assert.match(html,/Rokitnica \(rzeka\), \d+ m na zachód/);
+  assert.match(html,/Przedszkole<\/td><td>brak danych tym razem/);
+  assert.match(html,/<table class="stats"><tr><th><\/th><th class="num">2020<\/th><th class="num">2025<\/th>/);
+  assert.match(html,/Ludność \+2,6% \(2020–2025\)/);
+});

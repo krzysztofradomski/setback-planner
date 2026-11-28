@@ -4474,3 +4474,13 @@ body:not(.advisor-ready) #report-advisor{display:none}
 .welcome-drawing .wd-dim{stroke:#1d2430;stroke-width:2}
 .welcome-drawing .wd-dim-t{font:700 17px var(--f-ui);fill:#1d2430;paint-order:stroke;stroke:#faf9f5;stroke-width:5px}
 @media (prefers-reduced-motion:no-preference){.welcome-drawing .wd-measure{animation:wd-fade .6s ease 4.1s both}}
+
+/* Land register (księga wieczysta) paste-in, under the public registry data */
+.land-register{margin-top:12px;padding:12px 14px;border-radius:14px;background:var(--surface,#eef0f5)}
+.land-register summary{cursor:pointer;font-weight:700}
+.land-register label{display:grid;gap:4px;margin-top:10px;font-size:13px;font-weight:600}
+.land-register :is(input,textarea){width:100%;box-sizing:border-box;border:1px solid #d6dae2;border-radius:10px;padding:8px 10px;font:13px/1.4 var(--f-ui,system-ui);background:#fff}
+.land-register textarea{resize:vertical;min-height:64px}
+.land-register .land-open{display:inline-block;margin-top:6px;font-weight:700;color:#2f5bea}
+.land-register .land-status:empty{display:none}
+.land-register .land-status{color:#1d2430;font-weight:600}

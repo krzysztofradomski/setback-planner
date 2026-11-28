@@ -29,7 +29,9 @@ export const itemSchema=z.object({
 export const sceneSchema=z.object({
   schemaVersion:z.literal(2),units:z.literal('m'),
   coordinates:z.object({crs:z.literal('LOCAL'),axis:z.literal('x-east-y-south'),projected:z.object({crs:z.literal('EPSG:2180'),origin:z.object({x:finite.min(0).max(1.2e6),y:finite.min(0).max(1.2e6)}).strict()}).strict().optional()}).strict(),
-  parcel:z.object({identifier:z.string().max(80).optional(),source:z.object({name:z.string().min(1).max(120),retrievedAt:z.iso.datetime({offset:true}),crs:z.enum(['EPSG:4326','EPSG:2180']),url:z.url().refine(s=>s.startsWith('https://')).optional()}).strict(),edited:z.boolean()}).strict().optional(),
+  parcel:z.object({identifier:z.string().max(80).optional(),source:z.object({name:z.string().min(1).max(120),retrievedAt:z.iso.datetime({offset:true}),crs:z.enum(['EPSG:4326','EPSG:2180']),url:z.url().refine(s=>s.startsWith('https://')).optional()}).strict(),edited:z.boolean(),
+    // Land register entries pasted by the user (sections III and IV only; owners are not collected).
+    landRegister:z.object({number:z.string().max(20).optional(),section3:z.string().max(6000).optional(),section4:z.string().max(6000).optional()}).strict().optional()}).strict().optional(),
   plot:z.array(pointSchema).min(3).max(512).refine(validRing,'Invalid parcel boundary'),
   plotHoles:z.array(z.array(pointSchema).min(3).max(512).refine(validRing)).max(16).default([]),
   plotParts:z.array(z.array(z.array(pointSchema).min(3).max(512).refine(validRing)).min(1).max(17)).max(16).default([]),

@@ -19,6 +19,7 @@ import { worldFootprint, boundingCorners, fitOpenings } from './core/footprints.
 import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
 import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
 import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointLocation } from './core/geometry.ts';
+import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land-register.ts';
 
 (async () => {
   const $ = s => document.querySelector(s);
@@ -1416,6 +1417,35 @@ import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointL
     const head=siteState==='loading'?bi('Fetching official registry data…','Pobieram dane z rejestrów publicznych…'):siteState==='error'?bi('Registry data could not be fetched. The report lists the sources to check.','Nie udało się pobrać danych z rejestrów. Raport wskaże źródła do sprawdzenia.'):bi('Fetched automatically from official registries. Results apply to a point inside the parcel; the full report shows a map for each source.','Pobrane automatycznie z rejestrów urzędowych. Wyniki dotyczą punktu w środku działki; pełny raport zawiera mapę dla każdego źródła.');
     const rows=siteData?siteLayerIds.map(id=>{const layer=siteData.layers[id];return `<li class="${id==='cadastre'?'none':layer.status}"><b>${esc(name(id))}</b><span>${esc(siteSummary(id,layer))}</span></li>`;}).join('')+(siteData.planRules?.status==='found'?`<li class="found plan-doc"><b>${esc(bi('Local plan text','Tekst planu miejscowego'))}</b><span><a href="${esc(siteData.planRules.plan.url)}" target="_blank" rel="noopener noreferrer">${esc(siteData.planRules.plan.title)} ↗</a>${(siteData.planRules.extraction?.claims??[]).slice(0,8).map(c=>`<br>• ${esc(c.parameter)}: <i>${esc(c.value)}</i>`).join('')}</span></li>`:siteData.planRules?.note?`<li class="none"><b>${esc(bi('Local plan text','Tekst planu miejscowego'))}</b><span>${esc(siteData.planRules.note)}</span></li>`:'')+(planSetbacks.some(v=>v)?`<li class="found"><b>${esc(bi('Building lines (local plan)','Linie zabudowy (MPZP)'))}</b><span>${planSetbacks.map((v,i)=>v?`${cornerName(i)}${cornerName((i+1)%state.plot.length)}: ${dec(v.toFixed(1))} m`:'').filter(Boolean).join(' · ')} ${esc(bi('from the boundary; checked against every building.','od granicy; uwzględnione w sprawdzeniu budynków.'))}</span></li>`:'')+(siteData.ortho.captures[0]?`<li class="none"><b>${esc(bi('Orthophoto','Ortofotomapa'))}</b><span>${esc(bi('Latest capture','Najnowsze zdjęcie'))}: ${esc(siteData.ortho.captures[0].date)}</span></li>`:''):'';
     sitePanel.innerHTML=`<h3>${bi('Public registry data','Dane z rejestrów publicznych')}</h3><p class="hint" role="status" aria-busy="${siteState==='loading'}">${head}</p>${rows?`<ul>${rows}</ul>`:''}`;
+    syncLandPanel();
+  }
+  // Land register (księga wieczysta): the court's search is behind a CAPTCHA, so the visitor opens it and pastes sections III and IV.
+  // Section II (owners) is not asked for: whatever is pasted is saved in the plan and its share link.
+  let landPanel=null,landKey='';
+  function syncLandPanel(){
+    if(!landPanel){landPanel=document.createElement('details');landPanel.className='land-register';sitePanel.after(landPanel);
+      landPanel.addEventListener('input',e=>{const f=e.target;if(!f.name||!state.parcel)return;const lr={...(state.parcel.landRegister??{})};
+        if(f.value.trim())lr[f.name]=f.name==='number'?f.value.trim().toUpperCase().slice(0,20):f.value.slice(0,6000);else delete lr[f.name];
+        const {landRegister,...rest}=state.parcel;state.parcel=Object.keys(lr).length?{...rest,landRegister:lr}:rest;landStatus();save();});}
+    const p=state.parcel;landPanel.hidden=!p||!siteKey;if(!p)return;
+    const key=JSON.stringify([p.identifier,p.source?.retrievedAt,lang]);if(key===landKey)return;landKey=key;const lr=p.landRegister??{};
+    landPanel.open=!!(lr.number||lr.section3||lr.section4);
+    landPanel.innerHTML=`<summary>${bi('Land register (KW)','Księga wieczysta (KW)')}</summary>
+      <p class="hint">${bi('The register number is in the notarial deed, the land register extract or with the seller. Open the register in the court search, type the code from the picture, then copy the text of sections III and IV here.','Numer KW znajdziesz w akcie notarialnym, wypisie z rejestru gruntów albo u sprzedającego. Otwórz księgę w wyszukiwarce sądu, przepisz kod z obrazka i skopiuj tutaj treść działu III i IV.')}</p>
+      <a class="land-open" href="${EKW_SEARCH}" target="_blank" rel="noopener noreferrer">${bi('Open the court register search ↗','Otwórz wyszukiwarkę ksiąg wieczystych ↗')}</a>
+      <label>${bi('Register number','Numer księgi')}<input name="number" maxlength="20" placeholder="WA1G/00012345/6" autocomplete="off" spellcheck="false"></label>
+      <label>${bi('Section III – rights, claims and restrictions','Dział III – prawa, roszczenia i ograniczenia')}<textarea name="section3" rows="4" maxlength="6000"></textarea></label>
+      <label>${bi('Section IV – mortgage','Dział IV – hipoteka')}<textarea name="section4" rows="3" maxlength="6000"></textarea></label>
+      <p class="hint land-status" role="status"></p>
+      <p class="hint">${bi('Do not paste section II (owners): it is not needed. What you paste is saved in this plan and in its share link.','Nie wklejaj działu II (właściciele) – nie jest potrzebny. Wklejona treść zapisuje się w tym projekcie i w linku do udostępnienia.')}</p>`;
+    for(const k of ['number','section3','section4'])landPanel.querySelector(`[name=${k}]`).value=lr[k]??'';
+    landStatus();
+  }
+  function landStatus(){
+    const lr=state.parcel?.landRegister??{},el=landPanel?.querySelector('.land-status');if(!el)return;const parts=[];
+    if(lr.number){const k=kwNumber(lr.number);parts.push(k.ok?bi(`Number ${k.number}.`,`Numer ${k.number}.`):bi('The number should look like WA1G/00012345/6.','Numer powinien mieć postać WA1G/00012345/6.'));}
+    parts.push(...registerSummary(readRegister(lr.section3,lr.section4),lr.section3,lr.section4,lang==='pl'));
+    el.textContent=parts.join(' ');
   }
   renderSitePanel();
   applyLang(); renderCatalogs();
