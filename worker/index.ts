@@ -225,6 +225,13 @@ export default {
     },
     async scheduled(_event: unknown, env: Env) {
         const now = Date.now();
+        // Retention for the removed partner module stays until its tables are dropped: leftover leads still lose personal data on time.
+        const expired="SELECT l.id FROM leads l JOIN tenants t ON l.tenant_id=t.id WHERE l.anonymized=0 AND l.created < ? - t.retention_days*86400000";
+        await env.DB.batch([
+            env.DB.prepare("INSERT INTO audit(id,tenant_id,lead_id,actor,action,detail,created) SELECT lower(hex(randomblob(16))),tenant_id,id,'retention','personal_data_erased','{}',? FROM leads WHERE id IN ("+expired+")").bind(now,now),
+            env.DB.prepare("UPDATE leads SET contact='{}',email_hash='',project='{}',attribution='{}',consent='{}',anonymized=1,revision=revision+1 WHERE id IN ("+expired+")").bind(now),
+            env.DB.prepare('DELETE FROM ai_cache WHERE expires<?').bind(now),
+        ]);
         await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now), env.DB.prepare('DELETE FROM rate_limits WHERE expires<?').bind(now), env.DB.prepare('DELETE FROM funnel WHERE day<?').bind(new Date(now - 400 * 86400000).toISOString().slice(0, 10))]);
     }
 };

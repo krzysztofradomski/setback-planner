@@ -66,3 +66,11 @@ test('funnel counts are anonymous, bounded and readable only when signed in', as
     const report = await (await api(env, '/api/funnel?days=30', undefined, cookie)).json() as { rows: unknown[] };
     assert.equal(report.rows.length, 2);
 });
+test('retention still erases personal data in leftover leads', async () => {
+    const { env, db } = setup();
+    db.prepare("INSERT INTO tenants(id,name,retention_days) VALUES('t1','Old',1)").run();
+    db.prepare("INSERT INTO leads(id,tenant_id,project_id,contact,email_hash,project,attribution,created,attributed,consent) VALUES('l1','t1','p','{\"email\":\"a@b.c\"}','h','{}','{}',0,0,'{}')").run();
+    await worker.scheduled(null, env);
+    const row = db.prepare("SELECT contact,anonymized FROM leads WHERE id='l1'").get() as { contact: string; anonymized: number };
+    assert.deepEqual([row.contact, row.anonymized], ['{}', 1]);
+});
