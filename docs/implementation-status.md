@@ -4,9 +4,9 @@ The current workspace correction is tracked in F027. F023 now has verified main-
 
 The planner includes generic/custom house footprints, attached structures, groups, locks, visibility, openings, architectural finishes and roof types; synchronized 3D/walk views; multipart parcels with holes; deterministic setbacks/suggestions; a parametric garden library; fences/gates/hedges; seasonal rendering and physical solar position; NMT terrain; attributed map overlays; variants, share links and printable reports.
 
-Showroom integration isolates ordinary autosave and undo from visitors, warns before idle reset, clears visitor forms, and logs out privileged server sessions before kiosk entry. QR transfers include public scene data only. Campaign labels are first-party, unverified visitor claims.
+Campaign links carry first-party labels (unverified visitor claims) and may name a design with `dom=`. Share links carry a plot outline for link previews.
 
-Private business services use separate staging/production EU D1 databases, secure server sessions, scoped roles, explicit inquiry consent, Turnstile, audited retention/deletion, deterministic commission rules and CSV/API integration. No external CRM, email, webhook or pricing service is configured. No public recipient has been activated: the owner must supply the actual recipient/controller privacy disclosure and commercial rules.
+The owner panel shows anonymous funnel counts by campaign and builds campaign links with QR codes. The partner module (recipients, inquiries, leads, commissions, document assistant) was removed on 2026-11-28; its tables remain unused in D1.
 
 Workers AI provides opt-in text extraction, citation-based summaries/report text, registered catalog metadata answers and layout proposals. Schemas and exact quotations are checked independently. AI never calculates placement feasibility or applies changes. Global/account daily quotas and 24-hour private caches limit processing; request limits are not a guaranteed monetary ceiling.
 
@@ -22,7 +22,6 @@ Unit/integration tests run against deterministic fixtures and a real SQLite sche
 - Concave pitched roofs use schematic flat caps. Openings and exterior details are conceptual. Walk mode has no collision simulation. Accent-area meshes, vehicle swept-path engineering and automatic vector building-line extraction are not supplied.
 - Placement suggestions use a bounded deterministic sample grid and uniform user-selected setbacks; they are not exhaustive or legal feasibility decisions.
 - Optional 3D/map bundles are lazy-loaded but exceed Vite's 500 KB chunk warning threshold. The ordinary 2D editor does not load them.
-- Operational privacy notices, recipient activation and commission agreements require the actual platform owner's choices. No partnership is implied and no third-party message was sent.
 
 ## Operations
 

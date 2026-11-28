@@ -20,7 +20,6 @@ export function renderLayoutReview(
     onShowPlan,
     onReport,
     onSources,
-    onAdvisor,
   }: {
     scene: Scene;
     language: "en" | "pl";
@@ -29,7 +28,6 @@ export function renderLayoutReview(
     onShowPlan: (id?: string) => void;
     onReport: () => void;
     onSources: () => void;
-    onAdvisor?: () => void;
   },
 ) {
   const pl = language === "pl",
@@ -183,8 +181,6 @@ export function renderLayoutReview(
     onReport,
   );
   report.id = "review-report";
-  if (onAdvisor && scene.items.length)
-    action(pl ? "Umów rozmowę z doradcą →" : "Talk to an advisor →", onAdvisor).className = "review-action review-advisor";
   const sources = action(
     pl ? "Sprawdź mapy otoczenia" : "Review surrounding maps",
     onSources,

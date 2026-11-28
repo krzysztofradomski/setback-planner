@@ -16,11 +16,12 @@ test('preview parser rejects junk', () => {
   for (const bad of [null, '', 'x1,2,3,4,5,6', 'p1,2,3', 'p1,2,3,4,5,6_p1,2,3,4,5,6', 'p1,2,3,4,5,6_z1,2,3,4,5,6', 'p1,2,3,4,5,a', 'p' + '1,'.repeat(2000)]) assert.equal(parsePreview(bad), null, String(bad));
 });
 test('share search keeps campaign keys and replaces old preview keys', () => {
-  const q = new URLSearchParams(shareSearch(scene, '?utm_campaign=wiosna&pv=old&pn=old', 'DE 105'));
+  const q = new URLSearchParams(shareSearch(scene, '?utm_campaign=wiosna&pv=old&pn=old&admin', 'DE 105'));
   assert.equal(q.get('utm_campaign'), 'wiosna');
   assert.equal(q.get('pn'), 'DE 105');
   assert.equal(q.get('pa'), '1000');
   assert.notEqual(q.get('pv'), 'old');
+  assert.equal(q.has('admin'), false);
 });
 test('meta tags are escaped and name the house and plot', () => {
   const html = previewMeta(new URLSearchParams({ pn: 'DE 105"><script>', pa: '1000', pv: DEFAULT_PREVIEW }), 'https://x.test');

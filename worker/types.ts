@@ -25,8 +25,6 @@ export interface Env {
     };
     SESSION_SECRET?: string;
     BOOTSTRAP_SECRET?: string;
-    TURNSTILE_SECRET_KEY?: string;
-    TURNSTILE_SITEKEY?: string;
     AI_ENABLED?: string;
     AI_DAILY_LIMIT?: string;
 }
@@ -36,34 +34,4 @@ export interface User {
     role: 'owner' | 'manufacturer' | 'sales';
     tenant_id: string | null;
     password?: string;
-}
-export interface Lead {
-    id: string;
-    tenant_id: string;
-    project_id: string;
-    contact: string;
-    email_hash: string;
-    project: string;
-    attribution: string;
-    created: number;
-    attributed: number;
-    consent: string;
-    status: string;
-    duplicate: number;
-    existing_customer: number;
-    crm_status: string;
-    evidence: string;
-    commission_cents: number;
-    currency: string;
-    commission_rules: string;
-    revision: number;
-    anonymized: number;
-}
-export interface Tenant {
-    id: string;
-    name: string;
-    recipient_enabled: number;
-    privacy_notice: string;
-    retention_days: number;
-    rules: string;
 }

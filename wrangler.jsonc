@@ -31,8 +31,7 @@
   },
   "vars": {
     "AI_ENABLED": "true",
-    "AI_DAILY_LIMIT": "20",
-    "TURNSTILE_SITEKEY": "0x4AAAAAAGDxHm-Xx-flQooh"
+    "AI_DAILY_LIMIT": "20"
   },
   "observability": {
     "enabled": true,
@@ -77,8 +76,7 @@
       },
       "vars": {
         "AI_ENABLED": "true",
-        "AI_DAILY_LIMIT": "10",
-        "TURNSTILE_SITEKEY": "0x4AAAAAAGDxHm-Xx-flQooh"
+        "AI_DAILY_LIMIT": "10"
       },
       "triggers": {
         "crons": [

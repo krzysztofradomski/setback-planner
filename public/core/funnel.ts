@@ -2,7 +2,7 @@
 // Nothing is stored on the device and nothing identifies the visitor.
 import { campaignLabel } from './attribution.ts';
 
-export const funnelSteps = ['visit', 'parcel', 'house', 'view3d', 'report', 'share', 'video', 'inquiry'] as const;
+export const funnelSteps = ['visit', 'parcel', 'house', 'view3d', 'report', 'share', 'video'] as const;
 export type FunnelStep = typeof funnelSteps[number];
 export const funnelSource = (value: unknown) => campaignLabel(value) ?? 'direct';
 /** The campaign label marketers set on the link: campaign first, then showroom/event, then source. */

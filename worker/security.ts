@@ -16,8 +16,6 @@ export async function authenticate(req: Request, env: Env): Promise<User> { cons
     return fail(401, 'Sign in required'); const user = await env.DB.prepare('SELECT u.id,u.email,u.role,u.tenant_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>? AND u.active=1').bind(await tokenHash(token, env), Date.now()).first<User>(); return user ?? fail(401, 'Session expired'); }
 export function owner(user: User) { if (user.role !== 'owner')
     fail(403, 'Owner role required'); }
-export function tenantScope(user: User, tenant: string) { if (user.role !== 'owner' && user.tenant_id !== tenant)
-    fail(404, 'Not found'); }
 export async function rate(env: Env, key: string, limit: number, windowMs: number) { const now = Date.now(); const bucket = Math.floor(now / windowMs); const hash = await digest(key + ':' + bucket); const row = await env.DB.prepare('INSERT INTO rate_limits(key,count,expires) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1 RETURNING count').bind(hash, now + windowMs).first<{
     count: number;
 }>(); if (!row || row.count > limit)

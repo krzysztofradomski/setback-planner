@@ -18,7 +18,7 @@ A bilingual parcel and house concept planner. The existing SVG editor is retaine
 - Parcel-first address/identifier/map search, boundary confirmation, house choice and layout review; returning projects open directly.
 - Reviewed desktop library/canvas/inspector workspace, dismissible mobile sheets and English/Polish navigation.
 
-Setbacks are user-selected geometric inputs (defaults: 4 m for houses, 3 m for garages). This tool does not establish legal or technical building feasibility. Multipart parcels and holes are supported. Terrain, planning/utility/protected-area/flood/groundwater/geology overlays, garden objects, fences, seasons, showroom, private lead management and source-based Workers AI are implemented. See the status document for explicit external blockers and practical limits.
+Setbacks are user-selected geometric inputs (defaults: 4 m for houses, 3 m for garages). This tool does not establish legal or technical building feasibility. Multipart parcels and holes are supported. Terrain, planning/utility/protected-area/flood/groundwater/geology overlays, garden objects, fences, seasons, link previews, campaign statistics and source-based Workers AI are implemented. See the status document for explicit external blockers and practical limits.
 
 ## Development
 
@@ -49,14 +49,14 @@ npm run build
 npm run preview
 ```
 
-Cloudflare Worker Static Assets serves `dist` after the build. The existing custom domain configuration is preserved. Separate staging/production D1 databases, Workers AI, Turnstile and private server authentication are configured. R2 is unnecessary because no binary upload service is provided.
+Cloudflare Worker Static Assets serves `dist` after the build. The existing custom domain configuration is preserved. Separate staging/production D1 databases, Workers AI and owner sign-in for the statistics panel are configured. R2 is unnecessary because no binary upload service is provided.
 
 ```bash
 npm run build
 npx wrangler deploy
 ```
 
-Staging uses `npx wrangler deploy --env staging`; production uses `--env ''`. See [backend operations](docs/backend.md) for migrations, secrets, recipient activation and retention. For local API development, run `npm run dev:worker` alongside Vite and apply local D1 migrations; Vite proxies `/api` to port 8787. Never commit `.dev.vars` files.
+Staging uses `npx wrangler deploy --env staging`; production uses `--env ''`. See [backend operations](docs/backend.md) for migrations, secrets, link previews and the statistics panel. For local API development, run `npm run dev:worker` alongside Vite and apply local D1 migrations; Vite proxies `/api` to port 8787. Never commit `.dev.vars` files.
 
 ## Separate deployments
 

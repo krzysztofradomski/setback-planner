@@ -30,6 +30,7 @@ export function parsePreview(value: string | null): Preview | null {
 export function shareSearch(scene: Scene, search: string, houseName: string): string {
   const params = new URLSearchParams(search);
   for (const k of PREVIEW_KEYS) params.delete(k);
+  params.delete('admin'); // the owner's ?admin switch never travels in a share link
   try { params.set('pv', previewParam(scene)); } catch { return params.size ? '?' + params : ''; }
   if (houseName) params.set('pn', houseName.slice(0, 60));
   const area = Math.abs(scene.plot.reduce((s, a, i) => { const b = scene.plot[(i + 1) % scene.plot.length]; return s + a.x * b.y - b.x * a.y; }, 0) / 2);

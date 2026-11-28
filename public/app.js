@@ -262,7 +262,6 @@ import { track } from './core/funnel.ts';
   });
 
   // ---------- state ----------
-  let advisorReady=false;// set once /api/recipients answers (see openAdvisor)
   let persistencePaused = false;
   function projectWarning(message, pause = true){
     persistencePaused = pause;
@@ -822,13 +821,13 @@ import { track } from './core/funnel.ts';
   let verdictDismissed='';
   function renderVerdict(warnCount){
     let v=$('#verdict');if(!v){v=document.createElement('div');v.id='verdict';v.setAttribute('role','status');$('#chipbar').after(v);
-      v.onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.close!==undefined){verdictDismissed=v.className;v.hidden=true;return;}if(b.dataset.fix!==undefined)fixLayout();else if(b.dataset.verdictReport!==undefined)$('#b-report')?.click();else if(b.dataset.advisor!==undefined)openAdvisor();};}
+      v.onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.close!==undefined){verdictDismissed=v.className;v.hidden=true;return;}if(b.dataset.fix!==undefined)fixLayout();else if(b.dataset.verdictReport!==undefined)$('#b-report')?.click();};}
     const buildings=state.items.filter(i=>i.type!=='landscape'&&i.visible);
     if(!buildings.length){v.hidden=true;return;}
     const cls=warnCount?'verdict bad':'verdict ok';if(verdictDismissed===cls){v.hidden=true;return;}verdictDismissed='';// a closed card stays closed until the answer changes
     v.hidden=false;v.className=cls;
     v.innerHTML=warnCount?`<b>${bi('✕ Does not fit yet','✕ Jeszcze się nie mieści')}</b><span>${bi(`${warnCount} ${warnCount===1?'object breaks':'objects break'} a setback.`,`${warnCount===1?'1 obiekt narusza':`${warnCount} ${warnCount<5?'obiekty naruszają':'obiektów narusza'}`} odległość od granicy.`)}</span><button type="button" data-fix>${bi('Fix the placement','Popraw ustawienie')}</button><button type="button" class="verdict-close" data-close aria-label="${bi('Close','Zamknij')}">×</button>`
-      :`<b>${bi('✓ Fits the parcel','✓ Mieści się na działce')}</b><span>${bi('Every building keeps its setbacks.','Wszystkie budynki zachowują odległości od granic.')}</span><button type="button" data-verdict-report>${bi('Full report','Pełny raport')}</button>${advisorReady?`<button type="button" data-advisor class="advisor">${bi('Talk to an advisor','Umów rozmowę')}</button>`:''}<button type="button" class="verdict-close" data-close aria-label="${bi('Close','Zamknij')}">×</button>`;
+      :`<b>${bi('✓ Fits the parcel','✓ Mieści się na działce')}</b><span>${bi('Every building keeps its setbacks.','Wszystkie budynki zachowują odległości od granic.')}</span><button type="button" data-verdict-report>${bi('Full report','Pełny raport')}</button><button type="button" class="verdict-close" data-close aria-label="${bi('Close','Zamknij')}">×</button>`;
   }
   /** Move each failing building (with its carport or garage) to the nearest spot where everything keeps its setbacks. */
   function fixLayout(){
@@ -1309,7 +1308,6 @@ import { track } from './core/funnel.ts';
   };
   $('#report-print').onclick=()=>$('#report-frame').contentWindow.print();
   $('#report-close').onclick=()=>$('#report-dialog').close();
-  {const advisor=document.createElement('button');advisor.type='button';advisor.id='report-advisor';advisor.dataset.bi='Talk to an advisor|Umów rozmowę z doradcą';advisor.textContent=bi('Talk to an advisor','Umów rozmowę z doradcą');advisor.onclick=()=>{$('#report-dialog').close();openAdvisor();};$('#report-print').after(advisor);}
   $('#b-download').onclick=()=>{try{downloadFile(serializeScene(state),'setback-project.json','application/json');}catch{toast(t('notAPlan'));}};
   $('#b-file').onclick=()=>$('#project-file').click();
   $('#project-file').onchange=async e=>{
@@ -1385,12 +1383,15 @@ import { track } from './core/funnel.ts';
     buildPanel(); render();
   });
 
-  let business=null,attribution=null;
+  let attribution=null;
   try{attribution=validateAttribution(JSON.parse(window.sessionStorage.getItem(ATTRIBUTION_KEY)??'null'));}catch{/* storage unavailable */}
   attribution=readAttribution(location.search,attribution);
   try{if(attribution)window.sessionStorage.setItem(ATTRIBUTION_KEY,JSON.stringify(attribution));}catch{/* in-memory attribution still works */}
   funnelStep('visit');
-  const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');business=mountBusiness({container:businessHost,getScene:()=>structuredClone(state),getAttribution:()=>(attribution?structuredClone(attribution):null)});
+  const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');mountBusiness({container:businessHost});
+  // The statistics tab is for the owner: shown with ?admin in the address, or once a session exists.
+  if(new URLSearchParams(location.search).has('admin'))document.body.classList.add('admin');
+  else window.fetch('/api/auth/me',{credentials:'same-origin'}).then(r=>{if(r.ok)document.body.classList.add('admin');}).catch(()=>{});
 
   workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
   $('#viewer').addEventListener('pointerdown',()=>$('.stage').classList.add('viewer-quiet'));
@@ -1423,11 +1424,7 @@ import { track } from './core/funnel.ts';
   setAdvanced((()=>{try{return localStorage.getItem(ADV_LS)==='1';}catch{return false;}})());
   const parcelPanel=document.querySelector('[data-panel=parcel]'),parcelAdvanced=document.createElement('details');parcelAdvanced.className='parcel-advanced';parcelAdvanced.innerHTML=`<summary>${lang==='pl'?'Rysowanie, import i współrzędne':'Drawing, import & coordinates'}</summary>`;parcelAdvanced.append($('#p-area').closest('section'));parcelPanel.append(parcelAdvanced);
   const review=document.createElement('section');review.id='review-layout';document.querySelector('[data-panel=project]').prepend(review);
-  /** The sales hand-off: the existing inquiry form (recipient, consent, Turnstile) with the project attached. */
-  // Advisor buttons appear only once someone can receive inquiries (a recipient set up in the private panel).
-  window.fetch('/api/recipients').then(r=>r.ok?r.json():null).then(d=>{advisorReady=!!d?.recipients?.length;document.body.classList.toggle('advisor-ready',advisorReady);render();}).catch(()=>{});
-  function openAdvisor(){$('.app')?.classList.remove('library-collapsed');workspace?.activate('presentation');void business?.openInquiry();}
-  function renderLayoutReview(){const data=compute();renderReview(review,{scene:state,language:lang,checks:state.items.map(i=>({id:i.id,...data.res.get(i.id)})),selectedId:selected,onShowPlan:id=>{if(id){selected=id;buildPanel();}setStageMode('2d');fit();render();workspace.activate('houses');if(matchMedia('(max-width:1000px)').matches)document.querySelector('.library-close').click();},onReport:()=>$('#b-report').click(),onAdvisor:advisorReady?openAdvisor:undefined,onSources:()=>{workspace.activate('parcel');document.querySelector('.journey-topics').scrollIntoView({block:'start'});}});}
+  function renderLayoutReview(){const data=compute();renderReview(review,{scene:state,language:lang,checks:state.items.map(i=>({id:i.id,...data.res.get(i.id)})),selectedId:selected,onShowPlan:id=>{if(id){selected=id;buildPanel();}setStageMode('2d');fit();render();workspace.activate('houses');if(matchMedia('(max-width:1000px)').matches)document.querySelector('.library-close').click();},onReport:()=>$('#b-report').click(),onSources:()=>{workspace.activate('parcel');document.querySelector('.journey-topics').scrollIntoView({block:'start'});}});}
   async function journeyMap(point){await $('#view-map').onclick();if(!parcelMap||!mapActive)throw new Error('Map unavailable');await parcelMap.ready;$('#map-cadastre').checked=true;parcelMap.setCadastre(true);if(point)parcelMap.focusLocation(point.longitude,point.latitude,point.label);}
   journey=mountParcelJourney({container:parcelPanel,stage:$('.stage'),fresh:freshVisit,language:()=>lang,getScene:()=>state,onIntroEnd:()=>{entryPending=false;requestAnimationFrame(()=>{fit();renderSheet();});},onExploreExample:()=>{freshScene=false;entryPending=false;},
     lookupId:async id=>(await import('./core/uldk.ts')).lookupParcel(id),lookupAt:async(longitude,latitude)=>(await import('./core/uldk.ts')).lookupParcelAt(longitude,latitude),
