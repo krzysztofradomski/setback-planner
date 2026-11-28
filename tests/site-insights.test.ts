@@ -1,6 +1,7 @@
 import{test}from'node:test';import assert from'node:assert/strict';
 import{tileElements,readRcn,priceSummary,readOsm,readOtodom,readOlx,distanceToParcel,pointsToParcel,parseInsightsQuery,slug}from'../public/core/site-insights.ts';
 import{soilClasses}from'../public/core/report-insights.ts';
+import{geographicPoint as geo}from'../public/core/geospatial.ts';
 import{projectReport}from'../public/core/reports.ts';
 import{geographicPoint,projectPoint}from'../public/core/geospatial.ts';
 import{parseScene}from'../public/core/scene.ts';
@@ -97,4 +98,34 @@ test('vector tiles stand in for Overpass: roads, land use and a building count',
 test('report risks carry no invented cost estimates',async()=>{
   const src=(await import('node:fs')).readFileSync(new URL('../public/core/report-insights.ts',import.meta.url),'utf8');
   assert.doesNotMatch(src,/tys\. zł|thousand zł|\* 300|levellingCost/);
+});
+test('road numbers give the category and the art. 43 distances; unnumbered roads stay unknown',async()=>{
+  const {roadCategory,roadSetback}=await import('../public/core/site-insights.ts');
+  assert.deepEqual(['A2','S8','92','DK92','579','4105W','410102W','',undefined,'92;579','12345'].map(roadCategory),['autostrada','ekspresowa','krajowa','krajowa','wojewódzka','powiatowa','gminna',undefined,undefined,'krajowa',undefined]);
+  assert.deepEqual(roadSetback.gminna,[6,15]);assert.deepEqual(roadSetback.powiatowa,[8,20]);
+});
+test('PVGIS, GIOŚ and GUS answers are read as given and refuse empty answers',async()=>{
+  const {readPvgis,nearestStation,readAqIndex,readBdl}=await import('../public/core/site-insights.ts');
+  const {projectPoint}=await import('../public/core/geospatial.ts');
+  assert.deepEqual(readPvgis({inputs:{meteo_data:{radiation_db:'PVGIS-SARAH3',year_min:2005,year_max:2023},mounting_system:{fixed:{slope:{value:39},azimuth:{value:-2}}}},outputs:{totals:{fixed:{E_y:1063.42}}}}),{kwhPerKwp:1063,angle:39,azimuth:-2,database:'PVGIS-SARAH3',years:'2005–2023'});
+  assert.throws(()=>readPvgis({outputs:{totals:{fixed:{}}}}));
+  const here=projectPoint([20.6175,52.1985]),stations=[{'Identyfikator stacji':466,'Nazwa stacji':'Granica, KPN','WGS84 φ N':'52.285858','WGS84 λ E':'20.454653'},{'Identyfikator stacji':488,'Nazwa stacji':'Piastów, ul. Pułaskiego','WGS84 φ N':'52.191728','WGS84 λ E':'20.837489'}];
+  const s=nearestStation(stations,here)!;assert.equal(s.id,466);assert.ok(s.distance>14000&&s.distance<16000,String(s.distance));
+  assert.deepEqual(readAqIndex({AqIndex:{'Nazwa kategorii indeksu':'Bardzo dobry','Data wykonania obliczeń indeksu':'2026-11-28 12:35:21'}},s),{station:'Granica, KPN',distance:s.distance,index:'Bardzo dobry',at:'2026-11-28 12:35:21'});
+  assert.throws(()=>readAqIndex({AqIndex:{'Nazwa kategorii indeksu':null}},s));
+  const bdl=readBdl({results:[{id:'72305',values:[{year:'2024',val:22510},{year:'2025',val:22680}]},{id:'747069',values:[{year:'2025',val:36.7}]}]},'Błonie');
+  assert.deepEqual(bdl,{unit:'Błonie',population:[{year:'2024',val:22510},{year:'2025',val:22680}],dwellings:[],migration:[],buildMonths:[{year:'2025',val:36.7}]});
+  assert.throws(()=>readBdl({results:[]},'X'));
+});
+test('OpenStreetMap gives the road number and the nearest everyday places',()=>{
+  const ring:[number,number][]=[[500000,500000],[500020,500000],[500020,500020],[500000,500020]];
+  const ll=(e:number,n:number)=>{const [lon,lat]=geo([e,n]);return {lat,lon};};
+  const osm=readOsm([
+    {type:'way',tags:{highway:'tertiary',name:'Lesznowska',ref:'4105W'},geometry:[ll(500030,499990),ll(500030,500040)]},
+    {type:'node',tags:{amenity:'school',name:'SP 1'},...ll(500300,500010)},
+    {type:'node',tags:{amenity:'school',name:'SP 2'},...ll(501000,500010)},
+    {type:'node',tags:{shop:'convenience'},...ll(500120,500010)},
+  ],ring);
+  assert.equal(osm.road?.ref,'4105W');
+  assert.deepEqual(osm.amenities?.map(a=>[a.kind,a.name]),[['szkoła','SP 1'],['sklep spożywczy',undefined]]);
 });

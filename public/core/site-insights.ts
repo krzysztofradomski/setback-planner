@@ -4,14 +4,21 @@
 import { geographicPoint, projectPoint } from './geospatial.ts';
 
 type P = [number, number];
-export interface Near { name?: string; kind: string; distance: number; detail?: string }
+export interface Near { name?: string; kind: string; distance: number; detail?: string; ref?: string }
+export interface Stat { year: string; val: number }
 export interface Sale { date: string; price: number; area: number; perM2: number; use?: string; purpose?: string; place?: string }
 export interface Listing { source: 'Otodom' | 'OLX'; title: string; url: string; price?: number; area?: number; perM2?: number; distance?: number; place?: string }
 export interface SiteInsights {
   retrievedAt: string;
   admin?: { voivodeship: string; county: string; commune: string; region: string };
   /** source 'tiles': VersaTiles vector tiles only (no power lines, transit within ~2 km); 'overpass': full OpenStreetMap query. */
-  osm: { status: 'ok' | 'error'; source?: 'overpass' | 'tiles'; road?: Near; busStop?: Near; rail?: Near; forest?: Near; water?: Near; powerLines: Near[]; nuisance: Near[]; buildings200?: number };
+  osm: { status: 'ok' | 'error'; source?: 'overpass' | 'tiles'; road?: Near; busStop?: Near; rail?: Near; forest?: Near; water?: Near; powerLines: Near[]; nuisance: Near[]; buildings200?: number; amenities?: Near[] };
+  /** PVGIS (EU JRC): yearly yield of 1 kWp at the optimal fixed angle, from satellite radiation over `years`. */
+  solar?: { kwhPerKwp: number; angle: number; azimuth: number; database: string; years: string };
+  /** GIOŚ: the current air-quality index at the nearest state monitoring station. */
+  air?: { station: string; distance: number; index: string; at: string };
+  /** GUS Bank Danych Lokalnych: the commune's yearly figures. */
+  stats?: { unit: string; population: Stat[]; dwellings: Stat[]; migration: Stat[]; buildMonths: Stat[] };
   drives: (Near & { km: number; minutes: number })[];
   prices: { status: 'ok' | 'none' | 'error'; radius: number; count: number; median?: number; q1?: number; q3?: number; estimate?: number; buildingOnly?: boolean; sales: Sale[] };
   listings: { status: 'ok' | 'none' | 'error'; searched: string[]; items: Listing[]; match?: Listing };
@@ -41,12 +48,13 @@ const opt = <K extends string, V>(k: K, v: V | undefined) => (v ? { [k]: v } : {
 const paved = /^(asphalt|paved|concrete|concrete:plates|concrete:lanes|paving_stones|sett|chipseal|metal)$/;
 const roadKinds: Record<string, string> = { motorway: 'autostrada', trunk: 'droga ekspresowa', primary: 'droga główna', secondary: 'droga drugorzędna', tertiary: 'droga lokalna', unclassified: 'droga lokalna', residential: 'ulica osiedlowa', living_street: 'strefa zamieszkania', service: 'droga dojazdowa', track: 'droga gruntowa', road: 'droga' };
 export interface OsmElement { type: string; lat?: number; lon?: number; center?: { lat: number; lon: number }; geometry?: { lat: number; lon: number }[]; tags?: Record<string, string> }
+const amenityKinds: [string, (t: Record<string, string>) => boolean][] = [['szkoła', t => t.amenity === 'school'], ['przedszkole', t => t.amenity === 'kindergarten'], ['sklep spożywczy', t => t.shop === 'supermarket' || t.shop === 'convenience'], ['apteka', t => t.amenity === 'pharmacy'], ['przychodnia', t => t.amenity === 'doctors' || t.amenity === 'clinic']];
 /** Nearest features of each kind from an Overpass answer, measured to the parcel ring (EPSG:2180). */
 export function readOsm(elements: OsmElement[], ring: P[]): SiteInsights['osm'] {
   const shape = (e: OsmElement): P[] => (e.geometry ?? (e.lat !== undefined ? [{ lat: e.lat, lon: e.lon! }] : e.center ? [e.center] : [])).map(g => projectPoint([g.lon, g.lat]));
   const near = (test: (t: Record<string, string>) => boolean, describe: (t: Record<string, string>) => Omit<Near, 'distance'>) => elements.filter(e => e.type !== 'count' && e.tags && test(e.tags) && shape(e).length)
     .map(e => ({ ...describe(e.tags!), distance: distanceToParcel(ring, shape(e)) })).sort((a, b) => a.distance - b.distance);
-  const road = near(x => !!roadKinds[x.highway] && !/^(motorway|trunk)$/.test(x.highway), x => ({ name: x.name ?? x.ref, kind: roadKinds[x.highway], detail: x.surface ? (paved.test(x.surface) ? 'utwardzona' : 'nieutwardzona') : x.highway === 'track' ? 'nieutwardzona' : undefined }))[0];
+  const road = near(x => !!roadKinds[x.highway] && !/^(motorway|trunk)$/.test(x.highway), x => ({ name: x.name ?? x.ref, kind: roadKinds[x.highway], ...(x.ref ? { ref: x.ref } : {}), detail: x.surface ? (paved.test(x.surface) ? 'utwardzona' : 'nieutwardzona') : x.highway === 'track' ? 'nieutwardzona' : undefined }))[0];
   const count = elements.find(e => e.type === 'count')?.tags;
   return {
     status: 'ok', ...opt('road', road),
@@ -59,7 +67,41 @@ export function readOsm(elements: OsmElement[], ring: P[]): SiteInsights['osm'] 
     nuisance: near(x => /^(industrial|landfill|quarry)$/.test(x.landuse ?? '') || x.man_made === 'wastewater_plant' || x.power === 'substation' || x.power === 'plant' || /^(motorway|trunk)$/.test(x.highway ?? '') || x.aeroway === 'aerodrome', x => ({ name: x.name, kind: x.landuse === 'industrial' ? 'teren przemysłowy' : x.landuse === 'landfill' ? 'składowisko odpadów' : x.landuse === 'quarry' ? 'kopalnia/żwirownia' : x.man_made === 'wastewater_plant' ? 'oczyszczalnia ścieków' : x.power === 'substation' ? 'stacja elektroenergetyczna' : x.power === 'plant' ? 'elektrownia' : x.aeroway ? 'lotnisko' : roadKinds[x.highway] }))
       .filter((n, i, all) => all.findIndex(m => m.kind === n.kind) === i).slice(0, 5),
     ...(count ? { buildings200: Number(count.ways ?? count.total ?? 0) } : {}),
+    amenities: amenityKinds.map(([kind, test]) => near(test, x => ({ name: x.name, kind }))[0]).filter((n): n is Near => !!n),
   };
+}
+
+/** Public road category from its official number (OSM `ref`); undefined when the number is not mapped or not in the national scheme. */
+export function roadCategory(ref?: string): 'autostrada' | 'ekspresowa' | 'krajowa' | 'wojewódzka' | 'powiatowa' | 'gminna' | undefined {
+  const r = (ref ?? '').split(';')[0].trim().replace(/\s+/g, '').toUpperCase();
+  return /^A\d+$/.test(r) ? 'autostrada' : /^S\d+$/.test(r) ? 'ekspresowa' : /^(DK)?\d{1,2}$/.test(r) ? 'krajowa' : /^(DW)?\d{3}$/.test(r) ? 'wojewódzka' : /^\d{4}[A-Z]$/.test(r) ? 'powiatowa' : /^\d{6}[A-Z]$/.test(r) ? 'gminna' : undefined;
+}
+/** Minimum distance of a building from the outer edge of the carriageway, art. 43(1) of the Public Roads Act: [built-up area, elsewhere] in metres. */
+export const roadSetback: Record<NonNullable<ReturnType<typeof roadCategory>>, [number, number]> = { autostrada: [30, 50], ekspresowa: [20, 40], krajowa: [10, 25], wojewódzka: [8, 20], powiatowa: [8, 20], gminna: [6, 15] };
+/** PVGIS PVcalc answer (optimalangles=1, 1 kWp). */
+export function readPvgis(j: { inputs?: { meteo_data?: { radiation_db?: string; year_min?: number; year_max?: number }; mounting_system?: { fixed?: { slope?: { value?: number }; azimuth?: { value?: number } } } }; outputs?: { totals?: { fixed?: { E_y?: number } } } }): NonNullable<SiteInsights['solar']> {
+  const e = j.outputs?.totals?.fixed?.E_y, fixed = j.inputs?.mounting_system?.fixed, m = j.inputs?.meteo_data;
+  if (!(typeof e === 'number' && e > 0)) throw new Error('No PVGIS yield');
+  return { kwhPerKwp: Math.round(e), angle: Math.round(fixed?.slope?.value ?? 0), azimuth: Math.round(fixed?.azimuth?.value ?? 0), database: m?.radiation_db ?? 'PVGIS', years: m?.year_min ? `${m.year_min}–${m.year_max}` : '' };
+}
+type GiosStation = Record<string, string | number>;
+/** Nearest GIOŚ station to a point in EPSG:2180, with its distance in metres. */
+export function nearestStation(stations: GiosStation[], point: P) {
+  return stations.map(s => { const at = projectPoint([Number(s['WGS84 λ E']), Number(s['WGS84 φ N'])]); return { id: Number(s['Identyfikator stacji']), name: String(s['Nazwa stacji']), distance: Math.round(Math.hypot(at[0] - point[0], at[1] - point[1])) }; })
+    .filter(s => Number.isFinite(s.distance) && s.id).sort((a, b) => a.distance - b.distance)[0];
+}
+export function readAqIndex(j: { AqIndex?: Record<string, string | number | null> }, station: { name: string; distance: number }): NonNullable<SiteInsights['air']> {
+  const a = j.AqIndex, index = a?.['Nazwa kategorii indeksu'], at = a?.['Data wykonania obliczeń indeksu'];
+  if (typeof index !== 'string' || !index) throw new Error('No index');
+  return { station: station.name, distance: station.distance, index, at: String(at ?? '') };
+}
+/** GUS BDL variables: population (72305), dwellings completed (748601), net migration (1365234), months to build a new single-family house (747069). */
+export const bdlVariables = { population: 72305, dwellings: 748601, migration: 1365234, buildMonths: 747069 } as const;
+export function readBdl(j: { results?: { id: number | string; values?: { year: string; val: number }[] }[] }, unit: string): NonNullable<SiteInsights['stats']> {
+  const series = (id: number) => (j.results?.find(r => Number(r.id) === id)?.values ?? []).filter(v => Number.isFinite(v.val)).map(v => ({ year: v.year, val: v.val })).slice(-6);
+  const out = { unit, population: series(bdlVariables.population), dwellings: series(bdlVariables.dwellings), migration: series(bdlVariables.migration), buildMonths: series(bdlVariables.buildMonths) };
+  if (!out.population.length) throw new Error('No GUS data');
+  return out;
 }
 
 const TILE_ZOOM = 14, tileOf = (lon: number, lat: number) => { const k = 2 ** TILE_ZOOM, r = lat * Math.PI / 180; return [Math.floor((lon + 180) / 360 * k), Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * k)]; };
@@ -91,6 +133,16 @@ export async function tileElements(tiles: { buffer: Uint8Array; x: number; y: nu
           out.push({ type: f.type === 1 ? 'node' : 'way', tags: { ...tags }, ...(f.type === 1 ? geometry[0] : { geometry }) });
         }
       }
+    }
+    // Everyday places: shortbread `pois` carry the OSM amenity/shop values themselves.
+    const pois = tile.layers.pois;
+    for (let i = 0; pois && i < pois.length; i++) {
+      const f = pois.feature(i), amenity = String(f.properties.amenity ?? ''), shop = String(f.properties.shop ?? ''), c = f.loadGeometry()[0]?.[0];
+      const tags: Record<string, string> = /^(school|kindergarten|pharmacy|doctors|clinic)$/.test(amenity) ? { amenity } : /^(supermarket|convenience)$/.test(shop) && amenity !== 'fuel' ? { shop } : {};
+      if (!c || !Object.keys(tags).length) continue;
+      if (f.properties.name) tags.name = String(f.properties.name);
+      const [lon, lat] = tileLonLat(x + c.x / pois.extent, y + c.y / pois.extent);
+      out.push({ type: 'node', lat, lon, tags });
     }
     const b = tile.layers.buildings;
     for (let i = 0; b && i < b.length; i++) {
@@ -155,7 +207,7 @@ export async function fetchSiteInsights(input: { point: P; ring: P[]; area: numb
   const get = async (url: string, init: RequestInit = {}, timeout = 20000) => { const r = await fetcher(url, { ...init, signal: AbortSignal.timeout(timeout) }); if (!r.ok) throw new Error('HTTP ' + r.status); const body = await r.text(); if (body.length > 8_000_000) throw new Error('Too large'); return body; };
   const around = (r: number) => `(around:${r},${lat.toFixed(6)},${lon.toFixed(6)})`;
   // Two queries in parallel: the nearby one is quick; the wide railway search is slow on a busy server.
-  const nearQuery = `[out:json][timeout:50];(way${around(250)}[highway];node${around(2500)}[highway=bus_stop];node${around(2500)}[public_transport=platform][bus=yes];way${around(1500)}[landuse=forest];way${around(1500)}[natural=wood];way${around(1500)}[waterway~"^(river|stream|canal)$"];way${around(1200)}[power~"^(line|minor_line)$"];nwr${around(3000)}[landuse~"^(industrial|landfill|quarry)$"];nwr${around(3000)}[man_made=wastewater_plant];nwr${around(1500)}[power~"^(substation|plant)$"];way${around(1500)}[highway~"^(motorway|trunk)$"];nwr${around(8000)}[aeroway=aerodrome];);out tags geom;way${around(200)}[building];out count;`;
+  const nearQuery = `[out:json][timeout:50];(way${around(250)}[highway];node${around(2500)}[highway=bus_stop];node${around(2500)}[public_transport=platform][bus=yes];way${around(1500)}[landuse=forest];way${around(1500)}[natural=wood];way${around(1500)}[waterway~"^(river|stream|canal)$"];way${around(1200)}[power~"^(line|minor_line)$"];nwr${around(3000)}[landuse~"^(industrial|landfill|quarry)$"];nwr${around(3000)}[man_made=wastewater_plant];nwr${around(1500)}[power~"^(substation|plant)$"];way${around(1500)}[highway~"^(motorway|trunk)$"];nwr${around(8000)}[aeroway=aerodrome];nwr${around(3000)}[amenity~"^(school|kindergarten|pharmacy|doctors|clinic)$"];nwr${around(3000)}[shop~"^(supermarket|convenience)$"];);out tags geom;way${around(200)}[building];out count;`;
   const wideQuery = `[out:json][timeout:50];node${around(15000)}[railway~"^(station|halt)$"];out;`;
   // ponytail: 45 s budget across the mirrors so a busy Overpass never holds back prices and listings
   const deadline = Date.now() + 45000;
@@ -207,7 +259,25 @@ export async function fetchSiteInsights(input: { point: P; ring: P[]; area: numb
     const match = unique.find(l => l.area && Math.abs(l.area - area) / area < 0.03 && (l.distance === undefined ? !!l.place && slug(l.place) === r : l.distance < 1500));
     return { status: unique.length ? 'ok' as const : 'none' as const, searched, items: unique.slice(0, 20), ...(match ? { match } : {}) };
   });
-  const [overpassResult, tileResult, admin, prices, listings] = await Promise.allSettled([osmTask, tilesTask, adminTask, pricesTask, listingsTask]);
+  // No Accept header: GIOŚ answers 406 to application/json (it serves JSON-LD); BDL gets format=json in the URL.
+  const json = async (url: string, timeout = 20000) => JSON.parse(await get(url, { headers: { 'User-Agent': 'setback-planner/1.0' } }, timeout));
+  const solarTask = json(`https://re.jrc.ec.europa.eu/api/v5_3/PVcalc?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}&peakpower=1&loss=14&optimalangles=1&outputformat=json`).then(readPvgis);
+  const airTask = json('https://api.gios.gov.pl/pjp-api/v1/rest/station/findAll?size=500', 15000).then(async list => {
+    const station = nearestStation(list['Lista stacji pomiarowych'] ?? [], point);
+    if (!station) throw new Error('No station');
+    return readAqIndex(await json(`https://api.gios.gov.pl/pjp-api/v1/rest/aqindex/getIndex/${station.id}`, 15000), station);
+  });
+  // The commune in GUS BDL: same name as in the registry, a whole commune (kinds 1–3), in the parcel's county when the name repeats.
+  const statsTask = adminTask.then(async admin => {
+    if (!admin) throw new Error('No admin names');
+    const name = admin.commune.replace(/\s*\(.*\)$/, ''), base = 'https://bdl.stat.gov.pl/api/v1';
+    const units = ((await json(`${base}/units/search?name=${encodeURIComponent(name)}&level=6&format=json&page-size=50`)).results ?? []).filter((u: { kind: string; name: string }) => /^[123]$/.test(u.kind) && slug(u.name) === slug(name)) as { id: string; name: string; parentId: string }[];
+    let unit = units.length === 1 ? units[0] : undefined;
+    for (const u of units.length > 1 ? units : []) { const parent = await json(`${base}/units/${u.parentId}?format=json`); if (slug(String(parent.name ?? '')) === slug(admin.county)) { unit = u; break; } }
+    if (!unit) throw new Error('Commune not found in GUS');
+    return readBdl(await json(`${base}/data/by-unit/${unit.id}?${Object.values(bdlVariables).map(v => 'var-id=' + v).join('&')}&format=json`), unit.name);
+  });
+  const [overpassResult, tileResult, admin, prices, listings, solar, air, stats] = await Promise.allSettled([osmTask, tilesTask, adminTask, pricesTask, listingsTask, solarTask, airTask, statsTask]);
   const osm = overpassResult.status === 'fulfilled' ? overpassResult : tileResult.status === 'fulfilled' ? { status: 'fulfilled' as const, value: { elements: tileResult.value, source: 'tiles' as const } } : overpassResult;
   const elements = osm.status === 'fulfilled' ? osm.value.elements : [];
   // Drive times to the commune seat and the voivodeship capital, located with the GUGiK geocoder (stable, unlike Overpass).
@@ -237,6 +307,9 @@ export async function fetchSiteInsights(input: { point: P; ring: P[]; area: numb
     drives,
     prices: prices.status === 'fulfilled' ? prices.value : { status: 'error', radius, count: 0, sales: [] },
     listings: listings.status === 'fulfilled' ? listings.value : { status: 'error', searched: [], items: [] },
+    ...(solar.status === 'fulfilled' ? { solar: solar.value } : {}),
+    ...(air.status === 'fulfilled' ? { air: air.value } : {}),
+    ...(stats.status === 'fulfilled' ? { stats: stats.value } : {}),
   };
 }
 

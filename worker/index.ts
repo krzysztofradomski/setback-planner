@@ -43,7 +43,7 @@ async function siteInsights(req: Request, env: Env): Promise<Response> {
     try { input = parseInsightsQuery(body); }
     catch { fail(400, 'Invalid parcel'); }
     const round = (p: number[]) => p.map(v => Math.round(v)).join(',');
-    const key = new Request('https://site.cache/insights/v1?k=' + await digest(round(input!.point) + '|' + Math.round(input!.area) + '|' + input!.ring.map(round).join(';')));
+    const key = new Request('https://site.cache/insights/v2?k=' + await digest(round(input!.point) + '|' + Math.round(input!.area) + '|' + input!.ring.map(round).join(';')));
     const cache = (caches as unknown as { default: Cache }).default, hit = await cache.match(key);
     if (hit)
         return hit;
