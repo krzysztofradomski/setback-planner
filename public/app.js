@@ -20,6 +20,8 @@ import { ProjectHistory, saveVariant, readVariants } from './core/projects.ts';
 import { parseScene, serializeScene, encodeShare, decodeShare, plainShare, MAX_PROJECT_BYTES } from './core/scene.ts';
 import { polygonRelation, validRing, polygonArea, perpendicularClearance, pointLocation } from './core/geometry.ts';
 import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land-register.ts';
+import { shareSearch } from './core/preview.ts';
+import { track } from './core/funnel.ts';
 
 (async () => {
   const $ = s => document.querySelector(s);
@@ -37,7 +39,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
       mapView:'Map', mapLayer:'Map layer', ortho:'Orthophoto · GUGiK', cadastre:'Cadastre · GUGiK', mapHint:'Visual context only. Image dates and neighboring heights are unknown. Import a georeferenced parcel to see your project here. Map views contact the selected tile providers.', mapError:'Some map imagery could not load. Other layers may still work; your project is unchanged.',
       findParcel:'Find Polish parcel (ULDK)', parcelId:'Full parcel identifier', uldkHint:'Lookup sends this identifier to GUGiK ULDK. Service availability varies. The imported boundary replaces the parcel; verify building positions. You can still draw or import a parcel when the service is unavailable.', uldkLoading:'Looking up parcel…', uldkError:'Could not import this parcel. Check its full identifier, service availability and supported geometry. Current plan retained.', uldkChanged:'Project changed during lookup. Request again to replace the parcel.',
       importParcel:'Import parcel (GeoJSON)', sourceCrs:'Source coordinates', openParcel:'Open parcel file', parcelImportHint:'One polygon, up to 512 vertices. Holes and separate components are preserved. Replaces the parcel; keeps buildings at their local positions. Confirm their placement after import.', parcelImportError:'Parcel import failed. Check CRS, closure and geometry; rings must be valid and components disjoint.', parcelEdited:'Boundary edited locally; source geometry has changed.', north:'Grid north ↑',
-      topView:'Top', axonView:'Overview', screenshot:'Screenshot', lowQuality:'Low power', viewerHint:'Conceptual massing. Calculated sunlight; no terrain or neighboring heights. Shadows are approximate. Concave pitched roofs use a flat schematic cap.', viewerFailure:'3D is unavailable on this device. Continue planning in 2D.', loading3d:'Loading 3D…',
+      topView:'Top', axonView:'Overview', screenshot:'Screenshot', video916:'Video 9:16', lowQuality:'Low power', viewerHint:'Conceptual massing. Calculated sunlight; no terrain or neighboring heights. Shadows are approximate. Concave pitched roofs use a flat schematic cap.', viewerFailure:'3D is unavailable on this device. Continue planning in 2D.', loading3d:'Loading 3D…',
       catalogs:'Optional catalogs', catalogHint:'Manufacturer photos and dimensioned plans. Main-building envelopes exclude terraces, carports and roof overhangs. 3D heights and roof pitch are illustrative.', catalogUnavailable:'Catalog unavailable or disabled. Saved user-defined fallback geometry is retained.', enableCatalog:'Enable catalog', catalogError:'Catalog could not be loaded. Generic planning remains available.', source:'Source', verifiedOn:'Checked', noDimensions:'Main envelope from published plan',
       materials:'Materials', facade:'Façade finish', grout:'Grout color', roofColor:'Roof color', frameColor:'Window / door color', gutterColor:'Gutter color', trimColor:'Trim color', tileWidth:'Tile width (m)', tileHeight:'Tile height (m)', layout:'Tile direction', horizontal:'Horizontal', vertical:'Vertical', wallFinish:'Individual wall', allWalls:'All walls', inherit:'Use façade finish', resetMaterials:'Reset all finishes', resetFacade:'Reset façade', original:'Compare original', materialHint:'Conceptual finishes, not manufacturer-approved options. No price calculation. Patterns are schematic.',
       shape:'Footprint shape', rectangle:'Rectangular', wingRatio:'Wing proportion', height:'Wall height total (m)', storeys:'Storeys', roof:'Roof', flat:'Flat', gable:'Gable', pitch:'Roof pitch (°)', genericHint:'Generic conceptual house. Dimensions are user-defined; no manufacturer specifications or legal approval.',
@@ -77,7 +79,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
       mapView:'Mapa', mapLayer:'Warstwa mapy', ortho:'Ortofotomapa · GUGiK', cadastre:'Ewidencja · GUGiK', mapHint:'Kontekst wizualny. Daty zdjęć i wysokości sąsiadów są nieznane. Zaimportuj działkę z georeferencją, aby zobaczyć projekt. Mapa łączy się z wybranymi dostawcami kafelków.', mapError:'Nie udało się wczytać części mapy. Inne warstwy mogą działać; projekt pozostał bez zmian.',
       findParcel:'Znajdź działkę (ULDK)', parcelId:'Pełny identyfikator działki', uldkHint:'Zapytanie wysyła identyfikator do GUGiK ULDK. Dostępność usługi jest zmienna. Granica zastąpi działkę; sprawdź pozycje budynków. Przy awarii możesz nadal rysować lub importować działkę.', uldkLoading:'Wyszukiwanie działki…', uldkError:'Nie można zaimportować działki. Sprawdź identyfikator, usługę i obsługiwaną geometrię. Bieżący plan zachowano.', uldkChanged:'Projekt zmieniono podczas wyszukiwania. Ponów zapytanie, aby zastąpić działkę.',
       importParcel:'Import działki (GeoJSON)', sourceCrs:'Współrzędne źródłowe', openParcel:'Otwórz plik działki', parcelImportHint:'Jeden wielokąt, do 512 wierzchołków. Otwory i odrębne części są zachowane. Zastępuje działkę; budynki pozostają na pozycjach lokalnych. Sprawdź ich położenie po imporcie.', parcelImportError:'Import nieudany. Sprawdź układ, zamknięcie i geometrię; pierścienie muszą być poprawne, a części rozłączne.', parcelEdited:'Granica edytowana lokalnie; geometria źródłowa została zmieniona.', north:'Północ siatki ↑',
-      topView:'Z góry', axonView:'Widok ogólny', screenshot:'Zrzut ekranu', lowQuality:'Oszczędzanie energii', viewerHint:'Bryły koncepcyjne. Obliczona pozycja słońca, brak terenu i wysokości sąsiadów. Cienie przybliżone. Dachy spadziste brył wklęsłych pokazano jako płaski schemat.', viewerFailure:'Widok 3D niedostępny na tym urządzeniu. Kontynuuj w 2D.', loading3d:'Wczytywanie 3D…',
+      topView:'Z góry', axonView:'Widok ogólny', screenshot:'Zrzut ekranu', video916:'Film 9:16', lowQuality:'Oszczędzanie energii', viewerHint:'Bryły koncepcyjne. Obliczona pozycja słońca, brak terenu i wysokości sąsiadów. Cienie przybliżone. Dachy spadziste brył wklęsłych pokazano jako płaski schemat.', viewerFailure:'Widok 3D niedostępny na tym urządzeniu. Kontynuuj w 2D.', loading3d:'Wczytywanie 3D…',
       catalogs:'Katalogi opcjonalne', catalogHint:'Zdjęcia i wymiarowane rzuty producenta. Obrys głównej bryły bez tarasów, wiat i okapów. Wysokość i kąt dachu w 3D są poglądowe.', catalogUnavailable:'Katalog niedostępny lub wyłączony. Zachowano zapisany obrys użytkownika.', enableCatalog:'Włącz katalog', catalogError:'Nie można wczytać katalogu. Planowanie ogólne jest nadal dostępne.', source:'Źródło', verifiedOn:'Sprawdzono', noDimensions:'Obrys głównej bryły wg rzutu',
       materials:'Materiały', facade:'Wykończenie elewacji', grout:'Kolor fugi', roofColor:'Kolor dachu', frameColor:'Kolor okien / drzwi', gutterColor:'Kolor rynien', trimColor:'Kolor detali', tileWidth:'Szerokość płytki (m)', tileHeight:'Wysokość płytki (m)', layout:'Kierunek płytek', horizontal:'Poziomo', vertical:'Pionowo', wallFinish:'Pojedyncza ściana', allWalls:'Wszystkie ściany', inherit:'Wykończenie elewacji', resetMaterials:'Resetuj wykończenia', resetFacade:'Resetuj elewację', original:'Porównaj oryginał', materialHint:'Wykończenia koncepcyjne, bez zatwierdzenia producenta i kalkulacji cen. Wzory są schematyczne.',
       shape:'Kształt obrysu', rectangle:'Prostokątny', wingRatio:'Proporcja skrzydła', height:'Łączna wysokość ścian (m)', storeys:'Kondygnacje', roof:'Dach', flat:'Płaski', gable:'Dwuspadowy', pitch:'Kąt dachu (°)', genericHint:'Dom koncepcyjny. Wymiary określa użytkownik; bez specyfikacji producenta i potwierdzenia zgodności z prawem.',
@@ -139,6 +141,11 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
   try { const saved=JSON.parse(localStorage.getItem(CATALOG_LS)||'null');enabledCatalogs=Array.isArray(saved)?saved.filter(id=>catalogRegistrations.some(r=>r.id===id)):catalogRegistrations.map(r=>r.id); }
   catch { enabledCatalogs=catalogRegistrations.map(r=>r.id); }
   let catalogRevision=0;const loadedCatalogModels=new Map();
+  // Funnel steps; calls made before attribution is read (start-up) are skipped.
+  const funnelStep=name=>{try{track(name,attribution);}catch{/* not started yet */}};
+  const houseLabel=()=>{const h=state.items.find(i=>i.type==='house'&&i.visible);if(!h)return '';return (h.catalog&&loadedCatalogModels.get(h.catalog.catalogId+':'+h.catalog.modelId)?.name)||h.name||'';};
+  /** Query string of a share link: campaign keys stay, and the plot outline lets chat apps show a picture. */
+  const linkSearch=()=>shareSearch(state,location.search,houseLabel());
   /** Does each catalogue design (with its carport or garage) fit this parcel with the setbacks? Houses already placed would be replaced, so they are ignored. */
   let fitKey='',fitTimer=0;
   /** Scene without houses or their annexes: a chosen design would replace them. */
@@ -166,11 +173,13 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
     for(const id of enabledCatalogs){try{const c=await loadCatalog(id);for(const m of c.models)models.push({c:c.id,m:m.id,area:m.footprint.width*m.footprint.depth});}catch{/* catalogue offline */}}
     models.sort((a,b)=>b.area-a.area);
     const fits=[];for(const x of models)fits.push({...x,fit:await designFit(x.c,x.m,base)});
-    const pick=fits.find(x=>x.fit==='yes')??fits.find(x=>x.fit==='alone');
+    const wanted=new URLSearchParams(location.search).get('dom'),named=fits.find(x=>x.m===wanted&&(x.fit==='yes'||x.fit==='alone'));
+    if(wanted&&!named&&fits.some(x=>x.m===wanted))toast(bi('The design from the link does not fit this plot; showing the largest one that does.','Projekt z linku nie mieści się na tej działce; pokazuję największy, który się mieści.'));
+    const pick=named??fits.find(x=>x.fit==='yes')??fits.find(x=>x.fit==='alone');
     if(state.items.some(i=>i.type==='house'))return;// the visitor picked one meanwhile
     if(!pick){toast(bi('No catalogue design fits this plot with the setbacks.','Żaden projekt z katalogu nie mieści się na tej działce z zachowaniem odległości.'));return;}
     for(let i=0;i<30&&!document.querySelector(`[data-place-catalog="${pick.c}"][data-model="${pick.m}"]`);i++)await new Promise(r=>setTimeout(r,100));
-    document.querySelector(`[data-place-catalog="${pick.c}"][data-model="${pick.m}"]`)?.click();
+    const auto=document.querySelector(`[data-place-catalog="${pick.c}"][data-model="${pick.m}"]`);if(auto){auto.dataset.auto='1';auto.click();}
   }
   function updateFitBadges(){
     const key=JSON.stringify([state.plot,state.plotHoles,state.items.filter(i=>i.type!=='house'&&!i.attachedTo).map(i=>[i.x,i.y,i.w,i.d,i.rot])]);
@@ -203,6 +212,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
       if(!replace&&state.items.length>=100){toast(t('objectLimit'));return;}
       button.disabled=true;
       try{
+        const chosen=button.dataset.auto!=='1';delete button.dataset.auto;// automatic placement is not the visitor's choice
         const catalog=await loadCatalog(button.dataset.placeCatalog||button.dataset.addCatalog),x=replace?current.x:state.plot.reduce((n,p)=>n+p.x,0)/state.plot.length,y=replace?current.y:state.plot.reduce((n,p)=>n+p.y,0)/state.plot.length,item=createCatalogItem(catalog,button.dataset.model||button.dataset.addModel,{id:replace?current.id:'o'+uid++,x,y,rot:replace?current.rot:parcelAxis(state.plot)});
         if(replace){item.setback=current.setback;item.group=current.group;}
         const exterior=catalog.models.find(m=>m.id===(button.dataset.model||button.dataset.addModel))?.exterior;
@@ -219,7 +229,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
           if(alone){items=items.filter(i=>i.id!==annex.id).map(i=>i.id===house.id?alone[0]:i);setTimeout(()=>toast(bi('Placed without the carport or garage: there is no room for both.','Ustawiono bez wiaty/garażu: na oba nie ma miejsca.')),1500);}
           else if(seated){const by=new Map(seated.map(i=>[i.id,i]));items=items.map(i=>by.get(i.id)??i);}
           else if(!replace){toast(lang==='pl'?'Ten projekt nie mieści się na działce z zachowaniem odległości od granic.':'This design does not fit on the parcel with the setbacks.');return;}}
-        snapshot();state.items=items;selected=item.id;buildPanel();render();toast(replace?(lang==='pl'?'Zmieniono projekt wybranego domu.':'Selected house design updated.'):(lang==='pl'?'Dodano dom w wolnym miejscu. Możesz go przesunąć.':'House added in a free position. Drag it to adjust.'));
+        snapshot();state.items=items;selected=item.id;buildPanel();render();if(chosen)funnelStep('house');toast(replace?(lang==='pl'?'Zmieniono projekt wybranego domu.':'Selected house design updated.'):(lang==='pl'?'Dodano dom w wolnym miejscu. Możesz go przesunąć.':'House added in a free position. Drag it to adjust.'));
       }catch{toast(t('catalogError'));}finally{button.disabled=false;}
     });
     $('#catalog-models').querySelectorAll('[data-plan-src]').forEach(button=>button.onclick=()=>showCatalogPlan(button.dataset.planSrc,button.dataset.planName));
@@ -289,7 +299,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
         const json = serializeScene(state);
         localStorage.setItem(LS, json); $('#project-warning').hidden = true;
         const hash = await encodeShare(JSON.parse(json));
-        if (revision === saveRevision && !persistencePaused) window.history.replaceState(null, '', hash);
+        if (revision === saveRevision && !persistencePaused) window.history.replaceState(null, '', linkSearch() + hash);
       } catch { projectWarning(lang === 'pl' ? 'Nie można zapisać projektu. Sprawdź geometrię i pamięć przeglądarki.' : 'Project could not be saved. Check geometry and browser storage.', false); }
     }, 300);
   }
@@ -1016,7 +1026,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
 
   let quietTimer=0;
   function setStageMode(mode){
-    view3d=mode==='3d';mapActive=mode==='map';
+    view3d=mode==='3d';mapActive=mode==='map';if(view3d)funnelStep('view3d');
     if(!mapActive){mapPick=false;$('#map-pick').setAttribute('aria-pressed','false');}
     $('#viewer').hidden=!view3d;$('#sheet').toggleAttribute('hidden',mode!=='2d');$('#viewer-controls').hidden=!view3d;
     $('#parcel-map').hidden=!mapActive;$('#map-controls').hidden=!mapActive;$('#map-status').hidden=!mapActive;
@@ -1139,7 +1149,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
   const cameraGroup=document.createElement('div');cameraGroup.className='camera-group';cameraGroup.setAttribute('role','group');cameraGroup.setAttribute('aria-label',bi('Camera','Kamera'));
   cameraGroup.append($('#view-axon'),$('#view-top'),focusButton,interiorButton,walkButton);
   const more=document.createElement('details');more.className='viewer-more';more.innerHTML='<summary aria-label="More">⋯</summary><div class="viewer-more-menu"></div>';
-  more.querySelector('.viewer-more-menu').append($('#view-capture'),$('#view-low').closest('label'));
+  more.querySelector('.viewer-more-menu').append($('#view-capture'),$('#view-video'),$('#view-low').closest('label'));
   // Season, weather and time of day: a chip that opens a small popover (same data as Garden → Season and sunlight).
   const env=document.createElement('details');env.className='env-chip';
   const seasons=[['spring','Spring','Wiosna'],['summer','Summer','Lato'],['autumn','Autumn','Jesień'],['winter','Winter','Zima']],weathers=[['clear','Clear','Słońce'],['clouds','Cloudy','Chmury'],['rain','Rain','Deszcz'],['snow','Snow','Śnieg']];
@@ -1163,6 +1173,20 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
   $('#viewer').after(contextHint);
   $('#view-top').onclick=()=>viewer?.view('top');$('#view-axon').onclick=()=>viewer?.view('axonometric');
   $('#view-low').onchange=e=>viewer?.quality(e.target.checked);
+  // 9:16 clip of the camera circling this house on this plot, for social posts or for a rep to send.
+  $('#view-video').onclick=async()=>{
+    const button=$('#view-video');if(button.disabled||!viewer?.recordOrbit)return;button.disabled=true;toast(bi('Recording an 8-second video…','Nagrywam 8-sekundowy film…'));
+    try{
+      const house=state.items.find(i=>i.type==='house'&&i.visible),area=new Intl.NumberFormat(lang==='pl'?'pl-PL':'en-GB').format(Math.round(polygonArea(state.plot)));
+      const top=(houseLabel()?houseLabel()+' · ':'')+bi(`plot ${area} m²`,`działka ${area} m²`),bottom=bi('Check your plot · ','Sprawdź swoją działkę · ')+location.host;
+      const {blob,type}=await viewer.recordOrbit(house?{x:house.x,y:house.y}:null,[top,bottom]);
+      const file=new window.File([blob],'dom-na-dzialce.'+(type.includes('mp4')?'mp4':'webm'),{type});
+      funnelStep('video');
+      if(matchMedia('(pointer:coarse)').matches&&navigator.canShare?.({files:[file]}))await navigator.share({files:[file]}).catch(()=>{});
+      else{const a=document.createElement('a');a.download=file.name;a.href=URL.createObjectURL(file);a.click();setTimeout(()=>URL.revokeObjectURL(a.href),10000);}
+    }catch{toast(bi('This browser cannot record video. Try Chrome or Safari.','Ta przeglądarka nie nagra filmu. Spróbuj w Chrome lub Safari.'));}
+    finally{button.disabled=false;}
+  };
   $('#view-capture').onclick=()=>{try{const a=document.createElement('a');a.download='setback-3d.png';a.href=viewer.screenshot();a.click();}catch{toast(t('viewerFailure'));}};
   window.addEventListener('pagehide',()=>{viewer?.dispose();viewer=null;parcelMap?.dispose();parcelMap=null;});
   // ---------- wiring ----------
@@ -1239,7 +1263,8 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
   };
   $('#b-link').onclick = () => {
     // Build synchronously from the current scene to preserve clipboard activation and the latest edit.
-    let url; try { url = location.href.split('#')[0] + plainShare(state); } catch { toast(t('notAPlan')); return; }
+    let url; try { url = location.origin + location.pathname + linkSearch() + plainShare(state); } catch { toast(t('notAPlan')); return; }
+    funnelStep('share');
     const fallback = () => toast(t('linkBlocked'));
     try { navigator.clipboard.writeText(url).then(() => toast(t('linkCopied')), fallback); } catch (_) { fallback(); }
   };
@@ -1264,7 +1289,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
   $('#b-svg').onclick=async()=>{try{const {projectSvg}=await import('./core/reports.ts');downloadFile(projectSvg(reportScene(),lang),'setback-plan.svg','image/svg+xml');}catch{toast(t('notAPlan'));}};
   // Full report in one click: 3D views with surroundings, terrain slope and all checks are gathered automatically.
   $('#b-report').onclick=async()=>{
-    const button=$('#b-report');if(button.disabled)return;button.disabled=true;toast(bi('Preparing the full report…','Przygotowuję pełny raport…'));
+    const button=$('#b-report');if(button.disabled)return;button.disabled=true;funnelStep('report');toast(bi('Preparing the full report…','Przygotowuję pełny raport…'));
     const wait=ms=>new Promise(r=>setTimeout(r,ms)),frames=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     try{
       const {projectReport}=await import('./core/reports.ts'),previous=view3d?'3d':mapActive?'map':'2d';
@@ -1364,6 +1389,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
   try{attribution=validateAttribution(JSON.parse(window.sessionStorage.getItem(ATTRIBUTION_KEY)??'null'));}catch{/* storage unavailable */}
   attribution=readAttribution(location.search,attribution);
   try{if(attribution)window.sessionStorage.setItem(ATTRIBUTION_KEY,JSON.stringify(attribution));}catch{/* in-memory attribution still works */}
+  funnelStep('visit');
   const businessHost=document.createElement('div');businessHost.id='business-host';$('.rail').append(businessHost);const {mountBusiness}=await import('./business.ts');business=mountBusiness({container:businessHost,getScene:()=>structuredClone(state),getAttribution:()=>(attribution?structuredClone(attribution):null)});
 
   workspace=mountWorkspace({initialTab:freshVisit?'parcel':'houses',onTab:tab=>{journey?.tabChanged(tab);if(tab==='garden')void syncGateEdges();if(tab==='project')renderLayoutReview();}});
@@ -1406,7 +1432,7 @@ import { EKW_SEARCH, kwNumber, readRegister, registerSummary } from './core/land
   journey=mountParcelJourney({container:parcelPanel,stage:$('.stage'),fresh:freshVisit,language:()=>lang,getScene:()=>state,onIntroEnd:()=>{entryPending=false;requestAnimationFrame(()=>{fit();renderSheet();});},onExploreExample:()=>{freshScene=false;entryPending=false;},
     lookupId:async id=>(await import('./core/uldk.ts')).lookupParcel(id),lookupAt:async(longitude,latitude)=>(await import('./core/uldk.ts')).lookupParcelAt(longitude,latitude),
     showMap:journeyMap,showPreview:parcel=>{if(parcelMap){parcelMap.clearLocation();parcelMap.update(parcel?parseScene({...state,...parcel,items:[],terrain:undefined}):state);if(parcel)parcelMap.fitProject();}},
-    applyParcel:parcel=>{entryPending=false;const next=parseScene({...state,...parcel,items:freshScene?[]:state.items,terrain:undefined});next.items=fitItemsToParcel(next);next.fences=next.fences.filter(f=>f.id!==BOUNDARY_FENCE_ID);{const f=boundaryFence(next.plot,facingEdge(next.plot,next.items.find(x=>x.type==='house')),bi('Boundary fence','Ogrodzenie działki'));if(f&&next.fences.length<12)next.fences.unshift(f);}applyPlan(next,t('planLoaded'));void gateToStreet();void ensureStreet();freshScene=false;setStageMode('2d');fit();render();if(!state.items.some(i=>i.type==='house'))void autoPlaceHouse();requestAnimationFrame(()=>{fit();renderSheet();});},activate:tab=>workspace.activate(tab),
+    applyParcel:parcel=>{entryPending=false;funnelStep('parcel');const next=parseScene({...state,...parcel,items:freshScene?[]:state.items,terrain:undefined});next.items=fitItemsToParcel(next);next.fences=next.fences.filter(f=>f.id!==BOUNDARY_FENCE_ID);{const f=boundaryFence(next.plot,facingEdge(next.plot,next.items.find(x=>x.type==='house')),bi('Boundary fence','Ogrodzenie działki'));if(f&&next.fences.length<12)next.fences.unshift(f);}applyPlan(next,t('planLoaded'));void gateToStreet();void ensureStreet();freshScene=false;setStageMode('2d');fit();render();if(!state.items.some(i=>i.type==='house'))void autoPlaceHouse();requestAnimationFrame(()=>{fit();renderSheet();});},activate:tab=>workspace.activate(tab),
     pickMap:()=>{mapPick=true;$('#map-pick').setAttribute('aria-pressed','true');},stopPicking:()=>{mapPick=false;$('#map-pick').setAttribute('aria-pressed','false');},
     showTopic:async topic=>{workspace.activate('parcel');await journeyMap();const ids={planning:['planning'],water:['flood','groundwater'],utilities:['utilities'],nature:['environment'],ground:['relief','landslides','mining','wells']}[topic];for(const id of mapOverlayIds){const enabled=ids.includes(id);$('#map-'+id).checked=enabled;parcelMap.setOverlay(id,enabled);}},reviewLayout:renderLayoutReview});
   // Public registry data: fetched in the background whenever the located parcel changes, listed here and included in the report.

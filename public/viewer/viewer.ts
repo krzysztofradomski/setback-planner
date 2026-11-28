@@ -308,7 +308,35 @@ export function createViewer(container:HTMLElement,onFailure:()=>void){
     if(item){focus(item);shots.push({kind:'house',src:renderer.domElement.toDataURL('image/png')});}
     mode=was;applyCutaway();camera.position.copy(position);controls.target.copy(target);if(was==='walk'){controls.enabled=false;camera.quaternion.copy(quaternion);if(!walkLoop)walkLoop=requestAnimationFrame(walkStep);}else controls.update();render();return shots;
   }
-  return {update,view,setContext,addContextFences,focus,snapshots,ready:()=>contextReady,
+  /** A 9:16 clip for Reels/TikTok: the camera circles the house and closes in, with a caption band drawn on each frame.
+   *  The canvas is rendered at 720×1280 for the length of the clip, then the user's view is put back. */
+  async function recordOrbit(target:{x:number;y:number}|null,caption:[string,string],seconds=8):Promise<{blob:Blob;type:string}>{
+    const type=['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm'].find(t=>typeof MediaRecorder!=='undefined'&&MediaRecorder.isTypeSupported(t));
+    if(!type)throw new Error('Video recording is not supported in this browser');
+    if(mode==='walk')leaveWalk();
+    const W=720,H=1280,out=document.createElement('canvas');out.width=W;out.height=H;const g=out.getContext('2d')!;
+    const position=camera.position.clone(),look=controls.target.clone(),was=mode,ratio=renderer.getPixelRatio();
+    cancelAnimationFrame(flight);flight=0;controls.enabled=false;mode='orbit';applyCutaway();
+    renderer.setPixelRatio(1);renderer.setSize(W,H,false);camera.aspect=W/H;camera.updateProjectionMatrix();
+    const focusAt=target?new THREE.Vector3(target.x,2,target.y):center.clone().setY(2),r0=Math.max(extent*.9,22),chunks:Blob[]=[];
+    const recorder=new MediaRecorder(out.captureStream(30),{mimeType:type,videoBitsPerSecond:6_000_000});
+    recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+    const stopped=new Promise(r=>recorder.onstop=r);recorder.start();
+    const band=(y:number,h:number,text:string,size:number,colour:string,bg:string)=>{g.fillStyle=bg;g.fillRect(0,y,W,h);g.fillStyle=colour;g.font=`600 ${size}px -apple-system,BlinkMacSystemFont,sans-serif`;g.textAlign='center';g.textBaseline='middle';g.fillText(text,W/2,y+h/2,W-60);};
+    try{
+      await new Promise<void>(done=>{const t0=performance.now();const frame=()=>{
+        const k=Math.min(1,(performance.now()-t0)/(seconds*1000)),e=k*k*(3-2*k),a=-Math.PI*.75+e*Math.PI*1.3,r=r0*(1.35-.55*e);
+        camera.position.set(focusAt.x+Math.cos(a)*r,r*(.75-.35*e)+2,focusAt.z+Math.sin(a)*r);camera.lookAt(focusAt);draw();
+        g.drawImage(renderer.domElement,0,0,W,H);band(0,150,caption[0],46,'#141413','rgba(255,255,255,.92)');band(H-130,130,caption[1],34,'#ffffff','#ff6a00');
+        if(k<1)requestAnimationFrame(frame);else done();};frame();});
+      await new Promise(r=>setTimeout(r,120));// let the recorder take the last frame
+    }finally{
+      recorder.stop();await stopped;
+      renderer.setPixelRatio(ratio);mode=was==='walk'?'orbit':was;applyCutaway();camera.position.copy(position);controls.target.copy(look);controls.enabled=true;controls.update();resize();
+    }
+    return {blob:new Blob(chunks,{type:type.split(';')[0]}),type:type.split(';')[0]};
+  }
+  return {update,view,setContext,addContextFences,focus,snapshots,recordOrbit,ready:()=>contextReady,
     setPlain(value:boolean){plain=value;render();},
     setActive(value:boolean){active=value;if(value)resize();},
     quality(low:boolean){renderer.setPixelRatio(low?1:Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=!low;resize();},

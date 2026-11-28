@@ -8,6 +8,7 @@ import type { Database, Statement, Env } from '../worker/types.ts';
 function setup() {
     const db = new DatabaseSync(':memory:');
     db.exec(readFileSync(new URL('../migrations/0001_business.sql', import.meta.url), 'utf8'));
+    db.exec(readFileSync(new URL('../migrations/0002_funnel.sql', import.meta.url), 'utf8'));
     const adapt = (sql: string, params: unknown[] = []): Statement => ({ bind(...p: unknown[]) { return adapt(sql, p); }, async first<T>() { return (db.prepare(sql).get(...params as never[]) ?? null) as T | null; }, async all<T>() { return { results: db.prepare(sql).all(...params as never[]) as T[] }; }, async run() { return { meta: { changes: Number(db.prepare(sql).run(...params as never[]).changes) } }; } });
     const DB: Database = { prepare: adapt, async batch(statements) {
             db.exec('BEGIN');
@@ -261,4 +262,19 @@ test('retention erases more than one hundred expired leads atomically',async()=>
  await worker.scheduled({},env);
  assert.equal(db.prepare('SELECT count(*) n FROM leads WHERE anonymized=0').get()!.n,0);
  assert.equal(db.prepare("SELECT count(*) n FROM audit WHERE action='personal_data_erased'").get()!.n,150);
+});
+
+test('funnel counts are anonymous, bounded and readable only when signed in', async () => {
+    const { env, db } = setup();
+    assert.equal((await api(env, '/api/funnel', { step: 'visit', source: 'wiosna-2027' })).status, 200);
+    assert.equal((await api(env, '/api/funnel', { step: 'visit', source: 'wiosna-2027' })).status, 200);
+    assert.equal((await api(env, '/api/funnel', { step: 'parcel', source: '<script>' })).status, 200);
+    assert.equal((await api(env, '/api/funnel', { step: 'hack', source: 'x' })).status, 400);
+    assert.equal((await api(env, '/api/funnel', { step: 'visit', ip: '1.2.3.4' })).status, 400);
+    const rows = db.prepare('SELECT step,source,count FROM funnel ORDER BY step').all() as { step: string; source: string; count: number }[];
+    assert.deepEqual(rows.map(r => [r.step, r.source, r.count]), [['parcel', 'direct', 1], ['visit', 'wiosna-2027', 2]]);
+    assert.equal((await api(env, '/api/funnel?days=30')).status, 401);
+    const cookie = await ownerSession(env);
+    const report = await (await api(env, '/api/funnel?days=30', undefined, cookie)).json() as { rows: unknown[] };
+    assert.equal(report.rows.length, 2);
 });

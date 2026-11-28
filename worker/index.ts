@@ -4,8 +4,13 @@ import {objectLibrary} from '../public/core/objects.ts';
 import { fetchSiteData, parseSiteQuery } from '../public/core/site-data.ts';
 import { fetchSiteInsights, parseInsightsQuery } from '../public/core/site-insights.ts';
 import type { Env, User, Lead, Tenant } from './types.ts';
+import { parsePreview, rasterPreview, encodePng, previewMeta, DEFAULT_PREVIEW } from '../public/core/preview.ts';
+import { funnelSteps, funnelSource } from '../public/core/funnel.ts';
 import { rulesSchema, evidenceSchema, statuses, transition, csvCell, extractionSchema, validateExtraction } from './domain.ts';
 import { HttpError, fail, randomToken, digest, tokenHash, passwordHash, equal, authenticate, owner, tenantScope, rate, jsonBody } from './security.ts';
+// Workers runtime global (types here come from DOM + node, not @cloudflare/workers-types).
+type Rewriter = { on(selector: string, handler: { element(e: { remove(): void; append(html: string, o: { html: boolean }): void }): void }): Rewriter; transform(r: Response): Response };
+declare const HTMLRewriter: (new () => Rewriter) | undefined;
 const id = z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/);
 const credentials = z.object({ email: z.email().max(254).transform(s => s.toLowerCase()), password: z.string().min(12).max(200), bootstrapSecret: z.string().max(300).optional() }).strict();
 const attributionSchema = z.object(Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'manufacturer', 'showroom', 'event', 'campaign', 'representative'].map(key => [key, z.string().max(150).optional()]))).extend({ firstSeenAt: z.union([z.number().int().nonnegative(), z.iso.datetime()]).optional(), lastSeenAt: z.union([z.number().int().nonnegative(), z.iso.datetime()]).optional() }).strict();
@@ -145,6 +150,16 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
         return pdfText(req, env);
     if (path === '/api/ocr-page' && method === 'POST')
         return ocrPage(req, env, url.searchParams.get('kind') === 'map');
+    if (path === '/api/og.png' && method === 'GET') {
+        const preview = parsePreview(url.searchParams.get('pv') ?? DEFAULT_PREVIEW) ?? parsePreview(DEFAULT_PREVIEW)!;
+        return new Response(await encodePng(rasterPreview(preview)), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800, immutable', 'X-Content-Type-Options': 'nosniff' } });
+    }
+    if (path === '/api/funnel' && method === 'POST') {
+        await rate(env, 'funnel:' + req.headers.get('CF-Connecting-IP'), 120, 3600000);
+        const b = z.object({ step: z.enum(funnelSteps), source: z.string().max(80).default('direct') }).strict().parse(await jsonBody(req));
+        await env.DB.prepare('INSERT INTO funnel(day,step,source,count) VALUES(?,?,?,1) ON CONFLICT(day,step,source) DO UPDATE SET count=count+1').bind(new Date().toISOString().slice(0, 10), b.step, funnelSource(b.source)).run();
+        return response({ ok: true });
+    }
     if (path === '/api/health')
         return response({ ok: true, backend: 'd1', ai: env.AI_ENABLED === 'true' && !!env.AI });
     if (path === '/api/recipients' && method === 'GET') {
@@ -223,6 +238,13 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
     }
     if (path === '/api/auth/me')
         return response(user);
+    if (path === '/api/funnel' && method === 'GET') {
+        // Aggregate, non-personal counts, so every signed-in role may read them.
+        const days = z.coerce.number().int().min(1).max(365).default(30).parse(url.searchParams.get('days') ?? undefined);
+        const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+        const rows = (await env.DB.prepare('SELECT source,step,SUM(count) AS count FROM funnel WHERE day>=? GROUP BY source,step').bind(since).all<{ source: string; step: string; count: number }>()).results;
+        return response({ days, since, steps: funnelSteps, rows });
+    }
     if (path === '/api/tenants' && method === 'GET')
         return response((await env.DB.prepare(user.role === 'owner' ? 'SELECT * FROM tenants' : 'SELECT * FROM tenants WHERE id=?').bind(...(user.role === 'owner' ? [] : [user.tenant_id])).all<Tenant>()).results.map(t => ({ ...t, rules: JSON.parse(t.rules) })));
     if (path === '/api/tenants' && method === 'POST') {
@@ -417,8 +439,15 @@ async function assist(req:Request,env:Env,user:User) {
 }
 export default {
     async fetch(req: Request, env: Env) {
-        if (!new URL(req.url).pathname.startsWith('/api/'))
+        const url = new URL(req.url);
+        if (!url.pathname.startsWith('/api/')) {
+            // A shared plan carries its outline in ?pv=: give chat apps a title and a picture of that plot.
+            if (url.pathname === '/' && url.searchParams.has('pv') && typeof HTMLRewriter !== 'undefined') {
+                const page = await env.ASSETS.fetch(req), meta = previewMeta(url.searchParams, url.origin);
+                return new HTMLRewriter().on('meta[property^="og:"],meta[name="twitter:card"],meta[name="description"]', { element(e) { e.remove(); } }).on('head', { element(e) { e.append(meta, { html: true }); } }).transform(page);
+            }
             return env.ASSETS.fetch(req);
+        }
         try {
             return await handleApi(req, env);
         }
@@ -438,6 +467,6 @@ export default {
             env.DB.prepare("INSERT INTO audit(id,tenant_id,lead_id,actor,action,detail,created) SELECT lower(hex(randomblob(16))),tenant_id,id,'retention','personal_data_erased','{}',? FROM leads WHERE id IN ("+expired+")").bind(now,now),
             env.DB.prepare("UPDATE leads SET contact='{}',email_hash='',project='{}',attribution='{}',consent='{}',anonymized=1,revision=revision+1 WHERE id IN ("+expired+")").bind(now),
         ]);
-        await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now), env.DB.prepare('DELETE FROM ai_cache WHERE expires<?').bind(now), env.DB.prepare('DELETE FROM rate_limits WHERE expires<?').bind(now)]);
+        await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now), env.DB.prepare('DELETE FROM ai_cache WHERE expires<?').bind(now), env.DB.prepare('DELETE FROM rate_limits WHERE expires<?').bind(now), env.DB.prepare('DELETE FROM funnel WHERE day<?').bind(new Date(now - 400 * 86400000).toISOString().slice(0, 10))]);
     }
 };

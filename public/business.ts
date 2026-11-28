@@ -1,4 +1,5 @@
 import {projectAssistantScene} from './core/assistant.ts';
+import { track } from './core/funnel.ts';
 /** Private business data uses HttpOnly server sessions and never enters scene/share state. */
 type Recipient = {
     id: string;
@@ -124,6 +125,7 @@ export function mountBusiness({ container, getScene, getAttribution = () => null
             name.value = email.value = phone.value = message.value = '';
             token = '';
             consent.checked = marketing.checked = false;
+            track('inquiry', getAttribution() as Record<string, string> | null);
             notice.textContent = 'Zapisano zapytanie ' + result.id + '. Odbiorca odczyta je w prywatnym panelu.';
         }, block);
     }
@@ -144,6 +146,7 @@ export function mountBusiness({ container, getScene, getAttribution = () => null
         text('summary', 'Zmień hasło', passwordPanel);
         const currentPassword = input('Obecne hasło', 'password', '', passwordPanel), newPassword = input('Nowe hasło', 'password', '', passwordPanel);
         button('Zmień hasło i wyloguj wszystkie sesje', async () => { await api('/api/auth/password', { currentPassword: currentPassword.value, newPassword: newPassword.value }); session = null; await render(); }, passwordPanel);
+        await marketing().catch(e => notice.textContent = 'Marketing: ' + (e as Error).message); // never blocks leads and settings
         tenants = await api('/api/tenants');
         if (session.role === 'owner') {
             const name = input('Nazwa nowego odbiorcy');
@@ -245,6 +248,57 @@ export function mountBusiness({ container, getScene, getAttribution = () => null
                 text('pre',JSON.stringify(result,null,2),ai);
             },ai);
         }
+    }
+    /** Funnel by campaign and a campaign link + QR builder for flyers, stands and ads. Aggregates only, no personal data. */
+    async function marketing() {
+        const box = document.createElement('details');
+        content.append(box);
+        text('summary', 'Marketing: lejek i linki kampanii', box);
+        const days = document.createElement('select');
+        for (const d of [7, 30, 90, 365]) { const o = document.createElement('option'); o.value = String(d); o.textContent = `Ostatnie ${d} dni`; days.append(o); }
+        days.value = '30';
+        const table = document.createElement('div');
+        box.append(days, table);
+        const labels: Record<string, string> = { visit: 'Wejścia', parcel: 'Działka', house: 'Wybrany dom', view3d: '3D', report: 'Raport', share: 'Udostępnienie', video: 'Film', inquiry: 'Zapytanie' };
+        const load = async () => {
+            const data = await api('/api/funnel?days=' + days.value) as { steps: string[]; rows: { source: string; step: string; count: number }[] };
+            const by = new Map<string, Record<string, number>>();
+            for (const r of data.rows) (by.get(r.source) ?? by.set(r.source, {}).get(r.source)!)[r.step] = r.count;
+            const t = document.createElement('table'), head = t.createTHead().insertRow();
+            for (const h of ['Kampania', ...data.steps.map(s => labels[s] ?? s), 'Działka / wejścia']) { const th = document.createElement('th'); th.textContent = h; head.append(th); }
+            const body = t.createTBody();
+            for (const [source, c] of [...by].sort((a, b) => (b[1].visit ?? 0) - (a[1].visit ?? 0))) {
+                const row = body.insertRow();
+                row.insertCell().textContent = source;
+                for (const s of data.steps) row.insertCell().textContent = String(c[s] ?? 0);
+                row.insertCell().textContent = c.visit ? Math.round(100 * (c.parcel ?? 0) / c.visit) + '%' : '–';
+            }
+            table.replaceChildren(by.size ? t : Object.assign(document.createElement('p'), { textContent: 'Brak danych w tym okresie.' }));
+            text('p', 'Liczby na wczytanie strony, bez identyfikacji osób. Kampania = utm_campaign, potem campaign, showroom, event lub utm_source.', table);
+        };
+        days.onchange = () => void load().catch(e => notice.textContent = e.message);
+        await load();
+        text('h4', 'Link kampanii z kodem QR', box);
+        const fields = ['utm_source', 'utm_medium', 'utm_campaign', 'showroom', 'event', 'representative'] as const;
+        const hints: Record<string, string> = { utm_source: 'Źródło (np. ulotka, facebook)', utm_medium: 'Medium (np. print, social)', utm_campaign: 'Kampania (np. wiosna-2027)', showroom: 'Salon', event: 'Wydarzenie (np. targi-warszawa)', representative: 'Przedstawiciel' };
+        const inputs = fields.map(f => [f, input(hints[f], 'text', '', box)] as const);
+        const house = document.createElement('select');
+        for (const [v, l] of [['', 'Dom: najlepiej dopasowany'], ['de-75', 'DE 75'], ['de-105', 'DE 105'], ['de-135', 'DE 135'], ['de-165', 'DE 165']]) { const o = document.createElement('option'); o.value = v; o.textContent = l; house.append(o); }
+        box.append(house);
+        const out = document.createElement('input'); out.readOnly = true; out.size = 60; out.setAttribute('aria-label', 'Link kampanii');
+        const qr = document.createElement('canvas');
+        box.append(out, qr);
+        const build = async () => {
+            const params = new URLSearchParams();
+            for (const [f, el] of inputs) { const v = el.value.trim(); if (v) { if (!/^[\p{L}\p{N} _.-]{1,80}$/u.test(v)) throw Error(`Pole ${f}: tylko litery, cyfry, spacja, _ . -`); params.set(f, v); } }
+            if (house.value) params.set('dom', house.value);
+            out.value = location.origin + '/' + (params.size ? '?' + params : '');
+            const { toCanvas } = await import('qrcode');
+            await toCanvas(qr, out.value, { width: 320, margin: 2, color: { dark: '#141413', light: '#ffffff' } });
+        };
+        button('Utwórz link i QR', build, box);
+        button('Kopiuj link', async () => { if (!out.value) await build(); await navigator.clipboard.writeText(out.value); notice.textContent = 'Skopiowano link.'; }, box);
+        button('Pobierz QR (PNG)', async () => { if (!out.value) await build(); const a = document.createElement('a'); a.download = 'qr-' + (inputs[2][1].value.trim() || 'kampania') + '.png'; a.href = qr.toDataURL('image/png'); a.click(); }, box);
     }
     root.addEventListener('toggle', () => {
         if (root.open && !content.childElementCount)
